@@ -28,7 +28,4 @@ public interface Platform {
     void saveInt(String key, int value);
 
     void vibrate(int millis);
-
-    /** Loads an image from the app's assets, or returns null if it does not exist. */
-    Object loadImage(String assetPath);
 }

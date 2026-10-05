@@ -11,11 +11,6 @@ final class Snake {
     String name;
     Brawler type;
     boolean isPlayer;
-    /** The player's hero: a single walking character instead of a snake body. */
-    boolean isHero;
-    /** Hero only: true while the movement stick is held. */
-    boolean moveInput;
-    float heroDash, heroDashCooldown, biteCooldown;
     int color1, color2;
     /** Body colors, cycled along the snake. color1/color2 are the first two. */
     int[] palette;
@@ -108,9 +103,6 @@ final class Snake {
         this.burstLeft = 0;
         this.ang = this.targetAng = angle;
         this.superWasReady = false;
-        this.heroDash = 0;
-        this.heroDashCooldown = 0;
-        this.biteCooldown = 0;
         updateSize();
         this.segs = targetSegs();
         for (int i = 0; i < segs; i++) {
@@ -131,17 +123,11 @@ final class Snake {
     }
 
     int targetSegs() {
-        if (isHero) return 1;
         int n = 12 + (int) (MathUtil.sqrt(mass) * 3.2f);
         return Math.min(n, MAX_SEG);
     }
 
     void updateSize() {
-        if (isHero) {
-            radius = 24f;
-            spacing = 12f;
-            return;
-        }
         radius = Math.min(34f, 15f + MathUtil.sqrt(mass) * 0.42f);
         spacing = radius * 0.52f;
     }
@@ -184,10 +170,6 @@ final class Snake {
     /** Integrates movement for one step. Wall pushing is done by the world afterwards. */
     void move(float dt) {
         animTime += dt;
-        if (isHero) {
-            moveHero(dt);
-            return;
-        }
         float diff = MathUtil.wrap(targetAng - ang);
         float maxTurn = turnRate() * dt;
         if (diff > maxTurn) diff = maxTurn;
@@ -196,38 +178,6 @@ final class Snake {
 
         boosting = boostInput && mass > MIN_BOOST_MASS && dashTime <= 0;
         float spd = speed();
-        float ox = sx[0], oy = sy[0];
-        sx[0] += MathUtil.cos(ang) * spd * dt + kbx * dt;
-        sy[0] += MathUtil.sin(ang) * spd * dt + kby * dt;
-        float decay = (float) Math.exp(-7f * dt);
-        kbx *= decay;
-        kby *= decay;
-        vx = (sx[0] - ox) / dt;
-        vy = (sy[0] - oy) / dt;
-    }
-
-    static final float HERO_DASH_TIME = 0.22f, HERO_DASH_COOLDOWN = 2.5f;
-
-    /** Heroes walk freely: they stop when the stick is released and turn instantly. */
-    private void moveHero(float dt) {
-        if (heroDashCooldown > 0) heroDashCooldown -= dt;
-        if (biteCooldown > 0) biteCooldown -= dt;
-        if (boostInput && heroDashCooldown <= 0) {
-            heroDash = HERO_DASH_TIME;
-            heroDashCooldown = HERO_DASH_COOLDOWN;
-            if (!moveInput) targetAng = ang;
-        }
-        boosting = heroDash > 0;
-        float spd = 0;
-        if (heroDash > 0) {
-            heroDash -= dt;
-            ang = targetAng;
-            spd = BASE_SPEED * type.speed * 3.4f;
-        } else if (moveInput) {
-            ang = targetAng;
-            spd = BASE_SPEED * type.speed * 1.05f;
-        }
-        if (slowTime > 0) spd *= slowFactor;
         float ox = sx[0], oy = sy[0];
         sx[0] += MathUtil.cos(ang) * spd * dt + kbx * dt;
         sy[0] += MathUtil.sin(ang) * spd * dt + kby * dt;

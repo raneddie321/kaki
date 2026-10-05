@@ -142,7 +142,6 @@ final class World {
             Snake s = snakes[i];
             if (hasPlayer && i == 0) {
                 s.isPlayer = true;
-                s.isHero = playerType == Brawler.HERO;
                 s.name = "You";
                 s.setColors(playerPalette != null ? playerPalette : new int[]{playerType.color1, playerType.color2});
                 s.level = Math.max(1, Math.min(Brawler.MAX_LEVEL, playerLevel));
@@ -553,7 +552,7 @@ final class World {
 
         // Boost burns length and leaves a trail of food
         s.move(dt);
-        if (s.boosting && !s.isHero) {
+        if (s.boosting) {
             s.mass -= 9f * dt;
             s.boostDropTimer -= dt;
             if (s.boostDropTimer <= 0) {
@@ -676,35 +675,6 @@ final class World {
                 float rr = (a.radius + b.radius) * 0.78f;
                 if (MathUtil.dist2(hx, hy, b.sx[j], b.sy[j]) >= rr * rr) continue;
                 if (a.spawnShield > 0 || b.spawnShield > 0) continue;
-
-                if (a.isHero) {
-                    // The hero can't pass through snakes: push it out of the body
-                    float dx = hx - b.sx[j], dy = hy - b.sy[j];
-                    float d = (float) Math.sqrt(dx * dx + dy * dy);
-                    if (d < 1e-3f) {
-                        dx = 1;
-                        d = 1;
-                    }
-                    a.sx[0] = b.sx[j] + dx / d * rr;
-                    a.sy[0] = b.sy[j] + dy / d * rr;
-                    hx = a.sx[0];
-                    hy = a.sy[0];
-                    continue;
-                }
-                if (b.isHero) {
-                    // A snake head bites the hero and bounces off
-                    float ang = MathUtil.angleTo(hx, hy, b.hx(), b.hy());
-                    if (b.biteCooldown <= 0 && b.heroDash <= 0) {
-                        b.biteCooldown = 0.6f;
-                        hurt(b, 800f * a.damageMult() * (1f + Math.min(1.5f, a.mass / 800f)), a, b.hx(), b.hy(), ang, 650, CAUSE_CRASH);
-                        fx.burst(b.hx(), b.hy(), 10, 0xffff5a5a, 300, 8, 0.4f);
-                        shakeAt(b.hx(), b.hy(), 7);
-                    }
-                    a.ang = a.targetAng = ang + MathUtil.PI + MathUtil.rand(-0.6f, 0.6f);
-                    a.kbx -= MathUtil.cos(ang) * 300;
-                    a.kby -= MathUtil.sin(ang) * 300;
-                    continue;
-                }
 
                 if (a.dashTime > 0) {
                     if (!a.dashHit[bi]) {
@@ -841,33 +811,6 @@ final class World {
                 sound(sup ? Platform.SND_SUPER : Platform.SND_THROW, mx, my, 0.8f);
                 break;
             }
-            case Brawler.HERO_ID:
-                if (sup) {
-                    float d = MathUtil.clamp(dist, 150, s.type.superRange);
-                    float tx = s.hx() + MathUtil.cos(ang) * d, ty = s.hy() + MathUtil.sin(ang) * d;
-                    for (int i = 0; i < 6; i++) {
-                        float a = i * MathUtil.TAU / 6f + MathUtil.rand(-0.3f, 0.3f);
-                        float rr = i == 0 ? 0 : MathUtil.rand(60, 150);
-                        Projectile p = spawnProj(Projectile.BOMB, s, mx, my, ang, 0, s.type.superRange, 700 * mult, 12, 300, true);
-                        if (p != null) {
-                            p.startX = mx;
-                            p.startY = my;
-                            p.targetX = MathUtil.clamp(tx + MathUtil.cos(a) * rr, 0, size);
-                            p.targetY = MathUtil.clamp(ty + MathUtil.sin(a) * rr, 0, size);
-                            p.flight = 0.5f + i * 0.08f;
-                            p.t = 0;
-                            p.aoe = 110;
-                        }
-                    }
-                    sound(Platform.SND_SUPER, mx, my, 0.9f);
-                } else {
-                    s.burstLeft = 3;
-                    s.burstInterval = 0.08f;
-                    s.burstTimer = 0;
-                    s.burstAng = ang;
-                    s.burstSuper = false;
-                }
-                break;
             case Brawler.FROST:
                 if (sup) {
                     nova(s, s.type.superRange, 1200 * mult);
@@ -951,12 +894,7 @@ final class World {
     private void fireBurstShot(Snake s) {
         float mult = s.damageMult();
         float hr = s.radius * 1.2f;
-        if (s.type.id == Brawler.HERO_ID) {
-            float a = s.burstAng + MathUtil.rand(-0.035f, 0.035f);
-            float mx = s.hx() + MathUtil.cos(a) * hr * 1.3f, my = s.hy() + MathUtil.sin(a) * hr * 1.3f;
-            spawnProj(Projectile.BOLT, s, mx, my, a, 1900, s.type.range, s.type.damage * mult, 8, 120, false);
-            sound(Platform.SND_BOLT, mx, my, 0.55f);
-        } else if (s.type.id == Brawler.VOLT) {
+        if (s.type.id == Brawler.VOLT) {
             float a = s.burstAng + MathUtil.rand(-0.04f, 0.04f);
             float mx = s.hx() + MathUtil.cos(a) * hr, my = s.hy() + MathUtil.sin(a) * hr;
             spawnProj(Projectile.SUPERBOLT, s, mx, my, a, 2100, s.type.superRange, 520 * mult, 11, 200, true);
@@ -1466,7 +1404,7 @@ final class World {
                 if (bi == s.index) continue;
                 Snake o = snakes[bi];
                 int j = id % Snake.MAX_SEG;
-                if (!o.alive || j >= o.segs || o.isHero) continue;
+                if (!o.alive || j >= o.segs) continue;
                 float rr = s.radius + o.radius + 8f;
                 if (MathUtil.dist2(x, y, o.sx[j], o.sy[j]) < rr * rr) return d - step;
             }
@@ -1505,7 +1443,7 @@ final class World {
             camX += (f.hx() - camX) * k;
             camY += (f.hy() - camY) * k;
             float base = screenH / 900f * (mode == MODE_DEMO ? 0.85f : 1f);
-            float target = base * zoomMult * (f.isHero ? 0.92f : (float) Math.pow(19f / f.radius, 0.5f));
+            float target = base * zoomMult * (float) Math.pow(19f / f.radius, 0.5f);
             if (f.boosting) target *= 0.96f;
             zoom += (target - zoom) * Math.min(1f, dt * 2f);
         }
@@ -1693,22 +1631,6 @@ final class World {
 
     private void drawSnake(Gfx g, Snake s, float alpha, float l, float t, float r, float b, float tt) {
         if (s.maxX < l || s.minX > r || s.maxY < t || s.minY > b) return;
-        if (s.isHero) {
-            if (s.invisTime > 0 && s.revealTime <= 0) alpha = Math.min(alpha, 0.45f);
-            float look = s == player && aimActive ? aimAng : s.ang;
-            if (s.superReady()) {
-                float p = 0.5f + 0.5f * MathUtil.sin(tt * 8f);
-                g.color(MathUtil.withAlpha(0xffffd23f, (0.35f + 0.3f * p) * alpha));
-                g.strokeCircle(s.hx(), s.hy(), s.radius * 1.7f + p * 3, 5);
-            }
-            HeroArt.draw(g, s.hx(), s.hy(), s.radius, look, s.moveInput || s.heroDash > 0 ? s.animTime : 0,
-                    alpha, s.hitFlash > 0 ? s.hitFlash / 0.12f : 0f, s.heroDash > 0);
-            if (s.spawnShield > 0) {
-                g.color(MathUtil.withAlpha(0xff9ae6ff, 0.25f + 0.15f * MathUtil.sin(tt * 10f)));
-                g.fillCircle(s.hx(), s.hy(), s.radius * 2.3f);
-            }
-            return;
-        }
         Snake viewer = player;
         boolean anyHidden = false;
         for (int j = 0; j < s.segs; j++) {
@@ -1964,18 +1886,6 @@ final class World {
         float ca = MathUtil.cos(aimAng), sa = MathUtil.sin(aimAng);
         float range = aimSuper ? s.type.superRange : s.type.range;
         switch (s.type.id) {
-            case Brawler.HERO_ID:
-                if (!aimSuper) {
-                    drawAimLane(g, hx, hy, ca, sa, range, 14, col, edge);
-                    break;
-                } else {
-                    float d = MathUtil.clamp(aimDist, 150, range);
-                    g.color(col);
-                    g.fillCircle(hx + ca * d, hy + sa * d, 220);
-                    g.color(edge);
-                    g.strokeCircle(hx + ca * d, hy + sa * d, 220, 4);
-                    break;
-                }
             case Brawler.FROST:
             case Brawler.ZIGGY:
                 if (aimSuper) {

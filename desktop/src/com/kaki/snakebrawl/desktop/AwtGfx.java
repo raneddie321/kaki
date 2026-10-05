@@ -126,16 +126,6 @@ public final class AwtGfx implements Gfx {
         return (float) g.getFontMetrics().getStringBounds(s, g).getWidth();
     }
 
-    @Override
-    public void image(Object img, float l, float t, float r, float b, float alpha) {
-        if (!(img instanceof java.awt.Image)) return;
-        java.awt.Composite old = g.getComposite();
-        if (alpha < 1f) g.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, Math.max(0f, alpha)));
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g.drawImage((java.awt.Image) img, Math.round(l), Math.round(t), Math.round(r - l), Math.round(b - t), null);
-        g.setComposite(old);
-    }
-
     private final ArrayDeque<java.awt.Shape> clips = new ArrayDeque<>();
 
     @Override

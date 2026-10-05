@@ -1,6 +1,5 @@
 package com.kaki.snakebrawl;
 
-import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -124,16 +123,6 @@ final class AndroidGfx implements Gfx {
     public float measureText(String s, float size) {
         text.setTextSize(size);
         return text.measureText(s);
-    }
-
-    private final Paint bitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
-
-    @Override
-    public void image(Object img, float l, float t, float r, float b, float alpha) {
-        if (!(img instanceof Bitmap)) return;
-        bitmapPaint.setAlpha((int) (Math.max(0f, Math.min(1f, alpha)) * 255));
-        rect.set(l, t, r, b);
-        c.drawBitmap((Bitmap) img, null, rect, bitmapPaint);
     }
 
     @Override

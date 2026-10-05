@@ -11,8 +11,10 @@ final class Profile {
 
     int coins;
     int trophies, bestTrophies, wins, games, bestLen, totalKills, hints;
-    int mode;
-    int heroLevel;
+    int selected, mode, skin;
+    int ownedSkins;      // bit mask
+    int unlocked;        // bit mask of brawlers
+    final int[] levels = new int[Brawler.ALL.length];
     int nextGiftMinute;
 
     // Settings
@@ -35,7 +37,14 @@ final class Profile {
         totalKills = p.loadInt("totalKills", 0);
         hints = p.loadInt("hints", 0);
         mode = clamp(p.loadInt("mode", 0), 0, 1);
-        heroLevel = clamp(p.loadInt("heroLvl", 1), 1, Brawler.MAX_LEVEL);
+        skin = clamp(p.loadInt("skin", 0), 0, Skin.ALL.length - 1);
+        ownedSkins = p.loadInt("ownedSkins", 1) | 1;
+        // The four original brawlers are always free
+        unlocked = p.loadInt("unlocked", 0) | 0xf;
+        for (int i = 0; i < levels.length; i++) levels[i] = clamp(p.loadInt("lvl" + i, 1), 1, Brawler.MAX_LEVEL);
+        selected = clamp(p.loadInt("brawler", 0), 0, Brawler.ALL.length - 1);
+        if (!isUnlocked(selected)) selected = 0;
+        if (!ownsSkin(skin)) skin = 0;
         nextGiftMinute = p.loadInt("nextGift", 0);
 
         sound = p.loadInt("sound", 1) == 1;
@@ -58,7 +67,11 @@ final class Profile {
         p.saveInt("totalKills", totalKills);
         p.saveInt("hints", hints);
         p.saveInt("mode", mode);
-        p.saveInt("heroLvl", heroLevel);
+        p.saveInt("skin", skin);
+        p.saveInt("ownedSkins", ownedSkins);
+        p.saveInt("unlocked", unlocked);
+        for (int i = 0; i < levels.length; i++) p.saveInt("lvl" + i, levels[i]);
+        p.saveInt("brawler", selected);
         p.saveInt("nextGift", nextGiftMinute);
         p.saveInt("sound", sound ? 1 : 0);
         p.saveInt("vibration", vibration ? 1 : 0);
@@ -74,7 +87,11 @@ final class Profile {
     void resetProgress() {
         coins = START_COINS;
         trophies = bestTrophies = wins = games = bestLen = totalKills = 0;
-        heroLevel = 1;
+        skin = 0;
+        ownedSkins = 1;
+        unlocked = 0xf;
+        selected = 0;
+        for (int i = 0; i < levels.length; i++) levels[i] = 1;
         nextGiftMinute = 0;
         save();
     }
@@ -87,9 +104,17 @@ final class Profile {
         return (int) (System.currentTimeMillis() / 60000L);
     }
 
-    /** Coins for the next hero upgrade, or -1 at max level. */
-    int upgradeCost() {
-        return heroLevel >= Brawler.MAX_LEVEL ? -1 : Brawler.UPGRADE_COST[heroLevel - 1];
+    boolean isUnlocked(int b) {
+        return (unlocked & (1 << b)) != 0;
+    }
+
+    boolean ownsSkin(int s) {
+        return (ownedSkins & (1 << s)) != 0;
+    }
+
+    int upgradeCost(int b) {
+        int lvl = levels[b];
+        return lvl >= Brawler.MAX_LEVEL ? -1 : Brawler.UPGRADE_COST[lvl - 1];
     }
 
     boolean giftReady() {
@@ -102,4 +127,7 @@ final class Profile {
         return true;
     }
 
+    int[] palette() {
+        return Skin.ALL[skin].paletteFor(Brawler.ALL[selected]);
+    }
 }
