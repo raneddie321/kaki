@@ -88,18 +88,18 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-1.6.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-1.6.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-1.7.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-1.7.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**
 Google Play needs the same key for every update. To use your own key:
 
 ```bash
-KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=8 VERSION_NAME=1.7 ./build.sh
+KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=9 VERSION_NAME=1.8 ./build.sh
 ```
 
-The app targets API 35 and runs on Android 7.0 (API 24) and newer. It needs no permissions.
+The app targets API 36 and runs on Android 7.0 (API 24) and newer. It needs no permissions.
 
 ## Desktop test harness
 

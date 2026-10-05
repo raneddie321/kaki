@@ -821,7 +821,7 @@ final class MetaScreens {
             ui.button(g, bt);
         }
         g.color(0xff9aa0d0);
-        g.text("Snake Brawl v1.6  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
+        g.text("Snake Brawl v1.7  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
                 w / 2, h - game.padB - 160 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 }

@@ -11,10 +11,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION_CODE=${VERSION_CODE:-7}
-VERSION_NAME=${VERSION_NAME:-1.6}
+VERSION_CODE=${VERSION_CODE:-8}
+VERSION_NAME=${VERSION_NAME:-1.7}
 MIN_SDK=24
-TARGET_SDK=35
+TARGET_SDK=36
 
 SDK=${ANDROID_SDK:-/usr/lib/android-sdk}
 PLATFORM_JAR=${PLATFORM_JAR:-$(ls -d "$SDK"/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -1)}

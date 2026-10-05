@@ -60,6 +60,7 @@ public final class MainActivity extends Activity implements Platform {
         });
         setContentView(view);
         hideSystemUi();
+        registerBackCallback();
     }
 
     private void loadSounds() {
@@ -160,6 +161,38 @@ public final class MainActivity extends Activity implements Platform {
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
         if (!game.onBack()) super.onBackPressed();
+    }
+
+    /**
+     * From target SDK 36 (Android 16) predictive back is on by default and onBackPressed is no
+     * longer called, so on Android 13+ the back gesture is routed through an OnBackInvokedCallback.
+     * Registered via reflection because the app is compiled against an older SDK.
+     */
+    private void registerBackCallback() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        try {
+            Object dispatcher = Activity.class.getMethod("getOnBackInvokedDispatcher").invoke(this);
+            final Class<?> cbClass = Class.forName("android.window.OnBackInvokedCallback");
+            Object callback = java.lang.reflect.Proxy.newProxyInstance(cbClass.getClassLoader(), new Class<?>[]{cbClass},
+                    new java.lang.reflect.InvocationHandler() {
+                        @Override
+                        public Object invoke(Object proxy, java.lang.reflect.Method method, Object[] args) {
+                            String name = method.getName();
+                            if ("onBackInvoked".equals(name)) {
+                                if (!game.onBack()) moveTaskToBack(true);
+                                return null;
+                            }
+                            if ("hashCode".equals(name)) return System.identityHashCode(proxy);
+                            if ("equals".equals(name)) return proxy == args[0];
+                            if ("toString".equals(name)) return "SnakeBrawlBackCallback";
+                            return null;
+                        }
+                    });
+            dispatcher.getClass().getMethod("registerOnBackInvokedCallback", int.class, cbClass)
+                    .invoke(dispatcher, 0 /* PRIORITY_DEFAULT */, callback);
+        } catch (Throwable ignored) {
+            // Fall back to onBackPressed.
+        }
     }
 
     @Override

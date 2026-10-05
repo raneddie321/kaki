@@ -9,6 +9,10 @@
         android:isGame="true"
         android:label="@string/app_name"
         android:theme="@style/AppTheme">
+        <!-- Keep the landscape lock on large screens under Android 16 (target SDK 36) -->
+        <property
+            android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+            android:value="true" />
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode"
