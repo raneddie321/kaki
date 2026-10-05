@@ -31,14 +31,33 @@ poison closes in.
 
 ### Brawlers
 
-| Brawler | Role | Attack | Super |
-| --- | --- | --- | --- |
-| **Viper** | Shotgunner | Fang Spray: 5 venom pellets | Nova Blast: huge pellet wave with knockback |
-| **Volt** | Sniper | Spark Bolt: long-range lightning bolt | Rail Storm: 8 bolts that fly through walls |
-| **Boomer** | Thrower | Fuse Bomb: lobbed over walls, splash damage | Mega Bomb: giant blast |
-| **Blaze** | Tank | Flame Breath: short-range fire cone | Rampage: dash that slices through snake bodies |
+| Brawler | Role | Price | Attack | Super |
+| --- | --- | --- | --- | --- |
+| **Viper** | Shotgunner | free | Fang Spray: 5 venom pellets | Nova Blast: huge pellet wave with knockback |
+| **Volt** | Sniper | free | Spark Bolt: long-range lightning bolt | Rail Storm: 8 bolts that fly through walls |
+| **Boomer** | Thrower | free | Fuse Bomb: lobbed over walls, splash damage | Mega Bomb: giant blast |
+| **Blaze** | Tank | free | Flame Breath: short-range fire cone | Rampage: dash that slices through snake bodies |
+| **Frost** | Controller | 500 | Ice Shards: 3 shards that slow snakes | Blizzard: freezing blast around you |
+| **Ziggy** | Ricochet | 800 | Bouncy Balls: 3 balls that bounce off walls | Pinball Party: 12 balls in every direction |
+| **Toxin** | Poisoner | 1200 | Venom Glob: leaves a poison puddle | Toxic Cloud: huge toxic swamp |
+| **Shade** | Assassin | 2000 | Shuriken Fan: 3 fast shurikens | Shadow Step: teleport and turn invisible |
 
-Bots get smarter as your trophy count goes up.
+Bots get smarter, stronger and fancier as your trophy count goes up.
+
+### Coins, shop and upgrades
+
+- Every match pays coins based on your rank, knockouts and length.
+- **Shop: Offers** has a free gift every 4 hours, a Brawl Box (coins, a skin or a free upgrade),
+  a Mega Box (a guaranteed new skin plus coins), and a daily skin deal at 40% off.
+- **Shop: Skins** has 20 snake skins, from Lime and Tiger up to Rainbow, Gold and Diamond.
+  An equipped skin applies to every brawler.
+- **Shop: Brawlers**: unlock the four new brawlers.
+- **Brawlers screen**: pick a brawler and upgrade its power level (1 to 7, +6% health and damage per level).
+
+### Settings
+
+Sound, vibration, damage numbers, graphics quality (high/low), auto-aim on tap, left-handed controls,
+joystick size, camera distance, and resetting your progress.
 
 ## Project layout
 
@@ -66,15 +85,15 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-1.0.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-1.0.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-1.1.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-1.1.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**
 Google Play needs the same key for every update. To use your own key:
 
 ```bash
-KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=2 VERSION_NAME=1.1 ./build.sh
+KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=3 VERSION_NAME=1.2 ./build.sh
 ```
 
 The app targets API 35 and runs on Android 5.0 (API 21) and newer. It needs no permissions.

@@ -126,14 +126,24 @@ public final class AwtGfx implements Gfx {
         return (float) g.getFontMetrics().getStringBounds(s, g).getWidth();
     }
 
+    private final ArrayDeque<java.awt.Shape> clips = new ArrayDeque<>();
+
+    @Override
+    public void clip(float l, float t, float r, float b) {
+        g.clip(new Rectangle2D.Float(l, t, r - l, b - t));
+    }
+
     @Override
     public void save() {
         stack.push(g.getTransform());
+        java.awt.Shape c = g.getClip();
+        clips.push(c != null ? c : new Rectangle2D.Float(-1e6f, -1e6f, 2e6f, 2e6f));
     }
 
     @Override
     public void restore() {
         g.setTransform(stack.pop());
+        g.setClip(clips.pop());
     }
 
     @Override

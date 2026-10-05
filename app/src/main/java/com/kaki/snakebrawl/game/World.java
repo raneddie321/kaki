@@ -81,6 +81,7 @@ final class World {
     float aimAng, aimDist;
 
     private final float[] tmpPoly = new float[32];
+    private final float[] poly4 = new float[8];
     private final boolean[] hiddenBuf = new boolean[Snake.MAX_SEG];
     private final Snake[] drawOrder;
     private final float time0 = MathUtil.rand(0, 100);
@@ -91,8 +92,15 @@ final class World {
             0xffc65aff, 0xffff5ad7, 0xffffffff,
     };
 
-    World(Platform platform, int mode, Brawler playerType, int botCount, int trophies) {
+    /** Player-facing options (set by Game). */
+    boolean showDamage = true;
+    boolean lowGraphics;
+    float zoomMult = 1f;
+    private final int botTrophies;
+
+    World(Platform platform, int mode, Brawler playerType, int[] playerPalette, int playerLevel, int botCount, int trophies) {
         this.platform = platform;
+        this.botTrophies = trophies;
         this.mode = mode;
         this.n = mode == MODE_SHOWDOWN ? 66 : (mode == MODE_ENDLESS ? 80 : 56);
         this.size = n * T;
@@ -129,21 +137,18 @@ final class World {
         zoneB = size;
 
         String[] names = shuffledNames();
-        int skin = MathUtil.randInt(Brawler.BOT_SKINS.length);
         float startMass = mode == MODE_SHOWDOWN ? 40f : 45f;
         for (int i = 0; i < snakeCount; i++) {
             Snake s = snakes[i];
             if (hasPlayer && i == 0) {
                 s.isPlayer = true;
                 s.name = "You";
-                s.color1 = playerType.color1;
-                s.color2 = playerType.color2;
+                s.setColors(playerPalette != null ? playerPalette : new int[]{playerType.color1, playerType.color2});
+                s.level = Math.max(1, Math.min(Brawler.MAX_LEVEL, playerLevel));
                 s.spawn(playerType, spX[i], spY[i], spA[i], startMass);
             } else {
                 s.name = names[i % names.length];
-                int[] sk = Brawler.BOT_SKINS[(skin + i) % Brawler.BOT_SKINS.length];
-                s.color1 = sk[0];
-                s.color2 = sk[1];
+                dressBot(s, i);
                 Brawler b = Brawler.ALL[MathUtil.randInt(Brawler.ALL.length)];
                 float m = mode == MODE_SHOWDOWN ? startMass : MathUtil.rand(45, 260);
                 s.spawn(b, spX[i], spY[i], spA[i], m);
@@ -160,6 +165,15 @@ final class World {
         countAlive();
         if (mode == MODE_SHOWDOWN) banner("SHOWDOWN!");
         else if (mode == MODE_ENDLESS) banner("ENDLESS BRAWL!");
+    }
+
+    /** Bots get fancier skins and higher power levels as the player's trophies grow. */
+    private void dressBot(Snake s, int i) {
+        float fancy = 0.15f + Math.min(0.6f, botTrophies / 800f);
+        if (MathUtil.rand() < fancy) s.setColors(Skin.ALL[1 + MathUtil.randInt(Skin.ALL.length - 1)].palette);
+        else s.setColors(Brawler.BOT_SKINS[(i + MathUtil.randInt(Brawler.BOT_SKINS.length)) % Brawler.BOT_SKINS.length]);
+        int lvl = 1 + botTrophies / 90 + MathUtil.randInt(2) - (MathUtil.rand() < 0.4f ? 1 : 0);
+        s.level = Math.max(1, Math.min(Brawler.MAX_LEVEL, lvl));
     }
 
     private static String[] shuffledNames() {
@@ -350,7 +364,7 @@ final class World {
         boxHp[b] -= dmg;
         boxFlash[b] = 0.12f;
         float cx = (tileIdx % n + 0.5f) * T, cy = (tileIdx / n + 0.5f) * T;
-        if (by != null && (by.isPlayer || isNearCamera(cx, cy))) fx.text(cx, cy - 30, Integer.toString((int) dmg), 0xffffffff, 26);
+        if (showDamage && by != null && (by.isPlayer || isNearCamera(cx, cy))) fx.text(cx, cy - 30, Integer.toString((int) dmg), 0xffffffff, 26);
         if (boxHp[b] <= 0) {
             tiles[tileIdx] = EMPTY;
             boxTile[b] = boxTile[boxCount - 1];
@@ -443,6 +457,7 @@ final class World {
         checkCollisions(dt);
         eatAndPickup(dt);
         updateProjectiles(dt);
+        updateAreas(dt);
 
         for (int i = 0; i < boxCount; i++) if (boxFlash[i] > 0) boxFlash[i] -= dt;
         if (mode != MODE_SHOWDOWN && boxCount < boxTarget) {
@@ -483,6 +498,12 @@ final class World {
         }
         if (s.spawnShield > 0) s.spawnShield -= dt;
         if (s.revealTime > 0) s.revealTime -= dt;
+        if (s.invisTime > 0) s.invisTime -= dt;
+        if (s.slowTime > 0) {
+            s.slowTime -= dt;
+            if (s.slowTime <= 0) s.slowFactor = 1f;
+            else if (MathUtil.rand() < dt * 8f) fx.add(Particles.DOT, s.hx() + MathUtil.rand(-15, 15), s.hy() + MathUtil.rand(-15, 15), 0, -30, 5, 0xffbff0ff, 0.5f);
+        }
         if (s.hitFlash > 0) s.hitFlash -= dt;
         if (s.fireCooldown > 0) s.fireCooldown -= dt;
         if (s.bumpCooldown > 0) s.bumpCooldown -= dt;
@@ -519,7 +540,7 @@ final class World {
             if (s.poisonTick >= 0.5f) {
                 s.poisonTick -= 0.5f;
                 float dmg = dps * 0.5f;
-                if (s.isPlayer || isNearCamera(s.hx(), s.hy())) fx.text(s.hx(), s.hy() - s.radius - 50, Integer.toString((int) dmg), 0xff8cff5a, 30);
+                if (showDamage && (s.isPlayer || isNearCamera(s.hx(), s.hy()))) fx.text(s.hx(), s.hy() - s.radius - 50, Integer.toString((int) dmg), 0xff8cff5a, 30);
                 hurt(s, dmg, null, s.hx(), s.hy(), 0, 0, CAUSE_POISON);
                 if (!s.alive) return;
                 fx.smoke(s.hx(), s.hy(), 3, 0xff4ad04a, 26, 0.8f);
@@ -605,9 +626,7 @@ final class World {
             }
             if (crowded) continue;
             if (player != null && player.alive && MathUtil.dist2(x, y, player.hx(), player.hy()) < 700 * 700) continue;
-            int[] sk = Brawler.BOT_SKINS[MathUtil.randInt(Brawler.BOT_SKINS.length)];
-            s.color1 = sk[0];
-            s.color2 = sk[1];
+            dressBot(s, MathUtil.randInt(100));
             s.name = Brawler.BOT_NAMES[MathUtil.randInt(Brawler.BOT_NAMES.length)];
             s.spawn(Brawler.ALL[MathUtil.randInt(Brawler.ALL.length)], x, y, MathUtil.rand(0, MathUtil.TAU), MathUtil.rand(45, 220));
             if (s.brain != null) s.brain.reset();
@@ -792,6 +811,66 @@ final class World {
                 sound(sup ? Platform.SND_SUPER : Platform.SND_THROW, mx, my, 0.8f);
                 break;
             }
+            case Brawler.FROST:
+                if (sup) {
+                    nova(s, s.type.superRange, 1200 * mult);
+                    sound(Platform.SND_SUPER, mx, my, 0.9f);
+                } else {
+                    for (int i = -1; i <= 1; i++) {
+                        Projectile p = spawnProj(Projectile.SHARD, s, mx, my, ang + i * 0.12f, 1300, s.type.range,
+                                s.type.damage * mult, 9, 80, false);
+                        if (p != null) {
+                            p.slowFactor = 0.6f;
+                            p.slowDur = 1.3f;
+                        }
+                    }
+                    sound(Platform.SND_SHOOT, mx, my, 0.7f);
+                }
+                break;
+            case Brawler.ZIGGY:
+                if (sup) {
+                    for (int i = 0; i < 12; i++) {
+                        float a = ang + MathUtil.TAU * i / 12f;
+                        Projectile p = spawnProj(Projectile.BALL, s, s.hx() + MathUtil.cos(a) * hr, s.hy() + MathUtil.sin(a) * hr,
+                                a, 1350, s.type.superRange, 420 * mult, 12, 150, false);
+                        if (p != null) p.bounces = 3;
+                    }
+                    sound(Platform.SND_SUPER, mx, my, 0.9f);
+                } else {
+                    s.burstLeft = 3;
+                    s.burstInterval = 0.1f;
+                    s.burstTimer = 0;
+                    s.burstAng = ang;
+                    s.burstSuper = false;
+                }
+                break;
+            case Brawler.TOXIN: {
+                float range = sup ? s.type.superRange : s.type.range;
+                float d = MathUtil.clamp(dist, 110, range);
+                Projectile p = spawnProj(sup ? Projectile.MEGAGLOB : Projectile.GLOB, s, mx, my, ang, 0, range,
+                        (sup ? 600 : s.type.damage) * mult, sup ? 18 : 12, 120, true);
+                if (p != null) {
+                    p.startX = mx;
+                    p.startY = my;
+                    p.targetX = MathUtil.clamp(s.hx() + MathUtil.cos(ang) * d, 0, size);
+                    p.targetY = MathUtil.clamp(s.hy() + MathUtil.sin(ang) * d, 0, size);
+                    p.flight = sup ? 0.8f : 0.6f;
+                    p.t = 0;
+                    p.aoe = sup ? 210 : 95;
+                }
+                sound(sup ? Platform.SND_SUPER : Platform.SND_THROW, mx, my, 0.8f);
+                break;
+            }
+            case Brawler.SHADE:
+                if (sup) {
+                    shadowStep(s, ang, dist);
+                    sound(Platform.SND_SUPER, mx, my, 0.9f);
+                } else {
+                    for (int i = -1; i <= 1; i++)
+                        spawnProj(Projectile.SHURIKEN, s, mx, my, ang + i * 0.1f, 1600, s.type.range, s.type.damage * mult, 9, 90, false);
+                    sound(Platform.SND_SHOOT, mx, my, 0.7f);
+                }
+                break;
             case Brawler.BLAZE:
             default:
                 if (sup) {
@@ -820,6 +899,12 @@ final class World {
             float mx = s.hx() + MathUtil.cos(a) * hr, my = s.hy() + MathUtil.sin(a) * hr;
             spawnProj(Projectile.SUPERBOLT, s, mx, my, a, 2100, s.type.superRange, 520 * mult, 11, 200, true);
             sound(Platform.SND_BOLT, mx, my, 0.5f);
+        } else if (s.type.id == Brawler.ZIGGY) {
+            float a = s.burstAng + MathUtil.rand(-0.05f, 0.05f);
+            float mx = s.hx() + MathUtil.cos(a) * hr, my = s.hy() + MathUtil.sin(a) * hr;
+            Projectile p = spawnProj(Projectile.BALL, s, mx, my, a, 1400, s.type.range, s.type.damage * mult, 11, 120, false);
+            if (p != null) p.bounces = 2;
+            sound(Platform.SND_SHOOT, mx, my, 0.6f);
         } else {
             // Flames follow the head while it moves
             float a = s.burstAng + MathUtil.rand(-0.2f, 0.2f);
@@ -845,6 +930,9 @@ final class World {
             p.radius = radius;
             p.knock = knock;
             p.throughWalls = thru;
+            p.bounces = 0;
+            p.slowFactor = 1f;
+            p.slowDur = 0;
             return p;
         }
         return null;
@@ -868,6 +956,18 @@ final class World {
             float step = (float) Math.sqrt(p.vx * p.vx + p.vy * p.vy) * dt;
             p.traveled += step;
             if (p.kind == Projectile.FLAME) p.radius = 12f + 20f * (p.traveled / p.range);
+            if (p.kind == Projectile.BALL && p.traveled < p.range && p.bounces > 0
+                    && (p.x < 0 || p.y < 0 || p.x >= size || p.y >= size || tiles[(int) (p.y / T) * n + (int) (p.x / T)] == WALL)) {
+                boolean flipX = solidAt(p.x, p.py), flipY = solidAt(p.px, p.y);
+                if (!flipX && !flipY) flipX = flipY = true;
+                if (flipX) p.vx = -p.vx;
+                if (flipY) p.vy = -p.vy;
+                p.x = p.px;
+                p.y = p.py;
+                p.bounces--;
+                fx.sparks(p.x, p.y, 4, 0xffffe14a, 180, 0.2f);
+                continue;
+            }
             if (p.traveled >= p.range || p.x < 0 || p.y < 0 || p.x >= size || p.y >= size) {
                 p.active = false;
                 if (p.kind != Projectile.FLAME) fx.sparks(p.x, p.y, 3, 0xffffffff, 120, 0.2f);
@@ -906,9 +1006,10 @@ final class World {
             float rr = s.radius + p.radius;
             if (MathUtil.dist2(cx, cy, sxj, syj) < rr * rr) {
                 float ang = (float) Math.atan2(p.vy, p.vx);
-                int color = p.kind == Projectile.FLAME ? 0xffff8a2a : (p.kind == Projectile.PELLET ? 0xffffe066 : 0xff9af0ff);
+                int color = p.kind == Projectile.FLAME ? 0xffff8a2a : (p.kind == Projectile.PELLET || p.kind == Projectile.BALL ? 0xffffe066 : 0xff9af0ff);
                 fx.sparks(cx, cy, 6, color, 260, 0.25f);
                 hurt(s, p.damage, p.owner, cx, cy, ang, p.knock, CAUSE_SHOT);
+                if (p.slowDur > 0) slow(s, p.slowFactor, p.slowDur);
                 p.active = false;
                 return;
             }
@@ -918,6 +1019,15 @@ final class World {
     private void explode(Projectile p) {
         p.active = false;
         float x = p.x, y = p.y, r = p.aoe;
+        if (p.kind == Projectile.GLOB || p.kind == Projectile.MEGAGLOB) {
+            boolean big = p.kind == Projectile.MEGAGLOB;
+            addArea(x, y, r, big ? 5f : 3f, (big ? 850 : 650) * (p.owner != null ? p.owner.damageMult() : 1f), p.owner);
+            fx.burst(x, y, big ? 30 : 16, 0xffa6ff3a, r * 3f, 9, 0.5f);
+            fx.ring(x, y, r, 0xffa6ff3a, 0.35f);
+            sound(Platform.SND_EXPLODE, x, y, 0.45f);
+            splash(p, x, y, r * 0.8f);
+            return;
+        }
         boolean mega = p.kind == Projectile.MEGABOMB;
         fx.ring(x, y, r * 1.1f, 0xffffe28a, 0.45f);
         fx.burst(x, y, mega ? 40 : 22, 0xffff8a2a, r * 3.5f, mega ? 14 : 10, 0.6f);
@@ -925,6 +1035,11 @@ final class World {
         fx.smoke(x, y, mega ? 14 : 7, 0xff5a4a40, r * 0.5f, 0.9f);
         sound(Platform.SND_EXPLODE, x, y, mega ? 1f : 0.7f);
         shakeAt(x, y, mega ? 16 : 8);
+        splash(p, x, y, r);
+    }
+
+    /** Damages every snake (once) and box within r of (x, y). */
+    private void splash(Projectile p, float x, float y, float r) {
         for (int i = 0; i < snakeCount; i++) {
             Snake s = snakes[i];
             if (!s.alive || s == p.owner) continue;
@@ -951,6 +1066,130 @@ final class World {
                     damageBox(ty * n + tx, p.damage, p.owner);
     }
 
+    void slow(Snake v, float factor, float dur) {
+        if (!v.alive || v.spawnShield > 0) return;
+        if (v.slowTime <= 0 || factor <= v.slowFactor) v.slowFactor = factor;
+        v.slowTime = Math.max(v.slowTime, dur);
+    }
+
+    /** Frost's Blizzard: damages and nearly freezes everyone close by. */
+    private void nova(Snake s, float radius, float dmg) {
+        float x = s.hx(), y = s.hy();
+        fx.ring(x, y, radius, 0xffbff0ff, 0.5f);
+        fx.ring(x, y, radius * 0.6f, 0xffffffff, 0.35f);
+        fx.burst(x, y, 40, 0xffe8ffff, radius * 3f, 9, 0.6f);
+        shakeAt(x, y, 8);
+        for (int i = 0; i < snakeCount; i++) {
+            Snake o = snakes[i];
+            if (o == s || !o.alive) continue;
+            if (x < o.minX - radius || x > o.maxX + radius || y < o.minY - radius || y > o.maxY + radius) continue;
+            for (int j = 0; j < o.segs; j += 2) {
+                float rr = radius + o.radius;
+                if (MathUtil.dist2(x, y, o.sx[j], o.sy[j]) < rr * rr) {
+                    hurt(o, dmg, s, o.sx[j], o.sy[j], MathUtil.angleTo(x, y, o.sx[j], o.sy[j]), 200, CAUSE_SHOT);
+                    slow(o, 0.3f, 2.5f);
+                    break;
+                }
+            }
+        }
+    }
+
+    /** Shade's Shadow Step: blink forward and turn invisible. */
+    private void shadowStep(Snake s, float ang, float dist) {
+        float d = MathUtil.clamp(dist, 180, s.type.superRange);
+        float ox = s.hx(), oy = s.hy();
+        float tx = ox, ty = oy;
+        for (float k = d; k > 0; k -= 20) {
+            float x = ox + MathUtil.cos(ang) * k, y = oy + MathUtil.sin(ang) * k;
+            if (!solidCircle(x, y, s.radius)) {
+                tx = x;
+                ty = y;
+                break;
+            }
+        }
+        fx.smoke(ox, oy, 10, 0xff2a2a40, 40, 0.8f);
+        s.sx[0] = tx;
+        s.sy[0] = ty;
+        s.ang = s.targetAng = ang;
+        s.invisTime = 3.5f;
+        s.revealTime = 0;
+        fx.smoke(tx, ty, 8, 0xff4a4a66, 34, 0.7f);
+    }
+
+    // Lingering poison puddles (Toxin)
+    private static final int MAX_AREAS = 24;
+    private final float[] areaX = new float[MAX_AREAS], areaY = new float[MAX_AREAS], areaR = new float[MAX_AREAS];
+    private final float[] areaLife = new float[MAX_AREAS], areaMax = new float[MAX_AREAS], areaDps = new float[MAX_AREAS];
+    private final float[] areaTick = new float[MAX_AREAS];
+    private final Snake[] areaOwner = new Snake[MAX_AREAS];
+    private int areaCount;
+
+    private void addArea(float x, float y, float r, float life, float dps, Snake owner) {
+        if (areaCount >= MAX_AREAS) return;
+        int i = areaCount++;
+        areaX[i] = x;
+        areaY[i] = y;
+        areaR[i] = r;
+        areaLife[i] = areaMax[i] = life;
+        areaDps[i] = dps;
+        areaTick[i] = 0.25f;
+        areaOwner[i] = owner;
+    }
+
+    private void updateAreas(float dt) {
+        for (int i = 0; i < areaCount; i++) {
+            areaLife[i] -= dt;
+            if (areaLife[i] <= 0) {
+                int last = --areaCount;
+                areaX[i] = areaX[last];
+                areaY[i] = areaY[last];
+                areaR[i] = areaR[last];
+                areaLife[i] = areaLife[last];
+                areaMax[i] = areaMax[last];
+                areaDps[i] = areaDps[last];
+                areaTick[i] = areaTick[last];
+                areaOwner[i] = areaOwner[last];
+                areaOwner[last] = null;
+                i--;
+                continue;
+            }
+            areaTick[i] -= dt;
+            if (areaTick[i] > 0) continue;
+            areaTick[i] += 0.5f;
+            float x = areaX[i], y = areaY[i], r = areaR[i];
+            for (int k = 0; k < snakeCount; k++) {
+                Snake o = snakes[k];
+                if (o == areaOwner[i] || !o.alive) continue;
+                if (x < o.minX - r || x > o.maxX + r || y < o.minY - r || y > o.maxY + r) continue;
+                for (int j = 0; j < o.segs; j += 2) {
+                    float rr = r + o.radius * 0.5f;
+                    if (MathUtil.dist2(x, y, o.sx[j], o.sy[j]) < rr * rr) {
+                        hurt(o, areaDps[i] * 0.5f, areaOwner[i], o.sx[j], o.sy[j], 0, 0, CAUSE_SHOT);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private void drawAreas(Gfx g, float l, float t, float r, float b, float tt) {
+        for (int i = 0; i < areaCount; i++) {
+            float x = areaX[i], y = areaY[i], rad = areaR[i];
+            if (x < l - rad || x > r + rad || y < t - rad || y > b + rad) continue;
+            float f = Math.min(1f, areaLife[i] / 0.4f) * Math.min(1f, (areaMax[i] - areaLife[i]) / 0.2f + 0.3f);
+            g.color(MathUtil.withAlpha(0xff6a2bd1, 0.35f * f));
+            g.fillCircle(x, y, rad);
+            g.color(MathUtil.withAlpha(0xffa6ff3a, 0.45f * f));
+            g.fillCircle(x, y, rad * 0.82f);
+            g.color(MathUtil.withAlpha(0xffd8ff8a, 0.7f * f));
+            for (int k = 0; k < 5; k++) {
+                float a = k * 1.3f + i;
+                float ph = (tt * 0.8f + k * 0.21f) % 1f;
+                g.fillCircle(x + MathUtil.cos(a) * rad * 0.55f, y + MathUtil.sin(a) * rad * 0.55f, rad * 0.12f * (1f - ph));
+            }
+        }
+    }
+
     void hurt(Snake v, float dmg, Snake by, float x, float y, float kAng, float knock, int cause) {
         if (!v.alive) return;
         if (v.spawnShield > 0 && cause != CAUSE_POISON) {
@@ -971,7 +1210,7 @@ final class World {
         }
         if (cause != CAUSE_POISON) {
             boolean mine = by != null && by.isPlayer, me = v.isPlayer;
-            if (mine || me || isNearCamera(x, y)) {
+            if (showDamage && (mine || me || isNearCamera(x, y))) {
                 int col = me ? 0xffff5a5a : (mine ? 0xffffffff : 0xffd8d8d8);
                 // Pellets and flames land in clusters: sum them into one number
                 if (v.dmgTimer > 0 && v.dmgColor == col) {
@@ -1027,7 +1266,7 @@ final class World {
                 x = v.sx[j];
                 y = v.sy[j];
             }
-            addOrb(x, y, value, (k & 1) == 0 ? v.color1 : v.color2, -1);
+            addOrb(x, y, value, v.palette[k % v.palette.length], -1);
         }
         for (int c = 0; c < v.cubes; c++) {
             int j = MathUtil.randInt(Math.max(1, Math.min(v.segs, 12)));
@@ -1085,6 +1324,9 @@ final class World {
     // ------------------------------------------------------------------ queries for AI / aim
 
     boolean visibleTo(Snake target, Snake viewer) {
+        if (target.invisTime > 0 && target.revealTime <= 0) {
+            return viewer != null && viewer.alive && MathUtil.dist2(target.hx(), target.hy(), viewer.hx(), viewer.hy()) < 150 * 150;
+        }
         if (target.revealTime > 0 || !target.headInBush) return true;
         return viewer != null && viewer.alive
                 && MathUtil.dist2(target.hx(), target.hy(), viewer.hx(), viewer.hy()) < REVEAL_DIST * REVEAL_DIST;
@@ -1201,7 +1443,7 @@ final class World {
             camX += (f.hx() - camX) * k;
             camY += (f.hy() - camY) * k;
             float base = screenH / 900f * (mode == MODE_DEMO ? 0.85f : 1f);
-            float target = base * (float) Math.pow(19f / f.radius, 0.5f);
+            float target = base * zoomMult * (float) Math.pow(19f / f.radius, 0.5f);
             if (f.boosting) target *= 0.96f;
             zoom += (target - zoom) * Math.min(1f, dt * 2f);
         }
@@ -1224,6 +1466,7 @@ final class World {
         g.translate(-camX, -camY);
 
         drawGround(g, l, t, r, b, tt);
+        drawAreas(g, l, t, r, b, tt);
         drawOrbs(g, l, t, r, b, tt);
         drawCubes(g, l, t, r, b, tt);
         drawWallsAndBoxes(g, l, t, r, b);
@@ -1272,8 +1515,10 @@ final class World {
             if (x < l - 30 || x > r + 30 || y < t - 30 || y > b + 30) continue;
             float pulse = 1f + 0.15f * MathUtil.sin(tt * 4f + ophase[i]);
             int c = ocol[i];
-            g.color(MathUtil.withAlpha(c, 0.28f));
-            g.fillCircle(x, y, rad * 1.9f * pulse);
+            if (!lowGraphics || rad > 9) {
+                g.color(MathUtil.withAlpha(c, 0.28f));
+                g.fillCircle(x, y, rad * 1.9f * pulse);
+            }
             g.color(c);
             g.fillCircle(x, y, rad * pulse);
             g.color(0xccffffff);
@@ -1351,7 +1596,11 @@ final class World {
     }
 
     private boolean isHiddenFromViewer(Snake s, Snake viewer, float x, float y) {
-        if (s == viewer || s.revealTime > 0 || !bushAt(x, y)) return false;
+        if (s == viewer || s.revealTime > 0) return false;
+        if (s.invisTime > 0) {
+            return viewer == null || !viewer.alive || MathUtil.dist2(x, y, viewer.hx(), viewer.hy()) > 150 * 150;
+        }
+        if (!bushAt(x, y)) return false;
         if (viewer == null || !viewer.alive) return true;
         return MathUtil.dist2(x, y, viewer.hx(), viewer.hy()) > REVEAL_DIST * REVEAL_DIST;
     }
@@ -1389,15 +1638,20 @@ final class World {
             hiddenBuf[j] = hdn;
             anyHidden |= hdn;
         }
+        if (s == player && s.invisTime > 0 && s.revealTime <= 0) alpha = Math.min(alpha, 0.45f);
         float flash = s.hitFlash > 0 ? s.hitFlash / 0.12f * 0.8f : 0f;
         boolean glow = s.boosting || s.dashTime > 0;
-        Snake.drawBody(g, s.sx, s.sy, s.segs, s.radius, s.color1, s.color2, anyHidden ? hiddenBuf : null,
+        Snake.drawBody(g, s.sx, s.sy, s.segs, s.radius, s.palette, anyHidden ? hiddenBuf : null,
                 alpha, glow, flash, tt, l, t, r, b);
         if (anyHidden && hiddenBuf[0]) return;
         float hr = s.radius * 1.18f;
         if (s.dashTime > 0) {
             g.color(0x66ff7a2a);
             g.fillCircle(s.hx(), s.hy(), hr * 1.9f);
+        }
+        if (s.slowTime > 0) {
+            g.color(MathUtil.withAlpha(0xffbff0ff, 0.45f * alpha));
+            g.fillCircle(s.hx(), s.hy(), hr * 1.6f);
         }
         if (s.superReady()) {
             float p = 0.5f + 0.5f * MathUtil.sin(tt * 8f);
@@ -1465,6 +1719,73 @@ final class World {
                     g.fillCircle(p.x + br * 0.6f, by - br * 0.9f, br * 0.22f * fl);
                     break;
                 }
+                case Projectile.SHARD: {
+                    float a = (float) Math.atan2(p.vy, p.vx);
+                    float ca = MathUtil.cos(a), sa = MathUtil.sin(a);
+                    float len = p.radius * 2.6f;
+                    poly4[0] = p.x + ca * len;
+                    poly4[1] = p.y + sa * len;
+                    poly4[2] = p.x - sa * p.radius * 0.8f;
+                    poly4[3] = p.y + ca * p.radius * 0.8f;
+                    poly4[4] = p.x - ca * len;
+                    poly4[5] = p.y - sa * len;
+                    poly4[6] = p.x + sa * p.radius * 0.8f;
+                    poly4[7] = p.y - ca * p.radius * 0.8f;
+                    g.color(0x8899e6ff);
+                    g.line(p.x, p.y, p.x - p.vx * 0.03f, p.y - p.vy * 0.03f, p.radius * 1.2f);
+                    g.color(0xff4aa8e0);
+                    g.fillPoly(poly4, 4);
+                    g.color(0xffe8ffff);
+                    g.fillCircle(p.x, p.y, p.radius * 0.45f);
+                    break;
+                }
+                case Projectile.BALL: {
+                    g.color(0x66ff6fb5);
+                    g.line(p.x, p.y, p.x - p.vx * 0.03f, p.y - p.vy * 0.03f, p.radius * 1.4f);
+                    g.color(0xff7a3cff);
+                    g.fillCircle(p.x, p.y, p.radius + 2.5f);
+                    g.color(0xffff6fb5);
+                    g.fillCircle(p.x, p.y, p.radius);
+                    g.color(0xfffff04a);
+                    g.fillCircle(p.x - p.radius * 0.3f, p.y - p.radius * 0.3f, p.radius * 0.4f);
+                    break;
+                }
+                case Projectile.SHURIKEN: {
+                    float spin = tt * 25f;
+                    g.color(0xff1c1c2a);
+                    g.fillCircle(p.x, p.y, p.radius * 0.6f);
+                    for (int k = 0; k < 4; k++) {
+                        float a = spin + k * MathUtil.PI / 2;
+                        poly4[0] = p.x + MathUtil.cos(a) * p.radius * 1.7f;
+                        poly4[1] = p.y + MathUtil.sin(a) * p.radius * 1.7f;
+                        poly4[2] = p.x + MathUtil.cos(a + 0.7f) * p.radius * 0.5f;
+                        poly4[3] = p.y + MathUtil.sin(a + 0.7f) * p.radius * 0.5f;
+                        poly4[4] = p.x + MathUtil.cos(a - 0.7f) * p.radius * 0.5f;
+                        poly4[5] = p.y + MathUtil.sin(a - 0.7f) * p.radius * 0.5f;
+                        g.color(0xffc8c8d8);
+                        g.fillPoly(poly4, 3);
+                    }
+                    g.color(0xffff3a6a);
+                    g.fillCircle(p.x, p.y, p.radius * 0.25f);
+                    break;
+                }
+                case Projectile.GLOB:
+                case Projectile.MEGAGLOB: {
+                    float f = Math.min(1f, p.t / p.flight);
+                    float hgt = MathUtil.sin(f * MathUtil.PI) * (p.kind == Projectile.MEGAGLOB ? 170 : 120);
+                    g.color(0x40000000);
+                    g.fillCircle(p.x, p.y, p.radius * 0.8f);
+                    g.color(0x55a6ff3a);
+                    g.strokeCircle(p.targetX, p.targetY, p.aoe * (0.6f + 0.4f * f), 4);
+                    float by = p.y - hgt;
+                    g.color(0xff3a1a66);
+                    g.fillCircle(p.x, by, p.radius + 3);
+                    g.color(0xffa6ff3a);
+                    g.fillCircle(p.x, by, p.radius);
+                    g.color(0xccf2ff8a);
+                    g.fillCircle(p.x - p.radius * 0.3f, by - p.radius * 0.3f, p.radius * 0.35f);
+                    break;
+                }
                 case Projectile.FLAME:
                 default: {
                     float f = p.traveled / p.range;
@@ -1484,7 +1805,7 @@ final class World {
         int tx0 = Math.max(0, (int) (l / T) - 1), tx1 = Math.min(n - 1, (int) (r / T) + 1);
         int ty0 = Math.max(0, (int) (t / T) - 1), ty1 = Math.min(n - 1, (int) (b / T) + 1);
         float a = playerIn ? 0.75f : 1f;
-        for (int pass = 0; pass < 3; pass++) {
+        for (int pass = 0; pass < (lowGraphics ? 2 : 3); pass++) {
             int c = pass == 0 ? 0xff23602a : (pass == 1 ? 0xff3f9b3c : 0xff5cbf4e);
             g.color(MathUtil.withAlpha(c, a));
             for (int ty = ty0; ty <= ty1; ty++) {
@@ -1565,11 +1886,34 @@ final class World {
         float ca = MathUtil.cos(aimAng), sa = MathUtil.sin(aimAng);
         float range = aimSuper ? s.type.superRange : s.type.range;
         switch (s.type.id) {
+            case Brawler.FROST:
+            case Brawler.ZIGGY:
+                if (aimSuper) {
+                    g.color(col);
+                    g.fillCircle(hx, hy, s.type.id == Brawler.FROST ? range : 260);
+                    g.color(edge);
+                    g.strokeCircle(hx, hy, s.type.id == Brawler.FROST ? range : 260, 4);
+                    break;
+                }
+                if (s.type.id == Brawler.ZIGGY) {
+                    drawAimLane(g, hx, hy, ca, sa, range, 16, col, edge);
+                    break;
+                }
+                // fall through: Frost's shards use a narrow cone
             case Brawler.VIPER:
-            case Brawler.BLAZE: {
-                float spread = s.type.id == Brawler.VIPER ? (aimSuper ? 0.5f : 0.34f) : 0.24f;
-                if (s.type.id == Brawler.BLAZE && aimSuper) {
+            case Brawler.BLAZE:
+            case Brawler.SHADE: {
+                int id = s.type.id;
+                float spread = id == Brawler.VIPER ? (aimSuper ? 0.5f : 0.34f) : id == Brawler.FROST ? 0.15f : id == Brawler.SHADE ? 0.12f : 0.24f;
+                if (id == Brawler.BLAZE && aimSuper) {
                     drawAimLane(g, hx, hy, ca, sa, 2.6f * Snake.BASE_SPEED * s.type.speed * 1.05f, s.radius * 1.4f, col, edge);
+                    break;
+                }
+                if (id == Brawler.SHADE && aimSuper) {
+                    float d = MathUtil.clamp(aimDist, 180, range);
+                    drawAimLane(g, hx, hy, ca, sa, d, s.radius, col, edge);
+                    g.color(edge);
+                    g.strokeCircle(hx + ca * d, hy + sa * d, s.radius * 1.6f, 4);
                     break;
                 }
                 int segs = 10;
@@ -1596,7 +1940,7 @@ final class World {
             default: {
                 float d = MathUtil.clamp(aimDist, 110, range);
                 float tx = hx + ca * d, ty = hy + sa * d;
-                float aoe = aimSuper ? 230 : 105;
+                float aoe = s.type.id == Brawler.TOXIN ? (aimSuper ? 210 : 95) : (aimSuper ? 230 : 105);
                 g.color(edge);
                 for (int i = 1; i < 12; i++) {
                     float f = i / 12f;

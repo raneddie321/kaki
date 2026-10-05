@@ -12,6 +12,10 @@ final class Snake {
     Brawler type;
     boolean isPlayer;
     int color1, color2;
+    /** Body colors, cycled along the snake. color1/color2 are the first two. */
+    int[] palette;
+    /** Power level 1..7 from upgrades (players) or trophies (bots). */
+    int level = 1;
 
     boolean alive;
     float deadTime;
@@ -35,6 +39,8 @@ final class Snake {
     float dashTime;
     final boolean[] dashHit = new boolean[32];
     float revealTime;
+    float invisTime;
+    float slowTime, slowFactor = 1f;
     float hitFlash;
     float kbx, kby;
     float poisonTime, poisonTick;
@@ -81,6 +87,9 @@ final class Snake {
         this.spawnShield = 2.5f;
         this.dashTime = 0;
         this.revealTime = 0;
+        this.invisTime = 0;
+        this.slowTime = 0;
+        this.slowFactor = 1f;
         this.hitFlash = 0;
         this.kbx = this.kby = 0;
         this.poisonTime = 0;
@@ -123,18 +132,29 @@ final class Snake {
         spacing = radius * 0.52f;
     }
 
+    void setColors(int[] pal) {
+        palette = pal;
+        color1 = pal[0];
+        color2 = pal.length > 1 ? pal[1] : pal[0];
+    }
+
+    float levelMult() {
+        return 1f + 0.06f * (level - 1);
+    }
+
     float computeMaxHp() {
-        return type.hp * 2f * (1f + 0.1f * cubes) + mass * 2f;
+        return type.hp * 2f * (1f + 0.1f * cubes) * levelMult() + mass * 2f;
     }
 
     float damageMult() {
-        return 1f + 0.1f * cubes;
+        return (1f + 0.1f * cubes) * levelMult();
     }
 
     float speed() {
         float s = BASE_SPEED * type.speed * (1f - Math.min(0.15f, mass / 20000f));
         if (dashTime > 0) s *= DASH_MULT;
         else if (boosting) s *= BOOST_MULT;
+        if (slowTime > 0) s *= slowFactor;
         return s;
     }
 
@@ -215,6 +235,7 @@ final class Snake {
         fireCooldown = 0.32f;
         sinceAttack = 0;
         revealTime = 1.3f;
+        invisTime = 0;
         w.fire(this, aimAng, aimDist, false);
         return true;
     }
@@ -225,6 +246,7 @@ final class Snake {
         superWasReady = false;
         sinceAttack = 0;
         revealTime = 1.6f;
+        invisTime = 0;
         w.fire(this, aimAng, aimDist, true);
         return true;
     }
@@ -237,12 +259,12 @@ final class Snake {
      * Draws the snake. {@code hidden} lets the world hide segments that sit inside bushes.
      * Shared by the in-game renderer and the brawler preview cards.
      */
-    static void drawBody(Gfx g, float[] xs, float[] ys, int n, float r, int c1, int c2,
+    static void drawBody(Gfx g, float[] xs, float[] ys, int n, float r, int[] pal,
                          boolean[] hidden, float alpha, boolean glow, float flash, float time,
                          float viewL, float viewT, float viewR, float viewB) {
-        int outline = MathUtil.darker(c2, 0.45f);
+        int np = pal.length;
         if (glow) {
-            int gc = MathUtil.withAlpha(MathUtil.lighter(c1, 0.3f), 0.22f * alpha);
+            int gc = MathUtil.withAlpha(MathUtil.lighter(pal[0], 0.3f), 0.22f * alpha);
             g.color(gc);
             for (int i = n - 1; i >= 0; i -= 2) {
                 if (hidden != null && hidden[i]) continue;
@@ -257,8 +279,8 @@ final class Snake {
             if (x < viewL - r || x > viewR + r || y < viewT - r || y > viewB + r) continue;
             float taper = i > n - 8 ? 0.55f + 0.45f * (n - 1 - i) / 7f : 1f;
             float rr = r * taper;
-            boolean stripe = ((i + 1) / 3) % 2 == 0;
-            int base = stripe ? c1 : c2;
+            int base = pal[((i + 1) / 3) % np];
+            int outline = MathUtil.darker(base, 0.55f);
             if (flash > 0) base = MathUtil.mix(base, 0xffffffff, flash);
             g.color(MathUtil.withAlpha(outline, alpha));
             g.fillCircle(x, y, rr + 2.5f);
@@ -319,6 +341,30 @@ final class Snake {
                 g.fillCircle(ex, ey, r * 0.2f * fl);
                 break;
             }
+            case Brawler.SHADE: {
+                // Ninja headband tails fluttering behind
+                g.color(MathUtil.withAlpha(accent, alpha));
+                for (int k = 0; k < 2; k++) {
+                    float wob = MathUtil.sin(time * 11f + k * 1.7f) * 0.45f;
+                    float bx = x - ca * hr * 0.6f + px * hr * 0.25f * (k == 0 ? 1 : -1);
+                    float by = y - sa * hr * 0.6f + py * hr * 0.25f * (k == 0 ? 1 : -1);
+                    float ex = bx + (-ca + px * (wob + (k == 0 ? 0.3f : -0.3f))) * hr * 1.2f;
+                    float ey = by + (-sa + py * (wob + (k == 0 ? 0.3f : -0.3f))) * hr * 1.2f;
+                    g.line(bx, by, ex, ey, r * 0.22f);
+                }
+                break;
+            }
+            case Brawler.TOXIN: {
+                // Toxic bubbles drifting off the head
+                for (int k = 0; k < 3; k++) {
+                    float ph = (time * 0.9f + k / 3f) % 1f;
+                    float bx = x - ca * hr * (0.4f + ph * 1.4f) + px * hr * MathUtil.sin(time * 3f + k) * 0.5f;
+                    float by = y - sa * hr * (0.4f + ph * 1.4f) + py * hr * MathUtil.sin(time * 3f + k) * 0.5f;
+                    g.color(MathUtil.withAlpha(0xffa6ff3a, alpha * (1f - ph)));
+                    g.fillCircle(bx, by, r * (0.15f + 0.2f * ph));
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -364,6 +410,53 @@ final class Snake {
                 // Helmet stripe
                 g.color(MathUtil.withAlpha(0xff3a2a20, alpha * 0.85f));
                 g.line(x - ca * hr * 0.75f, y - sa * hr * 0.75f, x + ca * hr * 0.1f, y + sa * hr * 0.1f, hr * 0.32f);
+                break;
+            }
+            case Brawler.FROST: {
+                // Icicle crown
+                for (int k = -1; k <= 1; k++) {
+                    float cxp = x - ca * hr * 0.35f + px * hr * 0.5f * k, cyp = y - sa * hr * 0.35f + py * hr * 0.5f * k;
+                    float s2 = hr * (k == 0 ? 0.55f : 0.42f);
+                    TRI[0] = cxp - ca * s2;
+                    TRI[1] = cyp - sa * s2;
+                    TRI[2] = cxp + px * s2 * 0.3f;
+                    TRI[3] = cyp + py * s2 * 0.3f;
+                    TRI[4] = cxp - px * s2 * 0.3f;
+                    TRI[5] = cyp - py * s2 * 0.3f;
+                    g.color(MathUtil.withAlpha(0xff2a7ab0, alpha));
+                    g.fillPoly(TRI, 3);
+                    g.color(MathUtil.withAlpha(0xffe8ffff, alpha));
+                    g.fillCircle(cxp, cyp, s2 * 0.22f);
+                }
+                break;
+            }
+            case Brawler.ZIGGY: {
+                // Propeller cap
+                float cxp = x - ca * hr * 0.25f, cyp = y - sa * hr * 0.25f;
+                g.color(MathUtil.withAlpha(accent, alpha));
+                g.fillCircle(cxp, cyp, hr * 0.42f);
+                float pa = time * 14f;
+                g.color(MathUtil.withAlpha(0xffffe14a, alpha));
+                g.line(cxp + MathUtil.cos(pa) * hr * 0.75f, cyp + MathUtil.sin(pa) * hr * 0.75f,
+                        cxp - MathUtil.cos(pa) * hr * 0.75f, cyp - MathUtil.sin(pa) * hr * 0.75f, hr * 0.18f);
+                g.color(MathUtil.withAlpha(0xff222230, alpha));
+                g.fillCircle(cxp, cyp, hr * 0.12f);
+                break;
+            }
+            case Brawler.TOXIN: {
+                // Gas mask filter on the snout
+                float fx = x + ca * hr * 0.75f, fy = y + sa * hr * 0.75f;
+                g.color(MathUtil.withAlpha(0xff2a2a36, alpha));
+                g.fillCircle(fx, fy, hr * 0.38f);
+                g.color(MathUtil.withAlpha(0xffa6ff3a, alpha));
+                g.strokeCircle(fx, fy, hr * 0.26f, hr * 0.1f);
+                break;
+            }
+            case Brawler.SHADE: {
+                // Headband across the eyes
+                g.color(MathUtil.withAlpha(accent, alpha));
+                g.line(x + ca * hr * 0.15f + px * hr * 0.95f, y + sa * hr * 0.15f + py * hr * 0.95f,
+                        x + ca * hr * 0.15f - px * hr * 0.95f, y + sa * hr * 0.15f - py * hr * 0.95f, hr * 0.3f);
                 break;
             }
             default:

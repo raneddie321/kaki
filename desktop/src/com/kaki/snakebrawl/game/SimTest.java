@@ -74,7 +74,7 @@ public final class SimTest {
         float totalTime = 0;
         int unfinished = 0;
         for (int m = 0; m < matches; m++) {
-            World w = new World(pf, World.MODE_SHOWDOWN, null, 10, 200);
+            World w = new World(pf, World.MODE_SHOWDOWN, null, null, 1, 10, 200);
             int steps = 0;
             while (w.aliveCount > 1 && w.matchTime < 320) {
                 long t0 = System.nanoTime();
@@ -99,7 +99,7 @@ public final class SimTest {
         System.out.printf("avg step %.3f ms, worst %.3f ms%n", totalNanos / 1e6 / totalSteps, worstNanos / 1e6);
 
         // Endless stress: bigger map, lots of growth
-        World w = new World(pf, World.MODE_ENDLESS, null, 14, 400);
+        World w = new World(pf, World.MODE_ENDLESS, null, null, 1, 14, 400);
         long t0 = System.nanoTime();
         for (int i = 0; i < 60 * 240; i++) w.update(DT);
         float maxMass = 0;
@@ -201,7 +201,7 @@ public final class SimTest {
             Game g2 = new Game(pf);
             g2.resize(W, H);
             game = g2;
-            tap(game, 2140, 955); // PLAY
+            tapBtn(game, Game.B_PLAY);
             if (game.screenId() != 2) throw new IllegalStateException("did not start, screen=" + game.screenId());
             Pilot pilot = new Pilot(game);
             float lastHp = 1e9f;
@@ -263,9 +263,9 @@ public final class SimTest {
             }
             if (game.screenId() != 2) {
                 // Fall back to the PLAY button
-                float u = Math.min(height / 1080f, width / 1920f);
-                game.onBack();
-                tap(game, width - 28 * u - 30 * u - 200 * u, height - 20 * u - 30 * u - 75 * u);
+                while (game.onBack()) game.tick(DT);
+                if (game.screenId() != 0) game.onBack();
+                tapBtn(game, Game.B_PLAY);
             }
             Pilot pilot = new Pilot(game);
             int steps = 0;
@@ -315,77 +315,113 @@ public final class SimTest {
 
     // ------------------------------------------------------------------ screenshots
 
+    static void tapBtn(Game g, int id) {
+        Ui.Btn b = g.ui.find(id);
+        if (b == null) throw new IllegalStateException("no button " + id + " on screen " + g.screenId());
+        float y = (b.t + b.b) / 2 - (b.scrolls ? g.ui.scrollY : 0);
+        tap(g, (b.l + b.r) / 2, y);
+        g.tick(DT);
+    }
+
     static void shots(String outDir, int width, int height) throws Exception {
         new File(outDir).mkdirs();
         Font font = Font.createFont(Font.TRUETYPE_FONT, new File("app/src/main/assets/fonts/LilitaOne-Regular.ttf"));
         DesktopPlatform pf = new DesktopPlatform();
+        pf.prefs.put("coins", 5000);
+        pf.prefs.put("unlocked", 0x3f);
+        pf.prefs.put("ownedSkins", 0x1 | 1 << 8 | 1 << 18);
+        pf.prefs.put("skin", 18);
+        pf.prefs.put("lvl0", 4);
         pf.prefs.put("brawler", 2);
         Game game = new Game(pf);
         game.resize(width, height);
-        float u = Math.min(height / 1080f, width / 1920f);
-        float pad = 28 * u, padB = 20 * u;
 
         run(game, 1.0f);
         shot(game, font, width, height, outDir + "/1_menu.png");
 
-        tap(game, pad + 30 * u + 200 * u, height - padB - 30 * u - 50 * u); // BRAWLERS
-        run(game, 0.6f);
+        tapBtn(game, Game.B_BRAWLERS);
+        tapBtn(game, 100 + 6); // view TOXIN (locked)
+        run(game, 0.5f);
         shot(game, font, width, height, outDir + "/2_brawlers.png");
-        tap(game, pad + 100 * u, 20 * u + 60 * u); // BACK
-        run(game, 0.3f);
+        tapBtn(game, 100 + 4); // FROST
+        tapBtn(game, 151); // upgrade -> confirm popup
+        run(game, 0.4f);
+        shot(game, font, width, height, outDir + "/2b_upgrade_popup.png");
+        tapBtn(game, Game.B_YES);
+        run(game, 0.4f);
+        tapBtn(game, Game.B_OK);
+        tapBtn(game, Game.B_BACK);
 
-        for (int b = 0; b < 4; b++) {
+        tapBtn(game, Game.B_SHOP);
+        run(game, 0.5f);
+        shot(game, font, width, height, outDir + "/3_shop_offers.png");
+        tapBtn(game, 311); // brawl box
+        tapBtn(game, Game.B_YES);
+        run(game, 0.5f);
+        shot(game, font, width, height, outDir + "/3b_box_reward.png");
+        tapBtn(game, Game.B_OK);
+        tapBtn(game, 301); // skins tab
+        run(game, 0.5f);
+        shot(game, font, width, height, outDir + "/4_shop_skins.png");
+        // Scroll down with a drag
+        float cx = width / 2f, cy = height * 0.7f;
+        game.touchDown(3, cx, cy);
+        for (int i = 1; i <= 10; i++) {
+            game.touchMove(3, cx, cy - i * 40);
+            game.tick(DT);
+        }
+        game.touchUp(3, cx, cy - 400);
+        run(game, 0.5f);
+        shot(game, font, width, height, outDir + "/4b_shop_skins_scrolled.png");
+        tapBtn(game, 302); // brawlers tab
+        run(game, 0.3f);
+        shot(game, font, width, height, outDir + "/5_shop_brawlers.png");
+        tapBtn(game, Game.B_BACK);
+
+        tapBtn(game, Game.B_SETTINGS);
+        run(game, 0.3f);
+        shot(game, font, width, height, outDir + "/6_settings.png");
+        tapBtn(game, Game.B_BACK);
+
+        int[] brawlers = {4, 5, 6, 7};
+        for (int b : brawlers) {
             pf.prefs.put("brawler", b);
-            pf.prefs.put("hints", b == 0 ? 0 : 5);
+            pf.prefs.put("unlocked", 0xff);
+            pf.prefs.put("hints", 5);
             game = new Game(pf);
             game.resize(width, height);
-            tap(game, width - pad - 30 * u - 200 * u, height - padB - 30 * u - 75 * u); // PLAY
+            tapBtn(game, Game.B_PLAY);
             Pilot pilot = new Pilot(game);
             float t = 0;
-            float[] at = b == 0 ? new float[]{1.0f, 8f, 40f} : new float[]{22f};
-            int k = 0;
-            while (k < at.length && game.screenId() == 2) {
+            boolean shotTaken = false;
+            while (game.screenId() == 2 && t < 60) {
                 pilot.step(DT);
                 game.tick(DT);
                 t += DT;
-                // Hold an aim drag for the shot so the aim indicator shows
-                if (k < at.length && t >= at[k]) {
-                    if (b != 0 || k == 1) {
-                        game.touchDown(5, width - pad - 175 * u, height - padB - 175 * u);
-                        game.touchMove(5, width - pad - 175 * u - 60 * u, height - padB - 175 * u - 50 * u);
-                        game.tick(DT);
-                    }
-                    shot(game, font, width, height, outDir + "/3_play_" + Brawler.ALL[b].name.toLowerCase() + "_" + (int) at[k] + "s.png");
-                    if (b != 0 || k == 1) game.touchUp(5, width - pad - 175 * u - 60 * u, height - padB - 175 * u - 50 * u);
-                    k++;
+                World w = game.currentWorld();
+                if (!shotTaken && t > 14 && (w.player.superReady() || t > 30)) {
+                    // Drag the super stick to show its aim preview
+                    float u = Math.min(height / 1080f, width / 1920f);
+                    float sxp = width - 28 * u - 175 * u - 225 * u, syp = height - 20 * u - 175 * u + 55 * u;
+                    game.touchDown(6, sxp, syp);
+                    game.touchMove(6, sxp - 70 * u, syp - 40 * u);
+                    game.tick(DT);
+                    shot(game, font, width, height, outDir + "/7_play_" + Brawler.ALL[b].name.toLowerCase() + ".png");
+                    game.touchUp(6, sxp - 70 * u, syp - 40 * u);
+                    for (int i = 0; i < 20; i++) game.tick(DT);
+                    shot(game, font, width, height, outDir + "/7_play_" + Brawler.ALL[b].name.toLowerCase() + "_super.png");
+                    shotTaken = true;
                 }
             }
-            if (b == 0) {
-                // Play on to the end for the results screen
-                int steps = 0;
-                while (game.screenId() == 2 && steps < 60 * 400) {
+            if (b == 7) {
+                while (game.screenId() == 2) {
                     pilot.step(DT);
                     game.tick(DT);
-                    steps++;
                 }
                 run(game, 1.0f);
-                shot(game, font, width, height, outDir + "/4_result.png");
+                shot(game, font, width, height, outDir + "/8_result.png");
             }
         }
-
-        // Endless mode
-        pf.prefs.put("mode", 1);
-        game = new Game(pf);
-        game.resize(width, height);
-        tap(game, width - pad - 30 * u - 200 * u, height - padB - 30 * u - 75 * u);
-        Pilot pilot = new Pilot(game);
-        for (int i = 0; i < 60 * 12 && game.screenId() == 2; i++) {
-            pilot.step(DT);
-            game.tick(DT);
-        }
-        shot(game, font, width, height, outDir + "/5_endless.png");
-        game.onBack();
-        shot(game, font, width, height, outDir + "/6_paused.png");
     }
 
     static void run(Game g, float secs) {

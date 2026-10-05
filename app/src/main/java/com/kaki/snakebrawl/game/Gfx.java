@@ -29,6 +29,9 @@ public interface Gfx {
     void text(String s, float x, float y, float size, int align, float outline, int outlineColor);
     float measureText(String s, float size);
 
+    /** Intersects the clip with a rectangle (undone by restore). */
+    void clip(float l, float t, float r, float b);
+
     void save();
     void restore();
     void translate(float dx, float dy);

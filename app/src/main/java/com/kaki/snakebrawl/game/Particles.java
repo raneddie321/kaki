@@ -12,6 +12,7 @@ final class Particles {
     private final float[] life = new float[MAX], maxLife = new float[MAX], size = new float[MAX];
     private final int[] color = new int[MAX], type = new int[MAX];
     private int count;
+    boolean low;
 
     private static final int MAX_TEXT = 80;
     private final float[] tx = new float[MAX_TEXT], ty = new float[MAX_TEXT], tlife = new float[MAX_TEXT], tsize = new float[MAX_TEXT];
@@ -25,7 +26,7 @@ final class Particles {
     }
 
     void add(int t, float px, float py, float pvx, float pvy, float sz, int c, float l) {
-        if (count >= MAX) return;
+        if (count >= (low ? MAX / 3 : MAX)) return;
         int i = count++;
         type[i] = t;
         x[i] = px;
@@ -39,6 +40,7 @@ final class Particles {
     }
 
     void burst(float px, float py, int n, int c, float speed, float sz, float l) {
+        if (low) n = (n + 1) / 2;
         for (int k = 0; k < n; k++) {
             float a = MathUtil.rand(0, MathUtil.TAU);
             float s = speed * MathUtil.rand(0.3f, 1f);
@@ -59,6 +61,7 @@ final class Particles {
     }
 
     void smoke(float px, float py, int n, int c, float sz, float l) {
+        if (low) n = (n + 1) / 2;
         for (int k = 0; k < n; k++) {
             float a = MathUtil.rand(0, MathUtil.TAU);
             float s = MathUtil.rand(10, 60);

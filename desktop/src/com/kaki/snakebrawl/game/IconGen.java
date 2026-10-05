@@ -101,7 +101,7 @@ public final class IconGen {
         }
         Icons.bolt(g, 0, 0, 30, 0xff14142a);
         Icons.bolt(g, 0, 0, 24, 0xffffd23f);
-        Snake.drawBody(g, xs, ys, n, r, b.color1, b.color2, null, 1f, false, 0, 0, -1e4f, -1e4f, 1e4f, 1e4f);
+        Snake.drawBody(g, xs, ys, n, r, new int[]{b.color1, b.color2}, null, 1f, false, 0, 0, -1e4f, -1e4f, 1e4f, 1e4f);
         float ang = (float) Math.atan2(ys[0] - ys[1], xs[0] - xs[1]);
         Snake.drawHead(g, xs[0], ys[0], r * 1.1f, ang, ang, b.color1, b.color2, b.id, b.accent, 1f, 0, 0, 0.9f);
     }

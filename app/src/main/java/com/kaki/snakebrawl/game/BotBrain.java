@@ -132,13 +132,13 @@ final class BotBrain {
 
     private void shootAt(Snake t, float dist) {
         Brawler b = me.type;
-        float projSpeed = b.id == Brawler.VOLT ? 2000 : b.id == Brawler.VIPER ? 1300 : b.id == Brawler.BLAZE ? 950 : 0;
         // Aim at the closest body part, leading heads by the projectile flight time
-        if (!w.findAim(me, (me.superReady() ? b.superRange : b.range) * 0.95f, projSpeed)) return;
+        float reach = me.superReady() ? Math.max(b.range, b.superRange) : b.range;
+        if (!w.findAim(me, reach * 0.95f, b.projSpeed)) return;
         float ang = w.aimOutAng, d = w.aimOutDist;
-        if (b.id == Brawler.BOOMER) {
+        if (b.lobbed()) {
             // Bombs need the target point ahead of the head
-            float tt = 0.55f;
+            float tt = b.id == Brawler.TOXIN ? 0.6f : 0.55f;
             float tx = t.hx() + t.vx * tt * skill, ty = t.hy() + t.vy * tt * skill;
             float dd = MathUtil.dist(me.hx(), me.hy(), tx, ty);
             if (dd < b.range) {
@@ -152,6 +152,13 @@ final class BotBrain {
         if (me.superReady()) {
             boolean use = d < b.superRange * 0.85f;
             if (b.id == Brawler.BLAZE) use = d < 420 && me.hp > me.maxHp * 0.25f;
+            else if (b.id == Brawler.FROST) use = d < b.superRange * 0.8f;
+            else if (b.id == Brawler.ZIGGY) use = d < 500;
+            else if (b.id == Brawler.SHADE) {
+                // Shadow Step is an escape: blink away from danger and vanish
+                if (me.hp < me.maxHp * 0.5f && me.trySuper(w, MathUtil.angleTo(t.hx(), t.hy(), me.hx(), me.hy()), b.superRange)) return;
+                use = false;
+            }
             if (use && me.trySuper(w, ang, d)) return;
         }
         if (d > b.range * 0.95f || shotGap > 0) return;

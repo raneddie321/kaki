@@ -126,6 +126,11 @@ final class AndroidGfx implements Gfx {
     }
 
     @Override
+    public void clip(float l, float t, float r, float b) {
+        c.clipRect(l, t, r, b);
+    }
+
+    @Override
     public void save() {
         c.save();
     }

@@ -1,43 +1,51 @@
 package com.kaki.snakebrawl.game;
 
-/** Top-level game: screens, HUD, touch controls and persistence. Host-agnostic. */
+/** Top-level game: screens, HUD, touch controls and progression. Host-agnostic. */
 public final class Game {
-    private static final int MENU = 0, BRAWLERS = 1, PLAY = 2, RESULT = 3;
+    static final int MENU = 0, BRAWLERS = 1, PLAY = 2, RESULT = 3, SHOP = 4, SETTINGS = 5;
     private static final float STEP = 1f / 60f;
 
-    private static final int B_PLAY = 0, B_MODE = 1, B_BRAWLERS = 2, B_SOUND = 3, B_BACK = 4,
-            B_CARD = 5, /* 5..8 */ B_AGAIN = 9, B_MENU = 10, B_RESUME = 11, B_QUIT = 12, B_PAUSE = 13;
+    static final int B_PLAY = 1, B_MODE = 2, B_BRAWLERS = 3, B_SHOP = 4, B_SETTINGS = 5, B_BACK = 6,
+            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_YES = 90, B_NO = 91, B_OK = 92;
+
+    // Popup actions confirmed with YES
+    static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
+            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7;
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
+    private static final int[] RANK_COINS = {50, 40, 32, 26, 20, 15, 11, 8, 5, 3};
 
     private final Platform host;
-    private final Platform gated;
-    private float w = 1920, h = 1080, u = 1;
+    final Platform gated;
+    final Profile profile;
+    final Ui ui = new Ui();
+    private final MetaScreens meta;
+    float w = 1920, h = 1080, u = 1;
     private float insL, insT, insR, insB;
-    private float padL, padT, padR, padB;
+    float padL, padT, padR, padB;
 
-    private int screen = MENU;
+    int screen = MENU;
     private float screenTime;
     private World world;
-    private World demo;
+    World demo;
     private float acc;
-    private float clock;
-
-    private int selected;
-    private int mode;
-    private int trophies;
-    private int bestLen;
-    private int wins;
-    private int games;
-    private boolean soundOn;
-    private int hintGames;
+    float clock;
 
     private boolean paused;
     private float endTimer = -1;
     private boolean endIsWin;
-    private int resRank, resKills, resLength, resDelta, resCubes;
+    private int resRank, resKills, resLength, resDelta, resCubes, resCoins;
     private boolean resWin, resNewBest;
     private float resTime;
+
+    // Popup dialog
+    boolean popup;
+    private String popTitle, popText;
+    private int popArtType; // 0 none, 1 coins, 2 skin, 3 brawler, 4 box
+    private int popArt;
+    private int popAction, popArg;
+    private boolean popConfirm;
+    private float popTime;
 
     // Touch controls
     private int movePtr = -1;
@@ -47,44 +55,19 @@ public final class Game {
     private int supPtr = -1;
     private float supOx, supOy, supX, supY, supMax;
     private int boostPtr = -1;
+    private int pausePtr = -1;
     private float atkCX, atkCY, atkR, supCX, supCY, supR, boostCX, boostCY, boostR;
     private float moveCX, moveCY, moveR, pauseX, pauseY, pauseR, mapX, mapY, mapS;
 
-    // Buttons
-    private static final class Btn {
-        int id;
-        float l, t, r, b;
-        String label, sub;
-        int color;
-
-        boolean hit(float x, float y) {
-            return x >= l && x <= r && y >= t && y <= b;
-        }
-    }
-
-    private final Btn[] btns = new Btn[16];
-    private int btnCount;
-    private int pressedBtn = -1;
-    private int pressedPtr = -1;
-
-    private final float[] artX = new float[40], artY = new float[40];
     private final float[] poly = new float[16];
 
     public Game(Platform platform) {
         this.host = platform;
-        for (int i = 0; i < btns.length; i++) btns[i] = new Btn();
-        selected = clampInt(host.loadInt("brawler", 0), 0, Brawler.ALL.length - 1);
-        mode = clampInt(host.loadInt("mode", 0), 0, 1);
-        trophies = Math.max(0, host.loadInt("trophies", 0));
-        bestLen = host.loadInt("bestLen", 0);
-        wins = host.loadInt("wins", 0);
-        games = host.loadInt("games", 0);
-        soundOn = host.loadInt("sound", 1) == 1;
-        hintGames = host.loadInt("hints", 0);
+        this.profile = new Profile(platform);
         gated = new Platform() {
             @Override
             public void playSound(int id, float volume) {
-                if (soundOn) host.playSound(id, volume);
+                if (profile.sound) host.playSound(id, volume);
             }
 
             @Override
@@ -99,19 +82,18 @@ public final class Game {
 
             @Override
             public void vibrate(int millis) {
-                host.vibrate(millis);
+                if (profile.vibration) host.vibrate(millis);
             }
         };
+        meta = new MetaScreens(this);
         newDemo();
         layout();
     }
 
-    private static int clampInt(int v, int lo, int hi) {
-        return v < lo ? lo : (v > hi ? hi : v);
-    }
-
     private void newDemo() {
-        demo = new World(gated, World.MODE_DEMO, null, 9, 350);
+        demo = new World(gated, World.MODE_DEMO, null, null, 1, 9, 350);
+        demo.lowGraphics = profile.lowGraphics;
+        demo.fx.low = profile.lowGraphics;
         // Let the demo arena develop a bit so the menu starts lively
         for (int i = 0; i < 240; i++) demo.update(STEP);
     }
@@ -122,6 +104,7 @@ public final class Game {
         w = width;
         h = height;
         u = Math.min(h / 1080f, w / 1920f);
+        ui.u = u;
         layout();
     }
 
@@ -136,9 +119,7 @@ public final class Game {
     public void frame(float dt, Gfx g) {
         if (g.width() != w || g.height() != h) resize(g.width(), g.height());
         dt = Math.min(dt, 0.1f);
-        clock += dt;
-        screenTime += dt;
-        update(dt);
+        tick(dt);
         render(g);
     }
 
@@ -150,16 +131,19 @@ public final class Game {
         return screen;
     }
 
-    /** Advances the game without drawing (used by the desktop test harness). */
+    /** Advances the game without drawing (also used by the desktop test harness). */
     void tick(float dt) {
         clock += dt;
         screenTime += dt;
+        popTime += dt;
+        ui.update(dt);
         update(dt);
     }
 
     /** Called when the app goes to the background. */
     public void onPause() {
         releaseControls();
+        profile.save();
         if (screen == PLAY && endTimer < 0) {
             paused = true;
             layout();
@@ -168,6 +152,10 @@ public final class Game {
 
     /** Returns true if the back press was handled. */
     public boolean onBack() {
+        if (popup) {
+            closePopup();
+            return true;
+        }
         switch (screen) {
             case PLAY:
                 if (endTimer >= 0) return true;
@@ -176,6 +164,10 @@ public final class Game {
                 layout();
                 return true;
             case BRAWLERS:
+            case SHOP:
+            case SETTINGS:
+                setScreen(MENU);
+                return true;
             case RESULT:
                 goMenu();
                 return true;
@@ -186,10 +178,11 @@ public final class Game {
 
     // ------------------------------------------------------------------ flow
 
-    private void setScreen(int s) {
+    void setScreen(int s) {
         screen = s;
         screenTime = 0;
-        pressedBtn = -1;
+        ui.cancel();
+        ui.resetScroll();
         releaseControls();
         layout();
     }
@@ -202,11 +195,15 @@ public final class Game {
     }
 
     private void startGame() {
-        Brawler b = Brawler.ALL[selected];
-        int wm = mode == 0 ? World.MODE_SHOWDOWN : World.MODE_ENDLESS;
-        world = new World(gated, wm, b, wm == World.MODE_SHOWDOWN ? 9 : 11, trophies);
+        Brawler b = Brawler.ALL[profile.selected];
+        int wm = profile.mode == 0 ? World.MODE_SHOWDOWN : World.MODE_ENDLESS;
+        world = new World(gated, wm, b, profile.palette(), profile.levels[b.id], wm == World.MODE_SHOWDOWN ? 9 : 11, profile.trophies);
+        world.showDamage = profile.damageNumbers;
+        world.lowGraphics = profile.lowGraphics;
+        world.fx.low = profile.lowGraphics;
+        world.zoomMult = profile.camera == 0 ? 1.15f : (profile.camera == 2 ? 0.85f : 1f);
         world.updateCamera(1f, w, h);
-        world.zoom = h / 900f;
+        world.zoom = h / 900f * world.zoomMult;
         paused = false;
         endTimer = -1;
         acc = 0;
@@ -222,32 +219,114 @@ public final class Game {
         resTime = world.matchTime;
         if (world.mode == World.MODE_SHOWDOWN) {
             resRank = win ? 1 : Math.max(1, p.rank);
-            resDelta = TROPHY_TABLE[clampInt(resRank - 1, 0, TROPHY_TABLE.length - 1)];
-            if (win) wins++;
+            resDelta = TROPHY_TABLE[Profile.clamp(resRank - 1, 0, TROPHY_TABLE.length - 1)];
+            resCoins = RANK_COINS[Profile.clamp(resRank - 1, 0, RANK_COINS.length - 1)] + p.kills * 8 + Math.min(30, resLength / 15);
+            if (win) profile.wins++;
         } else {
             resRank = 0;
             resDelta = Math.min(5, p.kills);
+            resCoins = p.kills * 8 + Math.min(60, resLength / 12);
         }
-        int before = trophies;
-        trophies = Math.max(0, trophies + resDelta);
-        resDelta = trophies - before;
-        resNewBest = resLength > bestLen;
-        if (resNewBest) bestLen = resLength;
-        games++;
-        hintGames++;
-        host.saveInt("trophies", trophies);
-        host.saveInt("bestLen", bestLen);
-        host.saveInt("wins", wins);
-        host.saveInt("games", games);
-        host.saveInt("hints", hintGames);
+        int before = profile.trophies;
+        profile.trophies = Math.max(0, profile.trophies + resDelta);
+        profile.bestTrophies = Math.max(profile.bestTrophies, profile.trophies);
+        resDelta = profile.trophies - before;
+        resNewBest = resLength > profile.bestLen;
+        if (resNewBest) profile.bestLen = resLength;
+        profile.coins += resCoins;
+        profile.totalKills += p.kills;
+        profile.games++;
+        profile.hints++;
+        profile.save();
         gated.playSound(win ? Platform.SND_VICTORY : Platform.SND_DEFEAT, 1f);
         setScreen(RESULT);
+    }
+
+    // ------------------------------------------------------------------ popups
+
+    void showInfo(String title, String text, int artType, int art) {
+        openPopup(title, text, artType, art, ACT_NONE, 0, false);
+    }
+
+    void confirm(String title, String text, int artType, int art, int action, int arg) {
+        openPopup(title, text, artType, art, action, arg, true);
+    }
+
+    private void openPopup(String title, String text, int artType, int art, int action, int arg, boolean confirm) {
+        popup = true;
+        popTitle = title;
+        popText = text;
+        popArtType = artType;
+        popArt = art;
+        popAction = action;
+        popArg = arg;
+        popConfirm = confirm;
+        popTime = 0;
+        ui.cancel();
+        layout();
+    }
+
+    private void closePopup() {
+        popup = false;
+        ui.cancel();
+        layout();
+    }
+
+    private void popupButton(int id) {
+        int action = popAction, arg = popArg;
+        closePopup();
+        if (id == B_YES) meta.perform(action, arg);
+    }
+
+    private void renderPopup(Gfx g) {
+        float t = Math.min(1f, popTime * 5f);
+        g.color(MathUtil.withAlpha(0xcc0a0c22, t));
+        g.fillRect(0, 0, w, h);
+        float pw = Math.min(980 * u, w - padL - padR - 40 * u), ph = 600 * u;
+        float cx = w / 2, cy = h / 2 - 30 * u;
+        g.save();
+        g.translate(cx, cy);
+        g.scale(0.7f + 0.3f * (1f - (1f - t) * (1f - t)));
+        float l = -pw / 2, top = -ph / 2;
+        ui.panel(g, l, top, l + pw, top + ph, 0xff2a2f66);
+        g.color(0xff3a3f80);
+        g.fillRoundRect(l, top, l + pw, top + 100 * u, 26 * u);
+        g.color(0xffffd23f);
+        g.text(popTitle, 0, top + 70 * u, Ui.fit(g, popTitle, 60 * u, pw * 0.9f), Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
+        float artY = top + 200 * u;
+        switch (popArtType) {
+            case 1:
+                for (int k = 0; k < 3; k++) ui.coin(g, -70 * u + k * 70 * u, artY + MathUtil.sin(clock * 4 + k) * 8 * u, 90 * u);
+                break;
+            case 2: {
+                Brawler b = Brawler.ALL[profile.selected];
+                ui.snakeArt(g, b, Skin.ALL[popArt].paletteFor(b), 0, artY, 1.3f * u, clock);
+                break;
+            }
+            case 3: {
+                Brawler b = Brawler.ALL[popArt];
+                ui.snakeArt(g, b, new int[]{b.color1, b.color2}, 0, artY, 1.3f * u, clock);
+                break;
+            }
+            case 4:
+                MetaScreens.drawBox(g, 0, artY, 150 * u, popArt == 1, clock, u);
+                break;
+            default:
+                artY = top + 110 * u;
+                break;
+        }
+        float ty = popArtType == 0 ? top + 140 * u : top + 300 * u;
+        g.save();
+        ui.wrap(g, popText, l + 60 * u, l + pw - 60 * u, ty, 36 * u, 0xffffffff, top + ph - 150 * u);
+        g.restore();
+        g.restore();
+        for (int i = 0; i < ui.count; i++) ui.button(g, ui.btns[i]);
     }
 
     // ------------------------------------------------------------------ update
 
     private void update(float dt) {
-        if (screen == MENU || screen == BRAWLERS) {
+        if (screen != PLAY && screen != RESULT) {
             demo.update(dt);
             demo.updateCamera(dt, w, h);
             return;
@@ -322,19 +401,6 @@ public final class Game {
         }
     }
 
-    private float projSpeed(Brawler b) {
-        switch (b.id) {
-            case Brawler.VOLT:
-                return 2000;
-            case Brawler.VIPER:
-                return 1300;
-            case Brawler.BLAZE:
-                return 950;
-            default:
-                return 0;
-        }
-    }
-
     private void releaseAttack(boolean sup) {
         if (world == null || world.player == null || !world.player.alive) return;
         Snake p = world.player;
@@ -351,7 +417,7 @@ public final class Game {
             if (d < dead * 0.6f) return; // dragged back to the middle: cancel
             ang = (float) Math.atan2(dy, dx);
             dist = Math.min(1f, d / rad) * range;
-        } else if (world.findAim(p, range, projSpeed(p.type))) {
+        } else if (profile.autoAim && world.findAim(p, Math.max(range, p.type.range), p.type.projSpeed)) {
             ang = world.aimOutAng;
             dist = world.aimOutDist;
         } else {
@@ -363,8 +429,8 @@ public final class Game {
     }
 
     private void releaseControls() {
-        movePtr = atkPtr = supPtr = boostPtr = -1;
-        pressedBtn = -1;
+        movePtr = atkPtr = supPtr = boostPtr = pausePtr = -1;
+        ui.cancel();
         if (world != null) {
             world.aimActive = false;
             if (world.player != null) world.player.boostInput = false;
@@ -373,11 +439,14 @@ public final class Game {
 
     // ------------------------------------------------------------------ input
 
+    private boolean onMoveSide(float x) {
+        return profile.leftHanded ? x >= w * 0.5f : x <= w * 0.5f;
+    }
+
     public void touchDown(int id, float x, float y) {
-        if (screen == PLAY && !paused && endTimer < 0) {
+        if (screen == PLAY && !paused && endTimer < 0 && !popup) {
             if (MathUtil.dist2(x, y, pauseX, pauseY) < (pauseR * 1.5f) * (pauseR * 1.5f)) {
-                pressedBtn = B_PAUSE;
-                pressedPtr = id;
+                pausePtr = id;
                 return;
             }
             Snake p = world.player;
@@ -394,7 +463,7 @@ public final class Game {
                 boostPtr = id;
                 return;
             }
-            if (atkPtr < 0 && x > w * 0.5f) {
+            if (atkPtr < 0 && !onMoveSide(x)) {
                 atkPtr = id;
                 boolean onStick = MathUtil.dist2(x, y, atkCX, atkCY) < (atkR * 1.9f) * (atkR * 1.9f);
                 atkOx = onStick ? atkCX : x;
@@ -404,9 +473,11 @@ public final class Game {
                 atkMax = 0;
                 return;
             }
-            if (movePtr < 0 && x <= w * 0.5f) {
+            if (movePtr < 0 && onMoveSide(x)) {
                 movePtr = id;
-                moveOx = MathUtil.clamp(x, padL + moveR, w * 0.5f - moveR * 0.5f);
+                float minX = profile.leftHanded ? w * 0.5f + moveR * 0.5f : padL + moveR;
+                float maxX = profile.leftHanded ? w - padR - moveR : w * 0.5f - moveR * 0.5f;
+                moveOx = MathUtil.clamp(x, minX, maxX);
                 moveOy = MathUtil.clamp(y, padT + moveR + 80 * u, h - padB - moveR * 0.6f);
                 moveX = x;
                 moveY = y;
@@ -417,13 +488,7 @@ public final class Game {
             }
             return;
         }
-        for (int i = btnCount - 1; i >= 0; i--) {
-            if (btns[i].hit(x, y)) {
-                pressedBtn = btns[i].id;
-                pressedPtr = id;
-                return;
-            }
-        }
+        ui.down(id, x, y);
     }
 
     public void touchMove(int id, float x, float y) {
@@ -445,6 +510,8 @@ public final class Game {
             supX = x;
             supY = y;
             supMax = Math.max(supMax, MathUtil.dist(x, y, supOx, supOy));
+        } else {
+            ui.move(id, x, y);
         }
     }
 
@@ -473,25 +540,20 @@ public final class Game {
             if (world != null) world.aimActive = false;
             return;
         }
-        if (id == pressedPtr && pressedBtn >= 0) {
-            int b = pressedBtn;
-            pressedBtn = -1;
-            if (b == B_PAUSE) {
-                if (MathUtil.dist2(x, y, pauseX, pauseY) < (pauseR * 1.8f) * (pauseR * 1.8f)) {
-                    gated.playSound(Platform.SND_CLICK, 0.7f);
-                    paused = true;
-                    releaseControls();
-                    layout();
-                }
-                return;
+        if (id == pausePtr) {
+            pausePtr = -1;
+            if (MathUtil.dist2(x, y, pauseX, pauseY) < (pauseR * 1.8f) * (pauseR * 1.8f)) {
+                gated.playSound(Platform.SND_CLICK, 0.7f);
+                paused = true;
+                releaseControls();
+                layout();
             }
-            for (int i = 0; i < btnCount; i++) {
-                if (btns[i].id == b && btns[i].hit(x, y)) {
-                    gated.playSound(Platform.SND_CLICK, 0.7f);
-                    onButton(b);
-                    return;
-                }
-            }
+            return;
+        }
+        int b = ui.up(id, x, y);
+        if (b >= 0) {
+            gated.playSound(Platform.SND_CLICK, 0.7f);
+            onButton(b);
         }
     }
 
@@ -500,28 +562,32 @@ public final class Game {
     }
 
     private void onButton(int id) {
+        if (popup) {
+            popupButton(id);
+            return;
+        }
         switch (id) {
             case B_PLAY:
+            case B_AGAIN:
                 startGame();
                 break;
             case B_MODE:
-                mode = 1 - mode;
-                host.saveInt("mode", mode);
+                profile.mode = 1 - profile.mode;
+                profile.save();
                 layout();
                 break;
             case B_BRAWLERS:
+                meta.viewBrawler = profile.selected;
                 setScreen(BRAWLERS);
                 break;
-            case B_SOUND:
-                soundOn = !soundOn;
-                host.saveInt("sound", soundOn ? 1 : 0);
-                layout();
+            case B_SHOP:
+                setScreen(SHOP);
+                break;
+            case B_SETTINGS:
+                setScreen(SETTINGS);
                 break;
             case B_BACK:
-                goMenu();
-                break;
-            case B_AGAIN:
-                startGame();
+                setScreen(MENU);
                 break;
             case B_MENU:
             case B_QUIT:
@@ -532,48 +598,38 @@ public final class Game {
                 layout();
                 break;
             default:
-                if (id >= B_CARD && id < B_CARD + Brawler.ALL.length) {
-                    selected = id - B_CARD;
-                    host.saveInt("brawler", selected);
-                    gated.playSound(Platform.SND_POWER, 0.6f);
-                }
+                meta.onButton(id);
                 break;
         }
     }
 
     // ------------------------------------------------------------------ layout
 
-    private Btn addBtn(int id, float l, float t, float r, float b, String label, String sub, int color) {
-        Btn x = btns[btnCount++];
-        x.id = id;
-        x.l = l;
-        x.t = t;
-        x.r = r;
-        x.b = b;
-        x.label = label;
-        x.sub = sub;
-        x.color = color;
-        return x;
-    }
-
-    private void layout() {
+    void layout() {
         padL = Math.max(28 * u, insL + 8 * u);
         padR = Math.max(28 * u, insR + 8 * u);
         padT = Math.max(20 * u, insT + 4 * u);
         padB = Math.max(20 * u, insB + 4 * u);
 
-        atkR = 92 * u;
-        atkCX = w - padR - 175 * u;
-        atkCY = h - padB - 175 * u;
-        supR = 70 * u;
-        supCX = atkCX - 225 * u;
-        supCY = atkCY + 55 * u;
-        boostR = 62 * u;
-        boostCX = atkCX + 25 * u;
-        boostCY = atkCY - 215 * u;
-        moveR = 105 * u;
-        moveCX = padL + 200 * u;
-        moveCY = h - padB - 190 * u;
+        float ss = profile.stickSize == 0 ? 0.82f : (profile.stickSize == 2 ? 1.2f : 1f);
+        atkR = 92 * u * ss;
+        atkCX = w - padR - 175 * u * ss;
+        atkCY = h - padB - 175 * u * ss;
+        supR = 70 * u * ss;
+        supCX = atkCX - 225 * u * ss;
+        supCY = atkCY + 55 * u * ss;
+        boostR = 62 * u * ss;
+        boostCX = atkCX + 25 * u * ss;
+        boostCY = atkCY - 215 * u * ss;
+        moveR = 105 * u * ss;
+        moveCX = padL + 200 * u * ss;
+        moveCY = h - padB - 190 * u * ss;
+        if (profile.leftHanded) {
+            atkCX = w - atkCX;
+            supCX = w - supCX;
+            boostCX = w - boostCX;
+            moveCX = w - moveCX;
+        }
         pauseR = 38 * u;
         pauseX = padL + 44 * u;
         pauseY = padT + 44 * u;
@@ -581,45 +637,47 @@ public final class Game {
         mapX = w - padR - mapS;
         mapY = padT;
 
-        btnCount = 0;
+        ui.clear();
+        if (popup) {
+            float cx = w / 2, by = h / 2 - 30 * u + 300 * u - 40 * u;
+            if (popConfirm) {
+                ui.add(B_NO, cx - 380 * u, by - 110 * u, cx - 30 * u, by, "NO", null, 0xffff5a5a);
+                ui.add(B_YES, cx + 30 * u, by - 110 * u, cx + 380 * u, by, "YES", null, 0xff4ad04a);
+            } else {
+                ui.add(B_OK, cx - 200 * u, by - 110 * u, cx + 200 * u, by, "OK", null, 0xff4ad04a);
+            }
+            return;
+        }
         switch (screen) {
             case MENU: {
                 float bw = 400 * u, bh = 150 * u;
                 float r = w - padR - 30 * u, b = h - padB - 30 * u;
-                addBtn(B_PLAY, r - bw, b - bh, r, b, "PLAY", null, 0xffffc928);
-                addBtn(B_MODE, r - bw - 30 * u - 430 * u, b - bh, r - bw - 30 * u, b,
-                        mode == 0 ? "SHOWDOWN" : "ENDLESS", mode == 0 ? "Last snake standing" : "Grow forever", mode == 0 ? 0xff3fa0ff : 0xffb35cff);
+                ui.add(B_PLAY, r - bw, b - bh, r, b, "PLAY", null, 0xffffc928);
+                ui.add(B_MODE, r - bw - 30 * u - 430 * u, b - bh, r - bw - 30 * u, b,
+                        profile.mode == 0 ? "SHOWDOWN" : "ENDLESS", profile.mode == 0 ? "Last snake standing" : "Grow forever",
+                        profile.mode == 0 ? 0xff3fa0ff : 0xffb35cff);
                 float pl = padL + 30 * u;
-                addBtn(B_BRAWLERS, pl, b - 110 * u, pl + 470 * u, b, "BRAWLERS", null, 0xff4ad04a);
-                addBtn(B_SOUND, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, soundOn ? "ON" : "OFF", "SOUND", soundOn ? 0xff4ad04a : 0xff8a8a9a);
-                break;
-            }
-            case BRAWLERS: {
-                addBtn(B_BACK, padL + 10 * u, padT + 10 * u, padL + 230 * u, padT + 110 * u, "BACK", null, 0xffff5a5a);
-                float top = padT + 150 * u, bottom = h - padB - 30 * u;
-                float gap = 26 * u;
-                float cw = (w - padL - padR - 40 * u - gap * 3) / 4f;
-                for (int i = 0; i < Brawler.ALL.length; i++) {
-                    float l = padL + 20 * u + i * (cw + gap);
-                    addBtn(B_CARD + i, l, top, l + cw, bottom, null, null, 0);
-                }
+                ui.add(B_BRAWLERS, pl, b - 110 * u, pl + 470 * u, b, "BRAWLERS", null, 0xff4ad04a);
+                ui.add(B_SHOP, pl, padT + 200 * u, pl + 300 * u, padT + 330 * u, "SHOP", "Skins & boxes", 0xffff5ab5);
+                ui.add(B_SETTINGS, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, null, null, 0xff8a8fb8);
                 break;
             }
             case PLAY: {
                 if (paused) {
                     float cx = w / 2, cy = h / 2;
-                    addBtn(B_RESUME, cx - 220 * u, cy - 30 * u, cx + 220 * u, cy + 100 * u, "RESUME", null, 0xff4ad04a);
-                    addBtn(B_QUIT, cx - 220 * u, cy + 130 * u, cx + 220 * u, cy + 250 * u, "QUIT", null, 0xffff5a5a);
+                    ui.add(B_RESUME, cx - 220 * u, cy - 30 * u, cx + 220 * u, cy + 100 * u, "RESUME", null, 0xff4ad04a);
+                    ui.add(B_QUIT, cx - 220 * u, cy + 130 * u, cx + 220 * u, cy + 250 * u, "QUIT", null, 0xffff5a5a);
                 }
                 break;
             }
             case RESULT: {
                 float cx = w / 2, b = h - padB - 40 * u;
-                addBtn(B_MENU, cx - 470 * u, b - 130 * u, cx - 30 * u, b, "MENU", null, 0xff3fa0ff);
-                addBtn(B_AGAIN, cx + 30 * u, b - 130 * u, cx + 470 * u, b, "PLAY AGAIN", null, 0xffffc928);
+                ui.add(B_MENU, cx - 470 * u, b - 130 * u, cx - 30 * u, b, "MENU", null, 0xff3fa0ff);
+                ui.add(B_AGAIN, cx + 30 * u, b - 130 * u, cx + 470 * u, b, "PLAY AGAIN", null, 0xffffc928);
                 break;
             }
             default:
+                meta.layout();
                 break;
         }
     }
@@ -628,102 +686,44 @@ public final class Game {
 
     private void render(Gfx g) {
         switch (screen) {
-            case MENU:
-                demo.render(g);
-                renderMenu(g);
-                break;
-            case BRAWLERS:
-                demo.render(g);
-                renderBrawlers(g);
-                break;
             case PLAY:
                 world.render(g);
                 renderHud(g);
                 if (paused) renderPause(g);
                 break;
             case RESULT:
-            default:
                 world.render(g);
                 renderResult(g);
                 break;
+            case MENU:
+                demo.render(g);
+                renderMenu(g);
+                break;
+            default:
+                demo.render(g);
+                meta.render(g);
+                break;
         }
+        if (popup) renderPopup(g);
     }
 
-    private void drawButton(Gfx g, Btn b) {
-        boolean pressed = pressedBtn == b.id;
-        float l = b.l, t = b.t, r = b.r, bt = b.b;
-        if (pressed) {
-            float cx = (l + r) / 2, cy = (t + bt) / 2, s = 0.94f;
-            l = cx + (l - cx) * s;
-            r = cx + (r - cx) * s;
-            t = cy + (t - cy) * s;
-            bt = cy + (bt - cy) * s;
+    private void drawGear(Gfx g, float x, float y, float s) {
+        g.color(Ui.INK);
+        g.fillCircle(x, y, s * 0.42f);
+        for (int k = 0; k < 8; k++) {
+            float a = k * MathUtil.TAU / 8f + clock * 0.3f;
+            g.line(x + MathUtil.cos(a) * s * 0.3f, y + MathUtil.sin(a) * s * 0.3f,
+                    x + MathUtil.cos(a) * s * 0.52f, y + MathUtil.sin(a) * s * 0.52f, s * 0.2f);
         }
-        float rad = 22 * u;
-        g.color(0x55000000);
-        g.fillRoundRect(l + 4 * u, t + 10 * u, r + 4 * u, bt + 10 * u, rad);
-        g.color(0xff14142a);
-        g.fillRoundRect(l - 5 * u, t - 5 * u, r + 5 * u, bt + 5 * u, rad + 4 * u);
-        g.color(MathUtil.darker(b.color, 0.35f));
-        g.fillRoundRect(l, t, r, bt, rad);
-        g.color(b.color);
-        g.fillRoundRect(l, t, r, bt - 12 * u, rad);
-        g.color(MathUtil.withAlpha(0xffffffff, 0.25f));
-        g.fillRoundRect(l + 12 * u, t + 8 * u, r - 12 * u, t + (bt - t) * 0.35f, rad * 0.6f);
-        float cy = (t + bt) / 2;
-        g.color(0xffffffff);
-        if (b.sub != null) {
-            float size = Math.min(56 * u, (bt - t) * 0.42f);
-            g.text(b.label, (l + r) / 2, cy + size * 0.2f, size, Gfx.ALIGN_CENTER, 7 * u, 0xff14142a);
-            g.text(b.sub, (l + r) / 2, cy + size * 0.2f + size * 0.75f, size * 0.5f, Gfx.ALIGN_CENTER, 4 * u, 0xff14142a);
-        } else {
-            float size = Math.min(70 * u, (bt - t) * 0.5f);
-            g.text(b.label, (l + r) / 2, cy + size * 0.32f, size, Gfx.ALIGN_CENTER, 8 * u, 0xff14142a);
+        g.color(0xffe8eaff);
+        g.fillCircle(x, y, s * 0.34f);
+        for (int k = 0; k < 8; k++) {
+            float a = k * MathUtil.TAU / 8f + clock * 0.3f;
+            g.line(x + MathUtil.cos(a) * s * 0.3f, y + MathUtil.sin(a) * s * 0.3f,
+                    x + MathUtil.cos(a) * s * 0.46f, y + MathUtil.sin(a) * s * 0.46f, s * 0.12f);
         }
-    }
-
-    private void drawTrophy(Gfx g, float x, float y, float s) {
-        g.color(0xff14142a);
-        g.fillRoundRect(x - s * 0.62f, y - s * 0.62f, x + s * 0.62f, y + s * 0.05f, s * 0.3f);
-        g.fillRoundRect(x - s * 0.14f, y - s * 0.05f, x + s * 0.14f, y + s * 0.45f, s * 0.05f);
-        g.fillRoundRect(x - s * 0.44f, y + s * 0.32f, x + s * 0.44f, y + s * 0.62f, s * 0.1f);
-        g.strokeCircle(x - s * 0.55f, y - s * 0.3f, s * 0.24f, s * 0.2f);
-        g.strokeCircle(x + s * 0.55f, y - s * 0.3f, s * 0.24f, s * 0.2f);
-        g.color(0xffffc928);
-        g.strokeCircle(x - s * 0.55f, y - s * 0.3f, s * 0.24f, s * 0.09f);
-        g.strokeCircle(x + s * 0.55f, y - s * 0.3f, s * 0.24f, s * 0.09f);
-        g.fillRoundRect(x - s * 0.5f, y - s * 0.52f, x + s * 0.5f, y - s * 0.02f, s * 0.24f);
-        g.fillRect(x - s * 0.07f, y - s * 0.05f, x + s * 0.07f, y + s * 0.38f);
-        g.fillRoundRect(x - s * 0.34f, y + s * 0.38f, x + s * 0.34f, y + s * 0.54f, s * 0.06f);
-        g.color(0xfffff2a8);
-        g.fillRoundRect(x - s * 0.34f, y - s * 0.44f, x - s * 0.18f, y - s * 0.14f, s * 0.06f);
-    }
-
-    private void drawPanel(Gfx g, float l, float t, float r, float b, int color) {
-        g.color(0x66000000);
-        g.fillRoundRect(l + 6 * u, t + 12 * u, r + 6 * u, b + 12 * u, 30 * u);
-        g.color(0xff0e1024);
-        g.fillRoundRect(l - 6 * u, t - 6 * u, r + 6 * u, b + 6 * u, 32 * u);
-        g.color(color);
-        g.fillRoundRect(l, t, r, b, 26 * u);
-    }
-
-    /** A wavy snake used for previews. Positions are in the current transform. */
-    private void drawSnakeArt(Gfx g, Brawler br, int c1, int c2, float cx, float cy, float scale, float time) {
-        int n = 26;
-        float r = 20f, sp = r * 0.55f;
-        for (int i = 0; i < n; i++) {
-            float x = -i * sp + n * sp * 0.5f;
-            artX[i] = x;
-            artY[i] = MathUtil.sin(time * 3f - i * 0.38f) * 26f * Math.min(1f, i / 6f + 0.15f);
-        }
-        g.save();
-        g.translate(cx, cy);
-        g.scale(scale);
-        Snake.drawBody(g, artX, artY, n, r, c1, c2, null, 1f, false, 0, time, -1e5f, -1e5f, 1e5f, 1e5f);
-        float ang = MathUtil.angleTo(artX[1], artY[1], artX[0], artY[0]);
-        Snake.drawHead(g, artX[0], artY[0], r, ang, ang, c1, c2, br.id, br.accent, 1f, 0, time, 0);
-        g.restore();
+        g.color(Ui.INK);
+        g.fillCircle(x, y, s * 0.14f);
     }
 
     private void renderMenu(Gfx g) {
@@ -744,127 +744,48 @@ public final class Game {
         g.color(0xffffffff);
         g.text("SLITHER  •  SHOOT  •  SURVIVE", w / 2, ty + 80 * u, 44 * u, Gfx.ALIGN_CENTER, 6 * u, 0xff1a1030);
 
-        // Trophies
+        // Trophies and coins
         float tl = padL + 20 * u, tt = padT + 14 * u;
         g.color(0xcc0e1024);
-        g.fillRoundRect(tl, tt, tl + 300 * u, tt + 96 * u, 48 * u);
-        drawTrophy(g, tl + 52 * u, tt + 48 * u, 56 * u);
+        g.fillRoundRect(tl, tt, tl + 270 * u, tt + 90 * u, 45 * u);
+        ui.trophy(g, tl + 50 * u, tt + 45 * u, 52 * u);
         g.color(0xffffffff);
-        g.text(Integer.toString(trophies), tl + 100 * u, tt + 68 * u, 58 * u, Gfx.ALIGN_LEFT, 6 * u, 0xff14142a);
+        g.text(Integer.toString(profile.trophies), tl + 96 * u, tt + 64 * u, 54 * u, Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
+        float cl = tl + 290 * u;
+        g.color(0xcc0e1024);
+        g.fillRoundRect(cl, tt, cl + 270 * u, tt + 90 * u, 45 * u);
+        ui.coin(g, cl + 48 * u, tt + 45 * u, 60 * u);
+        g.color(0xffffe066);
+        g.text(Integer.toString(profile.coins), cl + 92 * u, tt + 64 * u, 54 * u, Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
         g.color(0xffd8dcff);
-        g.text("Wins " + wins + "   Best length " + bestLen, tl + 10 * u, tt + 140 * u, 32 * u, Gfx.ALIGN_LEFT, 5 * u, 0xff14142a);
+        g.text("Wins " + profile.wins + "   Best length " + profile.bestLen, tl + 10 * u, tt + 140 * u, 32 * u,
+                Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
 
         // Selected brawler showcase
-        Brawler b = Brawler.ALL[selected];
+        Brawler b = Brawler.ALL[profile.selected];
         float pl = padL + 30 * u, pb = h - padB - 150 * u, pt = pb - 250 * u, pr = pl + 470 * u;
-        drawPanel(g, pl, pt, pr, pb, 0xdd22264a);
+        ui.panel(g, pl, pt, pr, pb, 0xdd22264a);
         g.color(b.color1);
         g.text(b.name, pl + 30 * u, pt + 70 * u, 64 * u, Gfx.ALIGN_LEFT, 7 * u, 0xff0e1024);
         g.color(0xffd8dcff);
-        g.text(b.role, pr - 30 * u, pt + 64 * u, 38 * u, Gfx.ALIGN_RIGHT, 5 * u, 0xff0e1024);
-        drawSnakeArt(g, b, b.color1, b.color2, (pl + pr) / 2, pt + 165 * u, 1.45f * u, clock);
+        g.text("LVL " + profile.levels[b.id], pr - 30 * u, pt + 64 * u, 38 * u, Gfx.ALIGN_RIGHT, 5 * u, 0xff0e1024);
+        ui.snakeArt(g, b, profile.palette(), (pl + pr) / 2, pt + 165 * u, 1.45f * u, clock);
 
-        for (int i = 0; i < btnCount; i++) drawButton(g, btns[i]);
-    }
-
-    private void renderBrawlers(Gfx g) {
-        g.color(0xcc0d1030);
-        g.fillRect(0, 0, w, h);
-        g.color(0xffffd23f);
-        g.text("CHOOSE YOUR BRAWLER", w / 2, padT + 95 * u, 76 * u, Gfx.ALIGN_CENTER, 9 * u, 0xff14142a);
-        for (int i = 0; i < btnCount; i++) {
-            Btn bt = btns[i];
-            if (bt.id == B_BACK) {
-                drawButton(g, bt);
-                continue;
-            }
-            int bi = bt.id - B_CARD;
-            Brawler b = Brawler.ALL[bi];
-            boolean sel = bi == selected;
-            float l = bt.l, t = bt.t, r = bt.r, bb = bt.b;
-            if (pressedBtn == bt.id) {
-                l += 6 * u;
-                r -= 6 * u;
-                t += 6 * u;
-                bb -= 6 * u;
-            }
-            float cw = r - l;
-            float ts = Math.min(1f, cw / (440 * u));
-            if (sel) {
-                float glow = 0.5f + 0.5f * MathUtil.sin(clock * 5f);
-                g.color(MathUtil.withAlpha(0xffffd23f, 0.5f + 0.4f * glow));
-                g.fillRoundRect(l - 16 * u, t - 16 * u, r + 16 * u, bb + 16 * u, 40 * u);
-            }
-            drawPanel(g, l, t, r, bb, 0xff262a54);
-            // Header band
-            g.color(MathUtil.darker(b.color2, 0.2f));
-            g.fillRoundRect(l, t, r, t + 96 * u, 26 * u);
-            g.color(b.color1);
-            g.fillRoundRect(l, t, r, t + 84 * u, 26 * u);
-            g.color(0xffffffff);
-            g.text(b.name, (l + r) / 2, t + 62 * u, 56 * u * ts, Gfx.ALIGN_CENTER, 7 * u, 0xff14142a);
-            drawSnakeArt(g, b, b.color1, b.color2, (l + r) / 2, t + 185 * u, 1.25f * u * ts, clock + bi);
-            g.color(0xffd8dcff);
-            g.text(b.role.toUpperCase(), (l + r) / 2, t + 290 * u, 34 * u * ts, Gfx.ALIGN_CENTER, 5 * u, 0xff14142a);
-
-            float sy = t + 330 * u;
-            String[] labels = {"HEALTH", "DAMAGE", "RANGE", "SPEED"};
-            int[] vals = {b.statHp, b.statDamage, b.statRange, b.statSpeed};
-            for (int k = 0; k < 4; k++) {
-                float y = sy + k * 44 * u;
-                g.color(0xffb8bdf0);
-                g.text(labels[k], l + 24 * u, y + 26 * u, 26 * u * ts, Gfx.ALIGN_LEFT, 4 * u, 0xff14142a);
-                float px0 = l + cw * 0.45f, pw = (r - 24 * u - px0) / 5f;
-                for (int p = 0; p < 5; p++) {
-                    g.color(0xff14142a);
-                    g.fillRoundRect(px0 + p * pw, y + 4 * u, px0 + (p + 1) * pw - 6 * u, y + 30 * u, 6 * u);
-                    g.color(p < vals[k] ? 0xffffc928 : 0xff3a3e70);
-                    g.fillRoundRect(px0 + p * pw + 3 * u, y + 7 * u, px0 + (p + 1) * pw - 9 * u, y + 27 * u, 4 * u);
-                }
-            }
-            float ay = sy + 4 * 44 * u + 30 * u;
-            ay = drawAbility(g, "ATTACK: " + b.attackName, b.attackDesc, l + 24 * u, r - 24 * u, ay, ts, 0xffff9a4a, bb);
-            ay = drawAbility(g, "SUPER: " + b.superName, b.superDesc, l + 24 * u, r - 24 * u, ay + 14 * u, ts, 0xffffd23f, bb);
-            if (sel) {
-                g.color(0xff14142a);
-                g.fillRoundRect((l + r) / 2 - 120 * u, bb - 30 * u, (l + r) / 2 + 120 * u, bb + 22 * u, 20 * u);
-                g.color(0xffffd23f);
-                g.text("SELECTED", (l + r) / 2, bb + 10 * u, 34 * u, Gfx.ALIGN_CENTER, 0, 0);
-            } else if (ay < bb - 70 * u) {
-                g.color(MathUtil.withAlpha(0xffb8bdf0, 0.6f + 0.3f * MathUtil.sin(clock * 3f + bi)));
-                g.text("TAP TO SELECT", (l + r) / 2, bb - 34 * u, 30 * u * ts, Gfx.ALIGN_CENTER, 4 * u, 0xff14142a);
+        for (int i = 0; i < ui.count; i++) {
+            Ui.Btn bt = ui.btns[i];
+            ui.button(g, bt);
+            if (bt.id == B_SETTINGS) drawGear(g, (bt.l + bt.r) / 2, (bt.t + bt.b) / 2 - 4 * u, 70 * u);
+            if (bt.id == B_SHOP && profile.giftReady()) {
+                float bx = bt.r - 6 * u, by = bt.t + 6 * u;
+                float p = 1f + 0.12f * MathUtil.sin(clock * 6f);
+                g.color(Ui.INK);
+                g.fillCircle(bx, by, 26 * u * p);
+                g.color(0xffff3a3a);
+                g.fillCircle(bx, by, 21 * u * p);
+                g.color(0xffffffff);
+                g.text("!", bx, by + 12 * u, 34 * u, Gfx.ALIGN_CENTER, 0, 0);
             }
         }
-    }
-
-    private float drawAbility(Gfx g, String title, String desc, float l, float r, float y, float ts, int color, float limit) {
-        float size = 28 * u * ts;
-        if (y + size > limit - 30 * u) return y;
-        g.color(color);
-        g.text(title, l, y + size, size, Gfx.ALIGN_LEFT, 4 * u, 0xff14142a);
-        y += size + 8 * u;
-        float ds = 25 * u * ts;
-        g.color(0xffe8eaff);
-        String[] words = desc.split(" ");
-        StringBuilder line = new StringBuilder();
-        for (int i = 0; i < words.length; i++) {
-            String test = line.length() == 0 ? words[i] : line + " " + words[i];
-            if (g.measureText(test, ds) > r - l && line.length() > 0) {
-                if (y + ds > limit - 30 * u) return y;
-                g.text(line.toString(), l, y + ds, ds, Gfx.ALIGN_LEFT, 3 * u, 0xff14142a);
-                y += ds + 6 * u;
-                line.setLength(0);
-                line.append(words[i]);
-            } else {
-                line.setLength(0);
-                line.append(test);
-            }
-        }
-        if (line.length() > 0 && y + ds <= limit - 30 * u) {
-            g.text(line.toString(), l, y + ds, ds, Gfx.ALIGN_LEFT, 3 * u, 0xff14142a);
-            y += ds + 6 * u;
-        }
-        return y;
     }
 
     private void renderHud(Gfx g) {
@@ -975,12 +896,12 @@ public final class Game {
             g.restore();
         }
 
-        if (hintGames < 3 && wd.matchTime < 12f && p.alive) {
+        if (profile.hints < 3 && wd.matchTime < 12f && p.alive) {
             float a = Math.min(1f, (12f - wd.matchTime) * 0.8f);
             g.color(MathUtil.withAlpha(0xaa0e1024, a));
             g.fillRoundRect(cx - 560 * u, h * 0.62f - 46 * u, cx + 560 * u, h * 0.62f + 64 * u, 26 * u);
             g.color(MathUtil.withAlpha(0xffffffff, a));
-            g.text("Drag LEFT side to steer  •  Right stick: tap = auto-aim, drag = aim", cx, h * 0.62f, 32 * u,
+            g.text(profile.leftHanded ? "Drag RIGHT side to steer  •  Left stick: tap = auto-aim, drag = aim" : "Drag LEFT side to steer  •  Right stick: tap = auto-aim, drag = aim", cx, h * 0.62f, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, MathUtil.withAlpha(0xff14142a, a));
             g.text("Hold BOOST to sprint  •  Hit snakes to charge your SUPER", cx, h * 0.62f + 44 * u, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, MathUtil.withAlpha(0xff14142a, a));
@@ -1182,12 +1103,13 @@ public final class Game {
         }
     }
 
+
     private void renderPause(Gfx g) {
         g.color(0xaa0a0c22);
         g.fillRect(0, 0, w, h);
         g.color(0xffffffff);
-        g.text("PAUSED", w / 2, h / 2 - 110 * u, 110 * u, Gfx.ALIGN_CENTER, 12 * u, 0xff14142a);
-        for (int i = 0; i < btnCount; i++) drawButton(g, btns[i]);
+        g.text("PAUSED", w / 2, h / 2 - 110 * u, 110 * u, Gfx.ALIGN_CENTER, 12 * u, Ui.INK);
+        for (int i = 0; i < ui.count; i++) ui.button(g, ui.btns[i]);
     }
 
     private void renderResult(Gfx g) {
@@ -1211,45 +1133,44 @@ public final class Game {
         g.translate(cx, padT + 150 * u);
         g.scale(0.6f + 0.4f * t + (resWin ? 0.04f * MathUtil.sin(clock * 4f) : 0));
         g.color(tc);
-        g.text(title, 0, 0, 130 * u, Gfx.ALIGN_CENTER, 14 * u, 0xff14142a);
+        g.text(title, 0, 0, 130 * u, Gfx.ALIGN_CENTER, 14 * u, Ui.INK);
         g.restore();
 
-        float pw = 860 * u, ph = 400 * u;
-        float pl = cx - pw / 2, pt = padT + 210 * u;
-        float maxB = h - padB - 200 * u;
+        float pw = 860 * u, ph = 440 * u;
+        float pl = cx - pw / 2, pt = padT + 200 * u;
+        float maxB = h - padB - 190 * u;
         if (pt + ph > maxB) ph = maxB - pt;
-        drawPanel(g, pl, pt, pl + pw, pt + ph, 0xee22264a);
-        Brawler b = world.player.type;
-        drawSnakeArt(g, b, b.color1, b.color2, pl + 175 * u, pt + ph / 2, 0.95f * u, clock);
+        ui.panel(g, pl, pt, pl + pw, pt + ph, 0xee22264a);
+        Snake player = world.player;
+        ui.snakeArt(g, player.type, player.palette, pl + 175 * u, pt + ph / 2, 0.95f * u, clock);
 
-        float sx = pl + 380 * u, sy = pt + 80 * u, row = Math.min(64 * u, (ph - 60 * u) / 4.5f);
-        g.color(0xffd8dcff);
-        g.text("KNOCKOUTS", sx, sy, 36 * u, Gfx.ALIGN_LEFT, 5 * u, 0xff14142a);
-        g.color(0xffffffff);
-        g.text(Integer.toString(resKills), pl + pw - 50 * u, sy, 44 * u, Gfx.ALIGN_RIGHT, 5 * u, 0xff14142a);
+        float sx = pl + 380 * u, sy = pt + 70 * u, row = Math.min(62 * u, (ph - 50 * u) / 5.4f);
+        float vx = pl + pw - 50 * u;
+        resultRow(g, "KNOCKOUTS", Integer.toString(resKills), 0xffffffff, sx, vx, sy);
         sy += row;
-        g.color(0xffd8dcff);
-        g.text("LENGTH", sx, sy, 36 * u, Gfx.ALIGN_LEFT, 5 * u, 0xff14142a);
-        g.color(resNewBest ? 0xffffd23f : 0xffffffff);
-        g.text((resNewBest ? "NEW BEST! " : "") + resLength, pl + pw - 50 * u, sy, 44 * u, Gfx.ALIGN_RIGHT, 5 * u, 0xff14142a);
+        resultRow(g, "LENGTH", (resNewBest ? "NEW BEST! " : "") + resLength, resNewBest ? 0xffffd23f : 0xffffffff, sx, vx, sy);
         sy += row;
-        g.color(0xffd8dcff);
-        g.text("POWER CUBES", sx, sy, 36 * u, Gfx.ALIGN_LEFT, 5 * u, 0xff14142a);
-        g.color(0xff6dff6d);
-        g.text(Integer.toString(resCubes), pl + pw - 50 * u, sy, 44 * u, Gfx.ALIGN_RIGHT, 5 * u, 0xff14142a);
+        resultRow(g, "POWER CUBES", Integer.toString(resCubes), 0xff6dff6d, sx, vx, sy);
         sy += row;
-        g.color(0xffd8dcff);
-        g.text("SURVIVED", sx, sy, 36 * u, Gfx.ALIGN_LEFT, 5 * u, 0xff14142a);
         int secs = (int) resTime;
-        g.color(0xffffffff);
-        g.text(secs / 60 + ":" + (secs % 60 < 10 ? "0" : "") + secs % 60, pl + pw - 50 * u, sy, 44 * u, Gfx.ALIGN_RIGHT, 5 * u, 0xff14142a);
+        resultRow(g, "SURVIVED", secs / 60 + ":" + (secs % 60 < 10 ? "0" : "") + secs % 60, 0xffffffff, sx, vx, sy);
         sy += row;
-        drawTrophy(g, sx + 26 * u, sy - 14 * u, 46 * u);
+        ui.coin(g, sx + 24 * u, sy - 14 * u, 48 * u);
+        g.color(0xffffe066);
+        g.text("+" + resCoins, sx + 64 * u, sy, 46 * u, Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
+        ui.trophy(g, sx + 250 * u, sy - 14 * u, 44 * u);
         g.color(resDelta > 0 ? 0xff9cff8a : (resDelta < 0 ? 0xffff7a6a : 0xffffffff));
-        g.text((resDelta > 0 ? "+" : "") + resDelta, sx + 70 * u, sy, 50 * u, Gfx.ALIGN_LEFT, 6 * u, 0xff14142a);
+        g.text((resDelta > 0 ? "+" : "") + resDelta, sx + 292 * u, sy, 46 * u, Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
         g.color(0xffffffff);
-        g.text("Total " + trophies, pl + pw - 50 * u, sy, 40 * u, Gfx.ALIGN_RIGHT, 5 * u, 0xff14142a);
+        g.text("Total " + profile.trophies, vx, sy, 38 * u, Gfx.ALIGN_RIGHT, 5 * u, Ui.INK);
 
-        for (int i = 0; i < btnCount; i++) drawButton(g, btns[i]);
+        for (int i = 0; i < ui.count; i++) ui.button(g, ui.btns[i]);
+    }
+
+    private void resultRow(Gfx g, String label, String value, int color, float x, float vx, float y) {
+        g.color(0xffd8dcff);
+        g.text(label, x, y, 36 * u, Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
+        g.color(color);
+        g.text(value, vx, y, 44 * u, Gfx.ALIGN_RIGHT, 5 * u, Ui.INK);
     }
 }
