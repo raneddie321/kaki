@@ -14,6 +14,8 @@ final class World {
     static final float ZONE_START = 25f;
     static final float ZONE_END = 205f;
     static final float REVEAL_DIST = 230f;
+    static final float PLAYER_DAMAGE_TAKEN = 0.55f;
+    static final float PLAYER_DAMAGE_DEALT = 1.3f;
 
     final Platform platform;
     final int mode;
@@ -172,7 +174,7 @@ final class World {
         float fancy = 0.15f + Math.min(0.6f, botTrophies / 800f);
         if (MathUtil.rand() < fancy) s.setColors(Skin.ALL[1 + MathUtil.randInt(Skin.ALL.length - 1)].palette);
         else s.setColors(Brawler.BOT_SKINS[(i + MathUtil.randInt(Brawler.BOT_SKINS.length)) % Brawler.BOT_SKINS.length]);
-        int lvl = 1 + botTrophies / 90 + MathUtil.randInt(2) - (MathUtil.rand() < 0.4f ? 1 : 0);
+        int lvl = 1 + botTrophies / 250 + (MathUtil.rand() < 0.3f ? 1 : 0) - (MathUtil.rand() < 0.4f ? 1 : 0);
         s.level = Math.max(1, Math.min(Brawler.MAX_LEVEL, lvl));
     }
 
@@ -560,8 +562,9 @@ final class World {
         }
 
         // Regeneration after a few quiet seconds
-        if (s.sinceDamaged > 3f && s.sinceAttack > 3f && s.hp < s.maxHp && !(zoneActive() && !inZone(s.hx(), s.hy()))) {
-            s.hp = Math.min(s.maxHp, s.hp + s.maxHp * 0.12f * dt);
+        float quiet = s.isPlayer ? 2f : 3f;
+        if (s.sinceDamaged > quiet && s.sinceAttack > quiet && s.hp < s.maxHp && !(zoneActive() && !inZone(s.hx(), s.hy()))) {
+            s.hp = Math.min(s.maxHp, s.hp + s.maxHp * (s.isPlayer ? 0.2f : 0.12f) * dt);
         }
 
         // Poison
@@ -715,6 +718,17 @@ final class World {
                         hurt(b, 1000f * a.damageMult(), a, b.sx[j], b.sy[j], kA, 380, CAUSE_DASH);
                         fx.burst(b.sx[j], b.sy[j], 14, 0xffff8a3a, 420, 9, 0.5f);
                         shakeAt(b.sx[j], b.sy[j], 6);
+                    }
+                    continue;
+                }
+                if (a.isPlayer) {
+                    // The player never dies instantly from a crash: it hurts and bounces off instead
+                    if (a.bumpCooldown <= 0) {
+                        float ang = MathUtil.angleTo(b.sx[j], b.sy[j], hx, hy);
+                        a.bumpCooldown = 0.6f;
+                        hurt(a, a.maxHp * 0.3f / PLAYER_DAMAGE_TAKEN, b, hx, hy, ang, 600, CAUSE_CRASH);
+                        a.ang = a.targetAng = ang;
+                        fx.burst(hx, hy, 12, 0xffffffff, 300, 7, 0.4f);
                     }
                     continue;
                 }
@@ -1261,13 +1275,15 @@ final class World {
             fx.ring(v.hx(), v.hy(), v.radius * 2.2f, 0xaaffffff, 0.25f);
             return;
         }
+        // Easier fights: the player shrugs off a good part of every hit
+        if (v.isPlayer) dmg *= PLAYER_DAMAGE_TAKEN;
         v.hp -= dmg;
         v.hitFlash = 0.12f;
         v.sinceDamaged = 0;
         if (by != null && by != v) {
             v.lastAttacker = by;
             v.lastAttackerTime = time;
-            if (by.alive) by.superCharge = Math.min(1f, by.superCharge + dmg / by.type.superCost);
+            if (by.alive) by.superCharge = Math.min(1f, by.superCharge + dmg / by.type.superCost * (by.isPlayer ? 1.6f : 1f));
         }
         if (knock > 0) {
             v.kbx += MathUtil.cos(kAng) * knock;

@@ -88,7 +88,7 @@ final class Snake {
         this.sinceAttack = 10;
         this.boostInput = false;
         this.boosting = false;
-        this.spawnShield = 2.5f;
+        this.spawnShield = isPlayer ? 4f : 2.5f;
         this.dashTime = 0;
         this.revealTime = 0;
         this.invisTime = 0;
@@ -153,7 +153,7 @@ final class Snake {
     }
 
     float damageMult() {
-        return (1f + 0.1f * cubes) * levelMult();
+        return (1f + 0.1f * cubes) * levelMult() * (isPlayer ? World.PLAYER_DAMAGE_DEALT : 1f);
     }
 
     float speed() {

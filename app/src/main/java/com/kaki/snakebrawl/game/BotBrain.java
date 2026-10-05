@@ -22,8 +22,8 @@ final class BotBrain {
     BotBrain(World w, Snake me, int trophies) {
         this.w = w;
         this.me = me;
-        float base = 0.35f + Math.min(0.45f, trophies / 700f);
-        this.skill = MathUtil.clamp(base + MathUtil.rand(-0.12f, 0.12f), 0.2f, 0.95f);
+        float base = 0.2f + Math.min(0.35f, trophies / 1500f);
+        this.skill = MathUtil.clamp(base + MathUtil.rand(-0.1f, 0.1f), 0.1f, 0.7f);
         this.aggression = MathUtil.rand(0.2f, 1f);
         reset();
     }
@@ -66,7 +66,7 @@ final class BotBrain {
             if (o == me || !o.alive || !w.visibleTo(o, me)) continue;
             float d = MathUtil.dist(hx, hy, o.hx(), o.hy());
             if (d > 950) continue;
-            float score = d + (o.hp / o.maxHp) * 250f - (o == lastTarget ? 120 : 0) - (o == me.lastAttacker ? 150 : 0);
+            float score = d + (o.hp / o.maxHp) * 250f - (o == lastTarget ? 120 : 0) - (o == me.lastAttacker ? 150 : 0) + (o.isPlayer ? 260 : 0);
             if (score < bestScore) {
                 bestScore = score;
                 target = o;
@@ -101,7 +101,7 @@ final class BotBrain {
         else if (target == null && me.ammo >= 2.5f) shootBox();
 
         // Skilled bots sidestep shots that are about to hit their head
-        if (!poisonDanger && MathUtil.rand() < skill * 0.6f) {
+        if (!poisonDanger && MathUtil.rand() < skill * 0.3f) {
             float dodge = incomingDodge(hx, hy);
             if (dodge != NO_DODGE) {
                 goalAng = dodge;
@@ -176,7 +176,7 @@ final class BotBrain {
                 d = dd;
             }
         }
-        float err = (1f - skill) * 0.28f;
+        float err = (1f - skill) * 0.4f + (t.isPlayer ? 0.12f : 0f);
         ang += MathUtil.rand(-err, err);
 
         if (me.superReady()) {
@@ -194,7 +194,7 @@ final class BotBrain {
         if (d > b.range * 0.95f || shotGap > 0) return;
         boolean keepAmmo = me.ammo < 1.9f && MathUtil.rand() > skill && d > b.range * 0.6f;
         if (keepAmmo) return;
-        if (MathUtil.rand() < 0.25f + skill * 0.45f && me.tryAttack(w, ang, d)) shotGap = 0.5f + (1f - skill) * 0.6f;
+        if (MathUtil.rand() < 0.2f + skill * 0.35f && me.tryAttack(w, ang, d)) shotGap = 0.9f + (1f - skill) * 0.9f;
     }
 
     private void shootBox() {
