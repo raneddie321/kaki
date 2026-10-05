@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 import java.util.Random;
 

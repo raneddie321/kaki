@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /** Services the game needs from the host (Android app or desktop harness). */
 public interface Platform {

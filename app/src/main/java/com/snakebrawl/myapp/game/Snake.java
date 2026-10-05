@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 final class Snake {
     static final int MAX_SEG = 400;

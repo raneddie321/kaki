@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /** Uniform grid of snake segments, rebuilt every step, for fast proximity queries. */
 final class SegGrid {

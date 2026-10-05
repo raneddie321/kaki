@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /** Buttons, scrolling and shared drawing helpers for the menu screens. */
 final class Ui {

@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /**
  * Minimal drawing surface used by the game. The Android build implements it on top of

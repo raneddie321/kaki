@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /** Cosmetic snake color patterns sold in the shop. Skin 0 uses the brawler's own colors. */
 final class Skin {

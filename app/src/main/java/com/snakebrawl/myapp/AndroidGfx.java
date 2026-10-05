@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl;
+package com.snakebrawl.myapp;
 
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
@@ -9,7 +9,7 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 
-import com.kaki.snakebrawl.game.Gfx;
+import com.snakebrawl.myapp.game.Gfx;
 
 /** {@link Gfx} backed by an Android {@link Canvas}. */
 final class AndroidGfx implements Gfx {

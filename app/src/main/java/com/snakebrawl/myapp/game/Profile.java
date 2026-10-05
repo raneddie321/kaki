@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /** Everything saved between sessions: progress, purchases and settings. */
 final class Profile {

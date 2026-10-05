@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /** Pooled visual effects: dots, sparks, rings, smoke and floating text. */
 final class Particles {

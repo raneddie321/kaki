@@ -1,6 +1,6 @@
-package com.kaki.snakebrawl.desktop;
+package com.snakebrawl.myapp.desktop;
 
-import com.kaki.snakebrawl.game.Gfx;
+import com.snakebrawl.myapp.game.Gfx;
 
 import java.awt.BasicStroke;
 import java.awt.Color;

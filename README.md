@@ -65,8 +65,8 @@ joystick size, camera distance, and resetting your progress.
 ## Project layout
 
 ```
-app/src/main/java/com/kaki/snakebrawl/        Android host (Activity, View, Canvas adapter)
-app/src/main/java/com/kaki/snakebrawl/game/   The game itself, plain Java with no Android imports
+app/src/main/java/com/snakebrawl/myapp/        Android host (Activity, View, Canvas adapter)
+app/src/main/java/com/snakebrawl/myapp/game/   The game itself, plain Java with no Android imports
 app/src/main/res, assets                       Icons, sounds, Lilita One font (SIL OFL)
 desktop/src/                                   Desktop test harness: headless simulation and screenshots
 tools/gen_sounds.py                            Regenerates the sound effects
@@ -88,15 +88,15 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-1.5.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-1.5.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-1.6.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-1.6.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**
 Google Play needs the same key for every update. To use your own key:
 
 ```bash
-KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=7 VERSION_NAME=1.6 ./build.sh
+KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=8 VERSION_NAME=1.7 ./build.sh
 ```
 
 The app targets API 35 and runs on Android 7.0 (API 24) and newer. It needs no permissions.
@@ -104,12 +104,12 @@ The app targets API 35 and runs on Android 7.0 (API 24) and newer. It needs no p
 ## Desktop test harness
 
 ```bash
-mkdir -p /tmp/sb && javac -d /tmp/sb app/src/main/java/com/kaki/snakebrawl/game/*.java desktop/src/com/kaki/snakebrawl/*/*.java
-java -cp /tmp/sb com.kaki.snakebrawl.game.SimTest balance 20         # bot-only matches: stats and timings
-java -cp /tmp/sb com.kaki.snakebrawl.game.SimTest play 8             # scripted player through the touch API
-java -cp /tmp/sb com.kaki.snakebrawl.game.SimTest stress 1280 576 4  # render every frame with random input
-java -cp /tmp/sb com.kaki.snakebrawl.game.SimTest shots out 2400 1080  # screenshots of every screen
-java -cp /tmp/sb com.kaki.snakebrawl.game.IconGen app/src/main/res store-icon-512.png
+mkdir -p /tmp/sb && javac -d /tmp/sb app/src/main/java/com/snakebrawl/myapp/game/*.java desktop/src/com/snakebrawl/myapp/*/*.java
+java -cp /tmp/sb com.snakebrawl.myapp.game.SimTest balance 20         # bot-only matches: stats and timings
+java -cp /tmp/sb com.snakebrawl.myapp.game.SimTest play 8             # scripted player through the touch API
+java -cp /tmp/sb com.snakebrawl.myapp.game.SimTest stress 1280 576 4  # render every frame with random input
+java -cp /tmp/sb com.snakebrawl.myapp.game.SimTest shots out 2400 1080  # screenshots of every screen
+java -cp /tmp/sb com.snakebrawl.myapp.game.IconGen app/src/main/res store-icon-512.png
 ```
 
 ## Credits

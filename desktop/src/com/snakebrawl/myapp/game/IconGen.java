@@ -1,6 +1,6 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
-import com.kaki.snakebrawl.desktop.AwtGfx;
+import com.snakebrawl.myapp.desktop.AwtGfx;
 
 import java.awt.Font;
 import java.awt.image.BufferedImage;

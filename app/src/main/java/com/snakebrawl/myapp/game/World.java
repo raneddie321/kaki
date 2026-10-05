@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /** One arena: map, snakes, projectiles, food, poison and effects. */
 final class World {

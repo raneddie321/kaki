@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /** Small vector icons (the game font has no symbol glyphs). Centered on (x, y), s = size. */
 final class Icons {

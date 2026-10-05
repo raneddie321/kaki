@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /** Top-level game: screens, HUD, touch controls and progression. Host-agnostic. */
 public final class Game {

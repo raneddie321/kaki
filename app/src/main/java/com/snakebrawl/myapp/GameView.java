@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl;
+package com.snakebrawl.myapp;
 
 import android.content.Context;
 import android.graphics.Canvas;
@@ -6,7 +6,7 @@ import android.graphics.Typeface;
 import android.view.MotionEvent;
 import android.view.View;
 
-import com.kaki.snakebrawl.game.Game;
+import com.snakebrawl.myapp.game.Game;
 
 /** Hardware-accelerated view that drives the game loop from onDraw. */
 final class GameView extends View {

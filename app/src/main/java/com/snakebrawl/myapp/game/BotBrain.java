@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl.game;
+package com.snakebrawl.myapp.game;
 
 /** Simple utility-style AI: avoid obstacles, collect food and boxes, fight, flee and dodge poison. */
 final class BotBrain {

@@ -1,4 +1,4 @@
-package com.kaki.snakebrawl;
+package com.snakebrawl.myapp;
 
 import android.app.Activity;
 import android.content.SharedPreferences;
@@ -14,8 +14,8 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 
-import com.kaki.snakebrawl.game.Game;
-import com.kaki.snakebrawl.game.Platform;
+import com.snakebrawl.myapp.game.Game;
+import com.snakebrawl.myapp.game.Platform;
 
 public final class MainActivity extends Activity implements Platform {
     private static final int[] SOUND_RES = {
