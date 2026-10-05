@@ -46,6 +46,10 @@ final class Snake {
     float poisonTime, poisonTick;
     float bumpCooldown;
     float eatSoundTimer;
+    /** Displayed health fraction, lagging behind real health for the damage-chunk effect. */
+    float hpShown = 1f;
+    /** For reveal effects: whether this snake's head was hidden from the player last step. */
+    boolean wasHidden;
     // Damage numbers are batched per snake for a short moment
     float dmgPending, dmgTimer, dmgX, dmgY, dmgSize;
     int dmgColor;
@@ -96,6 +100,8 @@ final class Snake {
         this.poisonTick = 0;
         this.bumpCooldown = 0;
         this.dmgPending = 0;
+        this.hpShown = 1f;
+        this.wasHidden = false;
         this.dmgTimer = 0;
         this.kills = 0;
         this.rank = 0;
@@ -259,18 +265,39 @@ final class Snake {
      * Draws the snake. {@code hidden} lets the world hide segments that sit inside bushes.
      * Shared by the in-game renderer and the brawler preview cards.
      */
+    /** High-quality rendering (shadows, gloss, glows); turned off by the low graphics setting. */
+    static boolean fancy = true;
+    /** Drop shadows are only drawn in the arena, not on menu previews. */
+    static boolean shadows;
+
     static void drawBody(Gfx g, float[] xs, float[] ys, int n, float r, int[] pal,
                          boolean[] hidden, float alpha, boolean glow, float flash, float time,
                          float viewL, float viewT, float viewR, float viewB) {
         int np = pal.length;
-        if (glow) {
-            int gc = MathUtil.withAlpha(MathUtil.lighter(pal[0], 0.3f), 0.22f * alpha);
-            g.color(gc);
-            for (int i = n - 1; i >= 0; i -= 2) {
+        float m = r * 2.2f;
+        if (shadows) {
+            // Soft drop shadow under the whole body
+            g.color(MathUtil.withAlpha(0x38000000, alpha));
+            float ox = r * 0.22f, oy = r * 0.42f;
+            for (int i = n - 1; i >= 0; i -= fancy ? 1 : 2) {
                 if (hidden != null && hidden[i]) continue;
                 float x = xs[i], y = ys[i];
-                if (x < viewL - r * 2 || x > viewR + r * 2 || y < viewT - r * 2 || y > viewB + r * 2) continue;
-                g.fillCircle(x, y, r * 1.7f);
+                if (x < viewL - m || x > viewR + m || y < viewT - m || y > viewB + m) continue;
+                g.fillCircle(x + ox, y + oy, r * (i > n - 8 ? 0.55f + 0.45f * (n - 1 - i) / 7f : 1f) + 2f);
+            }
+        }
+        if (glow) {
+            int gc = MathUtil.lighter(pal[0], 0.4f);
+            for (int i = n - 1; i >= 0; i -= 3) {
+                if (hidden != null && hidden[i]) continue;
+                float x = xs[i], y = ys[i];
+                if (x < viewL - m || x > viewR + m || y < viewT - m || y > viewB + m) continue;
+                if (fancy) {
+                    g.radial(x, y, r * 2.3f, MathUtil.withAlpha(gc, 0.45f * alpha), gc & 0x00ffffff);
+                } else {
+                    g.color(MathUtil.withAlpha(gc, 0.22f * alpha));
+                    g.fillCircle(x, y, r * 1.7f);
+                }
             }
         }
         for (int i = n - 1; i >= 1; i--) {
@@ -280,20 +307,24 @@ final class Snake {
             float taper = i > n - 8 ? 0.55f + 0.45f * (n - 1 - i) / 7f : 1f;
             float rr = r * taper;
             int base = pal[((i + 1) / 3) % np];
-            int outline = MathUtil.darker(base, 0.55f);
             if (flash > 0) base = MathUtil.mix(base, 0xffffffff, flash);
-            g.color(MathUtil.withAlpha(outline, alpha));
+            g.color(MathUtil.withAlpha(MathUtil.darker(base, 0.62f), alpha));
             g.fillCircle(x, y, rr + 2.5f);
-            g.color(MathUtil.withAlpha(base, alpha));
+            g.color(MathUtil.withAlpha(MathUtil.darker(base, 0.22f), alpha));
             g.fillCircle(x, y, rr);
-            g.color(MathUtil.withAlpha(MathUtil.lighter(base, 0.35f), alpha));
-            g.fillCircle(x - rr * 0.18f, y - rr * 0.22f, rr * 0.5f);
+            g.color(MathUtil.withAlpha(base, alpha));
+            g.fillCircle(x - rr * 0.07f, y - rr * 0.11f, rr * 0.84f);
+            g.color(MathUtil.withAlpha(MathUtil.lighter(base, 0.42f), alpha));
+            g.fillCircle(x - rr * 0.22f, y - rr * 0.3f, rr * 0.42f);
+            if (fancy) {
+                g.color(MathUtil.withAlpha(0xffffffff, 0.55f * alpha));
+                g.fillCircle(x - rr * 0.33f, y - rr * 0.43f, rr * 0.14f);
+            }
         }
     }
 
     static void drawHead(Gfx g, float x, float y, float r, float ang, float lookAng, int c1, int c2,
                          int brawler, int accent, float alpha, float flash, float time, float tongue) {
-        int outline = MathUtil.darker(c2, 0.45f);
         int base = flash > 0 ? MathUtil.mix(c1, 0xffffffff, flash) : c1;
         float hr = r * 1.18f;
         float ca = MathUtil.cos(ang), sa = MathUtil.sin(ang);
@@ -369,12 +400,26 @@ final class Snake {
                 break;
         }
 
-        g.color(MathUtil.withAlpha(outline, alpha));
+        if (shadows) {
+            g.color(MathUtil.withAlpha(0x40000000, alpha));
+            g.fillCircle(x + hr * 0.22f, y + hr * 0.42f, hr + 3f);
+        }
+        g.color(MathUtil.withAlpha(MathUtil.darker(base, 0.62f), alpha));
         g.fillCircle(x, y, hr + 3f);
-        g.color(MathUtil.withAlpha(base, alpha));
+        g.color(MathUtil.withAlpha(MathUtil.darker(base, 0.22f), alpha));
         g.fillCircle(x, y, hr);
-        g.color(MathUtil.withAlpha(MathUtil.lighter(base, 0.35f), alpha));
-        g.fillCircle(x - hr * 0.2f, y - hr * 0.25f, hr * 0.5f);
+        g.color(MathUtil.withAlpha(base, alpha));
+        g.fillCircle(x - hr * 0.06f, y - hr * 0.1f, hr * 0.86f);
+        g.color(MathUtil.withAlpha(MathUtil.lighter(base, 0.42f), alpha));
+        g.fillCircle(x - hr * 0.22f, y - hr * 0.28f, hr * 0.45f);
+        if (fancy) {
+            g.color(MathUtil.withAlpha(0xffffffff, 0.6f * alpha));
+            g.fillCircle(x - hr * 0.34f, y - hr * 0.42f, hr * 0.13f);
+            // Nostrils
+            g.color(MathUtil.withAlpha(MathUtil.darker(base, 0.55f), alpha));
+            g.fillCircle(x + ca * hr * 0.8f + px * hr * 0.18f, y + sa * hr * 0.8f + py * hr * 0.18f, hr * 0.06f);
+            g.fillCircle(x + ca * hr * 0.8f - px * hr * 0.18f, y + sa * hr * 0.8f - py * hr * 0.18f, hr * 0.06f);
+        }
 
         switch (brawler) {
             case Brawler.VIPER: {
@@ -469,13 +514,17 @@ final class Snake {
             float ex = x + ca * hr * 0.38f + px * hr * 0.48f * sgn;
             float ey = y + sa * hr * 0.38f + py * hr * 0.48f * sgn;
             g.color(MathUtil.withAlpha(0xff1a1a24, alpha));
-            g.fillCircle(ex, ey, hr * 0.38f);
+            g.fillCircle(ex, ey, hr * 0.39f);
             g.color(MathUtil.withAlpha(0xffffffff, alpha));
-            g.fillCircle(ex, ey, hr * 0.32f);
-            g.color(MathUtil.withAlpha(0xff111118, alpha));
-            g.fillCircle(ex + lc * hr * 0.12f, ey + ls * hr * 0.12f, hr * 0.17f);
+            g.fillCircle(ex, ey, hr * 0.33f);
+            float ix = ex + lc * hr * 0.12f, iy = ey + ls * hr * 0.12f;
+            g.color(MathUtil.withAlpha(0xff3a2f6a, alpha));
+            g.fillCircle(ix, iy, hr * 0.2f);
+            g.color(MathUtil.withAlpha(0xff0c0c12, alpha));
+            g.fillCircle(ix, iy, hr * 0.13f);
             g.color(MathUtil.withAlpha(0xffffffff, alpha));
-            g.fillCircle(ex + lc * hr * 0.12f - hr * 0.06f, ey + ls * hr * 0.12f - hr * 0.07f, hr * 0.06f);
+            g.fillCircle(ix - hr * 0.07f, iy - hr * 0.08f, hr * 0.07f);
+            g.fillCircle(ix + hr * 0.05f, iy + hr * 0.06f, hr * 0.03f);
         }
         if (brawler == Brawler.BLAZE) {
             // Angry brows

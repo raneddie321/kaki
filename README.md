@@ -9,7 +9,8 @@ poison closes in.
 ## Gameplay
 
 - **Steer**: drag anywhere on the left half of the screen (floating joystick).
-- **Attack**: on the right stick, *tap* to auto-aim at the closest snake or *drag* to aim, then release.
+- **Attack**: a lock-on reticle always tracks the nearest visible enemy. On the right stick, *tap* to
+  fire at the locked target or *drag* to aim manually, then release.
   Drag back to the centre to cancel. You have 3 ammo bars that reload over time.
 - **Super**: hitting snakes charges the star button. When it glows, tap or drag it to unleash.
 - **Boost**: hold the blue button to sprint. Boosting burns length and leaves food behind.
@@ -21,6 +22,8 @@ poison closes in.
 - **Power cube boxes**: shoot the crates to get power cubes (+10% health and damage each).
 - **Bushes**: snakes inside bushes are invisible to enemies unless they come close or attack.
 - **Regeneration**: health refills after 3 seconds without attacking or taking damage.
+- **Combat extras**: head shots crit for +25%, chained knockouts trigger DOUBLE / TRIPLE KNOCKOUT
+  banners, and bots sidestep incoming shots.
 
 ### Modes
 
@@ -85,15 +88,15 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-1.1.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-1.1.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-1.3.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-1.3.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**
 Google Play needs the same key for every update. To use your own key:
 
 ```bash
-KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=3 VERSION_NAME=1.2 ./build.sh
+KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=5 VERSION_NAME=1.4 ./build.sh
 ```
 
 The app targets API 35 and runs on Android 5.0 (API 21) and newer. It needs no permissions.

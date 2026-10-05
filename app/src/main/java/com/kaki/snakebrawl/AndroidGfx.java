@@ -1,6 +1,9 @@
 package com.kaki.snakebrawl;
 
 import android.graphics.Canvas;
+import android.graphics.LinearGradient;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
@@ -123,6 +126,52 @@ final class AndroidGfx implements Gfx {
     public float measureText(String s, float size) {
         text.setTextSize(size);
         return text.measureText(s);
+    }
+
+    // Unit-sized gradients cached by colour pair and drawn under a scale transform, so no
+    // shader is mutated or allocated per draw.
+    private final java.util.HashMap<Long, Shader> radialCache = new java.util.HashMap<Long, Shader>();
+    private final java.util.HashMap<Long, Shader> linearCache = new java.util.HashMap<Long, Shader>();
+    private final Paint shaderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    private static long key(int a, int b) {
+        return ((long) a << 32) | (b & 0xffffffffL);
+    }
+
+    @Override
+    public void radial(float x, float y, float r, int inner, int outer) {
+        if (r <= 0.5f) return;
+        long k = key(inner, outer);
+        Shader sh = radialCache.get(k);
+        if (sh == null) {
+            sh = new RadialGradient(0, 0, 1, inner, outer, Shader.TileMode.CLAMP);
+            if (radialCache.size() > 600) radialCache.clear();
+            radialCache.put(k, sh);
+        }
+        shaderPaint.setShader(sh);
+        c.save();
+        c.translate(x, y);
+        c.scale(r, r);
+        c.drawCircle(0, 0, 1, shaderPaint);
+        c.restore();
+    }
+
+    @Override
+    public void vertical(float l, float t, float r, float b, int top, int bottom) {
+        if (b <= t || r <= l) return;
+        long k = key(top, bottom);
+        Shader sh = linearCache.get(k);
+        if (sh == null) {
+            sh = new LinearGradient(0, 0, 0, 1, top, bottom, Shader.TileMode.CLAMP);
+            if (linearCache.size() > 200) linearCache.clear();
+            linearCache.put(k, sh);
+        }
+        shaderPaint.setShader(sh);
+        c.save();
+        c.translate(l, t);
+        c.scale(r - l, b - t);
+        c.drawRect(0, 0, 1, 1, shaderPaint);
+        c.restore();
     }
 
     @Override

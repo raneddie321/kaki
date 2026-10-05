@@ -22,6 +22,19 @@ final class Projectile {
     boolean throughWalls;
     int bounces;
     float slowFactor, slowDur;
+    // Recent positions for the glowing trail
+    static final int TRAIL = 7;
+    final float[] trailX = new float[TRAIL], trailY = new float[TRAIL];
+    int trailCount;
+
+    void pushTrail() {
+        System.arraycopy(trailX, 0, trailX, 1, TRAIL - 1);
+        System.arraycopy(trailY, 0, trailY, 1, TRAIL - 1);
+        trailX[0] = x;
+        trailY[0] = y;
+        if (trailCount < TRAIL) trailCount++;
+    }
+
     // Lobbed bombs and globs
     float startX, startY, targetX, targetY, flight, t, aoe;
 

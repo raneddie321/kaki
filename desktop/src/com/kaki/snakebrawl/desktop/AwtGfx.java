@@ -126,6 +126,25 @@ public final class AwtGfx implements Gfx {
         return (float) g.getFontMetrics().getStringBounds(s, g).getWidth();
     }
 
+    @Override
+    public void radial(float x, float y, float r, int inner, int outer) {
+        if (r <= 0.5f) return;
+        java.awt.Paint old = g.getPaint();
+        g.setPaint(new java.awt.RadialGradientPaint(x, y, r, new float[]{0f, 1f},
+                new Color[]{new Color(inner, true), new Color(outer, true)}));
+        g.fill(new Ellipse2D.Float(x - r, y - r, r * 2, r * 2));
+        g.setPaint(old);
+    }
+
+    @Override
+    public void vertical(float l, float t, float r, float b, int top, int bottom) {
+        if (b <= t || r <= l) return;
+        java.awt.Paint old = g.getPaint();
+        g.setPaint(new java.awt.GradientPaint(0, t, new Color(top, true), 0, b, new Color(bottom, true)));
+        g.fill(new Rectangle2D.Float(l, t, r - l, b - t));
+        g.setPaint(old);
+    }
+
     private final ArrayDeque<java.awt.Shape> clips = new ArrayDeque<>();
 
     @Override

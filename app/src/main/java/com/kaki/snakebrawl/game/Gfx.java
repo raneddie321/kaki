@@ -29,6 +29,12 @@ public interface Gfx {
     void text(String s, float x, float y, float size, int align, float outline, int outlineColor);
     float measureText(String s, float size);
 
+    /** Fills a circle with a radial gradient from {@code inner} (centre) to {@code outer} (edge). */
+    void radial(float x, float y, float r, int inner, int outer);
+
+    /** Fills a rectangle with a vertical gradient. */
+    void vertical(float l, float t, float r, float b, int top, int bottom);
+
     /** Intersects the clip with a rectangle (undone by restore). */
     void clip(float l, float t, float r, float b);
 

@@ -727,11 +727,29 @@ public final class Game {
     }
 
     private void renderMenu(Gfx g) {
-        g.color(0x88101236);
-        g.fillRect(0, 0, w, h);
+        g.vertical(0, 0, w, h, 0x99101236, 0xcc0a0c24);
 
-        // Title
+        // Title with a light burst behind it
         float ty = h * 0.3f;
+        if (!profile.lowGraphics) {
+            g.save();
+            g.translate(w / 2, ty - 40 * u);
+            g.rotate(clock * 8f);
+            float rl = Math.max(w, h);
+            for (int k = 0; k < 14; k++) {
+                float a0 = k * MathUtil.TAU / 14f, a1 = a0 + MathUtil.TAU / 28f;
+                poly[0] = 0;
+                poly[1] = 0;
+                poly[2] = MathUtil.cos(a0) * rl;
+                poly[3] = MathUtil.sin(a0) * rl;
+                poly[4] = MathUtil.cos(a1) * rl;
+                poly[5] = MathUtil.sin(a1) * rl;
+                g.color(0x0effe08a);
+                g.fillPoly(poly, 3);
+            }
+            g.restore();
+            g.radial(w / 2, ty - 40 * u, 620 * u, 0x55ffc94a, 0x00ffc94a);
+        }
         float bounce = MathUtil.sin(clock * 2.2f) * 6 * u;
         g.save();
         g.translate(w / 2, ty + bounce);
@@ -914,9 +932,8 @@ public final class Game {
     private void drawControls(Gfx g, Snake p) {
         // Movement stick
         float mx = movePtr >= 0 ? moveOx : moveCX, my = movePtr >= 0 ? moveOy : moveCY;
-        g.color(movePtr >= 0 ? 0x553a3f7a : 0x332a2f5a);
-        g.fillCircle(mx, my, moveR);
-        g.color(0x66ffffff);
+        g.radial(mx, my, moveR, movePtr >= 0 ? 0x223a3f7a : 0x112a2f5a, movePtr >= 0 ? 0x993a3f7a : 0x662a2f5a);
+        g.color(0x88ffffff);
         g.strokeCircle(mx, my, moveR, 4 * u);
         float kx = mx, ky = my;
         if (movePtr >= 0) {
@@ -928,10 +945,11 @@ public final class Game {
                 ky = my + dy / d * m;
             }
         }
-        g.color(0xff2b6fd6);
-        g.fillCircle(kx, ky, moveR * 0.45f + 4 * u);
-        g.color(0xff4ea4ff);
-        g.fillCircle(kx, ky, moveR * 0.45f);
+        g.color(0xff1a3f8a);
+        g.fillCircle(kx, ky, moveR * 0.45f + 5 * u);
+        g.radial(kx - moveR * 0.1f, ky - moveR * 0.12f, moveR * 0.5f, 0xff9ad0ff, 0xff2b6fd6);
+        g.color(0x88ffffff);
+        g.fillCircle(kx - moveR * 0.16f, ky - moveR * 0.18f, moveR * 0.12f);
 
         // Boost button
         boolean canBoost = p.mass > Snake.MIN_BOOST_MASS;
@@ -987,16 +1005,22 @@ public final class Game {
 
         // Attack stick
         float ax = atkPtr >= 0 ? atkOx : atkCX, ay = atkPtr >= 0 ? atkOy : atkCY;
-        g.color(0x44ff5a3a);
-        g.fillCircle(ax, ay, atkR * 1.25f);
+        g.radial(ax, ay, atkR * 1.25f, 0x22ff5a3a, 0x77ff5a3a);
         g.color(0x88ffffff);
         g.strokeCircle(ax, ay, atkR * 1.25f, 4 * u);
+        if (world.hasLock() && atkPtr < 0) {
+            // Locked-on indicator: spinning ring
+            float sp = clock * 200f;
+            g.color(0xffffd23f);
+            g.arc(ax, ay, atkR * 1.25f + 8 * u, sp, 70, 6 * u);
+            g.arc(ax, ay, atkR * 1.25f + 8 * u, sp + 180, 70, 6 * u);
+        }
         if (atkPtr >= 0) drawStickKnob(g, atkOx, atkOy, atkX, atkY, atkR, 0xffff5a3a);
         else {
             g.color(0xff8a1f1f);
             g.fillCircle(ax, ay, atkR * 0.5f + 4 * u);
-            g.color(p.ammo >= 1 ? 0xffff5a3a : 0xff8a5a5a);
-            g.fillCircle(ax, ay, atkR * 0.5f);
+            int kc = p.ammo >= 1 ? 0xffff5a3a : 0xff8a5a5a;
+            g.radial(ax - atkR * 0.1f, ay - atkR * 0.12f, atkR * 0.55f, MathUtil.lighter(kc, 0.45f), kc);
             // Crosshair
             g.color(0xffffffff);
             g.strokeCircle(ax, ay, atkR * 0.22f, 4 * u);

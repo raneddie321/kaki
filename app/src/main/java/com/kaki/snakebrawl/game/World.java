@@ -432,7 +432,17 @@ final class World {
 
     // ------------------------------------------------------------------ update
 
+    /** Brief freeze after the player lands a knockout, for punch. */
+    float hitStop;
+    private int streak;
+    private float streakTimer;
+
     void update(float dt) {
+        if (hitStop > 0) {
+            hitStop -= dt;
+            return;
+        }
+        if (streakTimer > 0 && (streakTimer -= dt) <= 0) streak = 0;
         time += dt;
         matchTime += dt;
         if (bannerTime > 0) bannerTime -= dt;
@@ -475,6 +485,28 @@ final class World {
         fx.update(dt);
         countAlive();
         updateFocus(dt);
+        updateReveals();
+        updateLock(dt);
+    }
+
+    /** Pops a warning when a hidden enemy (bush or invisibility) is suddenly revealed. */
+    private void updateReveals() {
+        Snake p = player;
+        if (p == null || !p.alive) return;
+        for (int i = 0; i < snakeCount; i++) {
+            Snake s = snakes[i];
+            if (s == p || !s.alive) continue;
+            boolean hidden = isHiddenFromViewer(s, p, s.hx(), s.hy());
+            if (s.wasHidden && !hidden) {
+                float hr = s.radius * 1.18f;
+                fx.ring(s.hx(), s.hy(), hr * 3.2f, 0xffff4a4a, 0.45f);
+                fx.flash(s.hx(), s.hy(), hr * 3f, 0xffff4a4a, 0.25f);
+                fx.text(s.hx(), s.hy() - hr - 64, "!", 0xffff4a4a, 64);
+                fx.burst(s.hx(), s.hy(), 10, 0xff3f9b3c, 260, 7, 0.45f);
+                sound(Platform.SND_CLICK, s.hx(), s.hy(), 0.8f);
+            }
+            s.wasHidden = hidden;
+        }
     }
 
     private void updateZone() {
@@ -763,10 +795,32 @@ final class World {
 
     // ------------------------------------------------------------------ combat
 
+    private static int muzzleColor(int brawler) {
+        switch (brawler) {
+            case Brawler.VOLT:
+                return 0xff7ad8ff;
+            case Brawler.FROST:
+                return 0xffd0f6ff;
+            case Brawler.ZIGGY:
+                return 0xffff8ad0;
+            case Brawler.TOXIN:
+                return 0xffc0ff6a;
+            case Brawler.SHADE:
+                return 0xffff5a8a;
+            case Brawler.BLAZE:
+                return 0xffff7a2a;
+            default:
+                return 0xffffd060;
+        }
+    }
+
     void fire(Snake s, float ang, float dist, boolean sup) {
         float mult = s.damageMult();
         float hr = s.radius * 1.2f;
         float mx = s.hx() + MathUtil.cos(ang) * hr, my = s.hy() + MathUtil.sin(ang) * hr;
+        // Muzzle flash
+        if (isNearCamera(mx, my)) fx.flash(mx, my, sup ? 95 : 60, muzzleColor(s.type.id), sup ? 0.2f : 0.13f);
+        if (s.isPlayer) shake = Math.max(shake, sup ? 4f : 1.5f);
         switch (s.type.id) {
             case Brawler.VIPER: {
                 int count = sup ? 11 : 5;
@@ -933,6 +987,7 @@ final class World {
             p.bounces = 0;
             p.slowFactor = 1f;
             p.slowDur = 0;
+            p.trailCount = 0;
             return p;
         }
         return null;
@@ -949,6 +1004,7 @@ final class World {
                 if (f >= 1f) explode(p);
                 continue;
             }
+            p.pushTrail();
             p.px = p.x;
             p.py = p.y;
             p.x += p.vx * dt;
@@ -1007,8 +1063,13 @@ final class World {
             if (MathUtil.dist2(cx, cy, sxj, syj) < rr * rr) {
                 float ang = (float) Math.atan2(p.vy, p.vx);
                 int color = p.kind == Projectile.FLAME ? 0xffff8a2a : (p.kind == Projectile.PELLET || p.kind == Projectile.BALL ? 0xffffe066 : 0xff9af0ff);
-                fx.sparks(cx, cy, 6, color, 260, 0.25f);
-                hurt(s, p.damage, p.owner, cx, cy, ang, p.knock, CAUSE_SHOT);
+                fx.sparks(cx, cy, 7, color, 300, 0.25f);
+                fx.flash(cx, cy, 48, projColor(p.kind), 0.14f);
+                // Head shots crit
+                boolean crit = j <= 1;
+                float dmg = crit ? p.damage * 1.25f : p.damage;
+                if (crit && p.owner != null && p.owner.isPlayer && showDamage) fx.text(cx, cy - 78, "CRIT!", 0xffffd23f, 30);
+                hurt(s, dmg, p.owner, cx, cy, ang, p.knock, CAUSE_SHOT);
                 if (p.slowDur > 0) slow(s, p.slowFactor, p.slowDur);
                 p.active = false;
                 return;
@@ -1024,12 +1085,16 @@ final class World {
             addArea(x, y, r, big ? 5f : 3f, (big ? 850 : 650) * (p.owner != null ? p.owner.damageMult() : 1f), p.owner);
             fx.burst(x, y, big ? 30 : 16, 0xffa6ff3a, r * 3f, 9, 0.5f);
             fx.ring(x, y, r, 0xffa6ff3a, 0.35f);
+            fx.flash(x, y, r * 1.3f, 0xffa6ff3a, 0.2f);
             sound(Platform.SND_EXPLODE, x, y, 0.45f);
             splash(p, x, y, r * 0.8f);
             return;
         }
         boolean mega = p.kind == Projectile.MEGABOMB;
         fx.ring(x, y, r * 1.1f, 0xffffe28a, 0.45f);
+        fx.fireball(x, y, r * 1.15f, mega ? 0.75f : 0.55f);
+        fx.flash(x, y, r * 1.6f, 0xffffe08a, 0.2f);
+        addDecal(x, y, r * 0.95f);
         fx.burst(x, y, mega ? 40 : 22, 0xffff8a2a, r * 3.5f, mega ? 14 : 10, 0.6f);
         fx.burst(x, y, mega ? 20 : 10, 0xffffe066, r * 2.5f, 8, 0.4f);
         fx.smoke(x, y, mega ? 14 : 7, 0xff5a4a40, r * 0.5f, 0.9f);
@@ -1292,6 +1357,13 @@ final class World {
             sound(Platform.SND_KILL, v.hx(), v.hy(), 1f);
             platform.vibrate(40);
             fx.text(by.hx(), by.hy() - by.radius - 70, "KNOCKOUT!", 0xffffd23f, 44);
+            hitStop = 0.07f;
+            shake = Math.max(shake, 9);
+            streak = streakTimer > 0 ? streak + 1 : 1;
+            streakTimer = 4.5f;
+            if (streak == 2) banner("DOUBLE KNOCKOUT!");
+            else if (streak == 3) banner("TRIPLE KNOCKOUT!");
+            else if (streak >= 4) banner("UNSTOPPABLE!");
         } else {
             sound(Platform.SND_EXPLODE, v.hx(), v.hy(), 0.6f);
         }
@@ -1457,19 +1529,27 @@ final class World {
         float halfW = w / 2 / zoom, halfH = h / 2 / zoom;
         float l = camX - halfW, t = camY - halfH, r = camX + halfW, b = camY + halfH;
         float tt = time + time0;
+        boolean fancy = !lowGraphics;
+        Snake.fancy = fancy;
+        Snake.shadows = true;
 
-        g.color(0xff1d5e8c);
-        g.fillRect(0, 0, w, h);
+        // Deep sea around the island
+        if (fancy) g.vertical(0, 0, w, h, 0xff2f8fd0, 0xff174a85);
+        else {
+            g.color(0xff1d5e8c);
+            g.fillRect(0, 0, w, h);
+        }
         g.save();
         g.translate(w / 2 + sx, h / 2 + sy);
         g.scale(zoom);
         g.translate(-camX, -camY);
 
         drawGround(g, l, t, r, b, tt);
+        drawDecals(g, l, t, r, b);
         drawAreas(g, l, t, r, b, tt);
         drawOrbs(g, l, t, r, b, tt);
         drawCubes(g, l, t, r, b, tt);
-        drawWallsAndBoxes(g, l, t, r, b);
+        drawWallsAndBoxes(g, l, t, r, b, tt);
         boolean hidePlayer = playerInBush();
         drawSnakes(g, l, t, r, b, tt, hidePlayer);
         drawProjectiles(g, l, t, r, b, tt);
@@ -1477,118 +1557,287 @@ final class World {
         // Like Brawl Stars, you can always see yourself inside a bush (faded)
         if (hidePlayer) drawSnake(g, player, 0.6f, l, t, r, b, tt);
         fx.draw(g, l, t, r, b);
+        drawLockOn(g, tt);
         drawLabels(g, l, t, r, b);
         drawAim(g);
         drawPoison(g, l, t, r, b, tt);
         fx.drawText(g);
         g.restore();
+        Snake.shadows = false;
+
+        if (fancy) {
+            // Soft vignette pulls the eye to the centre
+            float rad = (float) Math.sqrt(w * w + h * h) * 0.62f;
+            g.radial(w / 2, h / 2, rad, 0x00000000, 0x70000018);
+        }
+    }
+
+    private static int hash(int x, int y) {
+        int h = x * 73856093 ^ y * 19349663;
+        h ^= h >>> 13;
+        h *= 0x5bd1e995;
+        return h ^ (h >>> 15);
     }
 
     private void drawGround(Gfx g, float l, float t, float r, float b, float tt) {
-        // Water ripples around the arena
+        boolean fancy = !lowGraphics;
+        // Animated waves around the island
         float wl = Math.max(l, -2000), wr = Math.min(r, size + 2000);
         for (float y = (float) Math.floor(t / 90) * 90; y < b; y += 90) {
             float off = MathUtil.sin(tt * 1.5f + y * 0.02f) * 20;
-            g.color(0x223fa8e0);
-            g.line(wl, y + off, wr, y + off + 6, 6);
+            g.color(0x2affffff);
+            g.line(wl, y + off, wr, y + off + 6, 5);
+        }
+        if (fancy) {
+            // Foam and wet sand along the shore
+            float foam = 26f + 6f * MathUtil.sin(tt * 2f);
+            g.color(0x55ffffff);
+            g.fillRoundRect(-foam - 18, -foam - 18, size + foam + 18, size + foam + 18, 60);
+            g.color(0xffb08c58);
+            g.fillRoundRect(-30, -30, size + 30, size + 30, 40);
         }
         g.color(0xffc9a46a);
         g.fillRect(-18, -18, size + 18, size + 18);
-        g.color(0xffe9cf98);
+        g.color(0xffeed49e);
         g.fillRect(0, 0, size, size);
-        g.color(0xffe1c48a);
         int tx0 = Math.max(0, (int) (l / T)), tx1 = Math.min(n - 1, (int) (r / T));
         int ty0 = Math.max(0, (int) (t / T)), ty1 = Math.min(n - 1, (int) (b / T));
+        // Checker tiles with a little colour variation so the ground feels natural
         for (int ty = ty0; ty <= ty1; ty++) {
-            for (int tx = tx0 + ((tx0 + ty) & 1); tx <= tx1; tx += 2) {
+            for (int tx = tx0; tx <= tx1; tx++) {
+                int hsh = hash(tx, ty);
+                boolean dark = ((tx + ty) & 1) == 0;
+                if (!dark && (!fancy || (hsh & 7) != 0)) continue;
+                int c = dark ? ((hsh & 3) == 0 ? 0xffe0c085 : 0xffe5c78d) : 0xfff2dba8;
+                g.color(c);
                 g.fillRect(tx * T, ty * T, tx * T + T, ty * T + T);
             }
         }
-        // Edge fence
+        if (fancy) {
+            // Decorations: grass tufts, pebbles and little flowers
+            for (int ty = ty0; ty <= ty1; ty++) {
+                for (int tx = tx0; tx <= tx1; tx++) {
+                    int idx = ty * n + tx;
+                    if (tiles[idx] != EMPTY || bush[idx]) continue;
+                    int hsh = hash(tx * 7 + 3, ty * 11 + 5);
+                    int kind = (hsh >>> 4) & 15;
+                    if (kind > 5) continue;
+                    float x = tx * T + 12 + ((hsh >>> 8) & 31) * 1.3f, y = ty * T + 12 + ((hsh >>> 13) & 31) * 1.3f;
+                    if (kind <= 2) {
+                        float sway = MathUtil.sin(tt * 2f + x * 0.05f) * 2f;
+                        g.color(0xff8fb04a);
+                        g.line(x, y, x - 6 + sway, y - 12, 3);
+                        g.line(x, y, x + sway, y - 15, 3);
+                        g.line(x, y, x + 6 + sway, y - 11, 3);
+                    } else if (kind <= 4) {
+                        g.color(0x33000000);
+                        g.fillCircle(x + 2, y + 3, 6);
+                        g.color(0xffb8a88c);
+                        g.fillCircle(x, y, 6);
+                        g.color(0xffd8ccb4);
+                        g.fillCircle(x - 2, y - 2, 2.5f);
+                    } else {
+                        int fc = (hsh & 1) == 0 ? 0xffff7ab0 : 0xffffffff;
+                        g.color(0xff8fb04a);
+                        g.line(x, y + 4, x, y + 12, 2.5f);
+                        g.color(fc);
+                        for (int k = 0; k < 5; k++) {
+                            float a = k * MathUtil.TAU / 5;
+                            g.fillCircle(x + MathUtil.cos(a) * 4, y + MathUtil.sin(a) * 4, 3);
+                        }
+                        g.color(0xffffd23f);
+                        g.fillCircle(x, y, 2.5f);
+                    }
+                }
+            }
+        }
+        // Wooden edge fence
+        g.color(0xff5a3a1a);
+        g.strokeRoundRect(-9, -7, size + 9, size + 11, 12, 16);
         g.color(0xff8b5a2b);
-        g.strokeRoundRect(-9, -9, size + 9, size + 9, 12, 14);
+        g.strokeRoundRect(-9, -9, size + 9, size + 9, 12, 12);
+        if (fancy) {
+            g.color(0xffb07a3c);
+            g.strokeRoundRect(-9, -11, size + 9, size + 7, 12, 4);
+        }
+    }
+
+    // Scorch marks left by explosions
+    private static final int MAX_DECALS = 40;
+    private final float[] decalX = new float[MAX_DECALS], decalY = new float[MAX_DECALS], decalR = new float[MAX_DECALS];
+    private final float[] decalBorn = new float[MAX_DECALS];
+    private int decalNext;
+
+    void addDecal(float x, float y, float r) {
+        int i = decalNext;
+        decalNext = (decalNext + 1) % MAX_DECALS;
+        decalX[i] = x;
+        decalY[i] = y;
+        decalR[i] = r;
+        decalBorn[i] = time;
+    }
+
+    private void drawDecals(Gfx g, float l, float t, float r, float b) {
+        for (int i = 0; i < MAX_DECALS; i++) {
+            float rad = decalR[i];
+            if (rad <= 0) continue;
+            float age = time - decalBorn[i];
+            if (age > 9f) continue;
+            float x = decalX[i], y = decalY[i];
+            if (x < l - rad || x > r + rad || y < t - rad || y > b + rad) continue;
+            float a = Math.min(1f, (9f - age) / 3f);
+            if (lowGraphics) {
+                g.color(MathUtil.withAlpha(0x44302010, a));
+                g.fillCircle(x, y, rad * 0.8f);
+            } else {
+                g.radial(x, y, rad, MathUtil.withAlpha(0x88281608, a), 0x00281608);
+            }
+        }
     }
 
     private void drawOrbs(Gfx g, float l, float t, float r, float b, float tt) {
+        boolean fancy = !lowGraphics;
         for (int i = 0; i < orbCount; i++) {
             float x = ox[i], y = oy[i], rad = orad[i];
-            if (x < l - 30 || x > r + 30 || y < t - 30 || y > b + 30) continue;
+            if (x < l - 40 || x > r + 40 || y < t - 40 || y > b + 40) continue;
             float pulse = 1f + 0.15f * MathUtil.sin(tt * 4f + ophase[i]);
             int c = ocol[i];
-            if (!lowGraphics || rad > 9) {
+            if (fancy) {
+                g.radial(x, y, rad * 2.6f * pulse, MathUtil.withAlpha(c, 0.55f), c & 0x00ffffff);
+            } else if (rad > 9) {
                 g.color(MathUtil.withAlpha(c, 0.28f));
                 g.fillCircle(x, y, rad * 1.9f * pulse);
             }
-            g.color(c);
+            g.color(MathUtil.darker(c, 0.25f));
             g.fillCircle(x, y, rad * pulse);
-            g.color(0xccffffff);
-            g.fillCircle(x - rad * 0.3f, y - rad * 0.3f, rad * 0.35f);
+            g.color(c);
+            g.fillCircle(x - rad * 0.1f, y - rad * 0.12f, rad * 0.82f * pulse);
+            g.color(0xddffffff);
+            g.fillCircle(x - rad * 0.3f, y - rad * 0.32f, rad * 0.3f);
+            if (fancy && rad > 8 && ((int) (tt * 2 + ophase[i]) & 3) == 0) {
+                // Occasional sparkle on big orbs
+                float sp = (tt * 2 + ophase[i]) % 1f;
+                float sr = rad * 0.9f * MathUtil.sin(sp * MathUtil.PI);
+                g.color(0xccffffff);
+                g.line(x + rad * 0.4f - sr, y - rad * 0.5f, x + rad * 0.4f + sr, y - rad * 0.5f, 2);
+                g.line(x + rad * 0.4f, y - rad * 0.5f - sr, x + rad * 0.4f, y - rad * 0.5f + sr, 2);
+            }
         }
     }
 
     private void drawCubes(Gfx g, float l, float t, float r, float b, float tt) {
         for (int i = 0; i < cubeCount; i++) {
             float x = cubeX[i], y = cubeY[i];
-            if (x < l - 50 || x > r + 50 || y < t - 50 || y > b + 50) continue;
+            if (x < l - 60 || x > r + 60 || y < t - 60 || y > b + 60) continue;
             float bob = MathUtil.sin(tt * 3f + i) * 5f;
             g.color(0x40000000);
             g.fillCircle(x, y + 18, 18);
-            g.color(0x5566ff66);
-            g.fillCircle(x, y + bob, 32);
+            if (!lowGraphics) g.radial(x, y + bob, 52, 0x996dff6d, 0x006dff6d);
+            else {
+                g.color(0x5566ff66);
+                g.fillCircle(x, y + bob, 32);
+            }
             g.save();
             g.translate(x, y + bob);
-            g.rotate(45);
-            g.color(0xff1f7a2a);
-            g.fillRoundRect(-17, -17, 17, 17, 5);
-            g.color(0xff5aff6a);
-            g.fillRoundRect(-13, -13, 13, 13, 4);
-            g.color(0xffc8ffc8);
-            g.fillRoundRect(-8, -8, 2, 2, 2);
+            g.rotate(45 + MathUtil.sin(tt * 2f + i) * 12f);
+            g.color(0xff14501c);
+            g.fillRoundRect(-18, -18, 18, 18, 5);
+            g.color(0xff2fbf45);
+            g.fillRoundRect(-14, -14, 14, 14, 4);
+            g.color(0xff7aff7a);
+            g.fillRoundRect(-14, -14, 6, 6, 4);
+            g.color(0xffe0ffe0);
+            g.fillRoundRect(-10, -10, -2, -2, 2);
             g.restore();
         }
     }
 
-    private void drawWallsAndBoxes(Gfx g, float l, float t, float r, float b) {
+    private void drawWallsAndBoxes(Gfx g, float l, float t, float r, float b, float tt) {
+        boolean fancy = !lowGraphics;
         int tx0 = Math.max(0, (int) (l / T) - 1), tx1 = Math.min(n - 1, (int) (r / T) + 1);
         int ty0 = Math.max(0, (int) (t / T) - 1), ty1 = Math.min(n - 1, (int) (b / T) + 1);
-        float lift = T * 0.22f;
+        float lift = T * 0.24f;
+        // Shadows first so blocks never shade each other
+        g.color(0x38000000);
+        for (int ty = ty0; ty <= ty1; ty++)
+            for (int tx = tx0; tx <= tx1; tx++)
+                if (tiles[ty * n + tx] != EMPTY) g.fillRect(tx * T + 8, ty * T + 10, tx * T + T + 10, ty * T + T + 12);
         for (int ty = ty0; ty <= ty1; ty++) {
             for (int tx = tx0; tx <= tx1; tx++) {
                 byte tile = tiles[ty * n + tx];
                 if (tile == EMPTY) continue;
                 float x = tx * T, y = ty * T;
                 if (tile == WALL) {
-                    g.color(0x33000000);
-                    g.fillRect(x + 6, y + 8, x + T + 6, y + T + 8);
-                    g.color(0xff4e5873);
-                    g.fillRect(x, y + T - lift, x + T, y + T);
-                    g.color(0xff7d8aa8);
-                    g.fillRoundRect(x, y - lift, x + T, y + T - lift, 6);
-                    g.color(0xff95a2c0);
-                    g.fillRoundRect(x + 6, y - lift + 6, x + T - 6, y + T - lift - 6, 5);
+                    boolean below = ty + 1 < n && tiles[(ty + 1) * n + tx] == WALL;
+                    // Front face
+                    if (!below) {
+                        if (fancy) g.vertical(x, y + T - lift, x + T, y + T, 0xff5a6688, 0xff3a4260);
+                        else {
+                            g.color(0xff4e5873);
+                            g.fillRect(x, y + T - lift, x + T, y + T);
+                        }
+                        g.color(0x55262c40);
+                        g.line(x + T / 2, y + T - lift + 3, x + T / 2, y + T - 2, 2);
+                    }
+                    // Top face
+                    g.color(0xff2a3048);
+                    g.fillRoundRect(x - 1, y - lift - 1, x + T + 1, y + T - lift + 1, 7);
+                    if (fancy) g.vertical(x, y - lift, x + T, y + T - lift, 0xffa6b2d0, 0xff7a87a6);
+                    else {
+                        g.color(0xff7d8aa8);
+                        g.fillRect(x, y - lift, x + T, y + T - lift);
+                    }
+                    g.color(0xffb8c4e0);
+                    g.fillRoundRect(x + 5, y - lift + 4, x + T - 5, y - lift + 10, 3);
+                    if (fancy) {
+                        int hsh = hash(tx, ty);
+                        g.color(0x55404a66);
+                        float cx = x + 14 + (hsh & 15) * 2, cy = y - lift + 20 + ((hsh >>> 4) & 15);
+                        g.line(cx, cy, cx + 10, cy + 8, 2);
+                        g.line(cx + 10, cy + 8, cx + 6, cy + 18, 2);
+                        g.color(0x22ffffff);
+                        g.fillCircle(x + T - 16, y - lift + 22, 5);
+                    }
                 } else {
                     int bi = boxAt(ty * n + tx);
                     float flash = bi >= 0 && boxFlash[bi] > 0 ? 0.6f : 0f;
-                    g.color(0x33000000);
-                    g.fillRect(x + 6, y + 8, x + T + 6, y + T + 8);
-                    g.color(MathUtil.mix(0xff7a4a1e, 0xffffffff, flash));
+                    float wob = flash > 0 ? MathUtil.rand(-2f, 2f) : 0f;
+                    x += wob;
+                    g.color(MathUtil.mix(0xff6a3c14, 0xffffffff, flash));
                     g.fillRect(x + 2, y + T - lift, x + T - 2, y + T);
-                    g.color(MathUtil.mix(0xffc4873f, 0xffffffff, flash));
-                    g.fillRoundRect(x + 2, y - lift, x + T - 2, y + T - lift, 6);
-                    g.color(0xff8a5626);
-                    g.line(x + 8, y - lift + 8, x + T - 8, y + T - lift - 8, 5);
-                    g.line(x + T - 8, y - lift + 8, x + 8, y + T - lift - 8, 5);
-                    // Power cube emblem
-                    g.color(0xff2a8a35);
-                    g.fillRoundRect(x + T / 2 - 12, y + T / 2 - lift - 12, x + T / 2 + 12, y + T / 2 - lift + 12, 4);
+                    g.color(0xff3a200a);
+                    g.fillRoundRect(x + 1, y - lift - 1, x + T - 1, y + T - lift + 1, 7);
+                    if (fancy) g.vertical(x + 3, y - lift + 2, x + T - 3, y + T - lift - 2,
+                            MathUtil.mix(0xffe0a35a, 0xffffffff, flash), MathUtil.mix(0xffb0742e, 0xffffffff, flash));
+                    else {
+                        g.color(MathUtil.mix(0xffc4873f, 0xffffffff, flash));
+                        g.fillRect(x + 3, y - lift + 2, x + T - 3, y + T - lift - 2);
+                    }
+                    // Planks
+                    g.color(0x668a5626);
+                    g.line(x + 4, y - lift + T * 0.33f, x + T - 4, y - lift + T * 0.33f, 2);
+                    g.line(x + 4, y - lift + T * 0.66f, x + T - 4, y - lift + T * 0.66f, 2);
+                    // Metal corners
+                    g.color(0xff8a8fa0);
+                    g.fillRect(x + 3, y - lift + 2, x + 13, y - lift + 12);
+                    g.fillRect(x + T - 13, y - lift + 2, x + T - 3, y - lift + 12);
+                    g.fillRect(x + 3, y + T - lift - 12, x + 13, y + T - lift - 2);
+                    g.fillRect(x + T - 13, y + T - lift - 12, x + T - 3, y + T - lift - 2);
+                    // Glowing power cube emblem
+                    float ex = x + T / 2, ey = y + T / 2 - lift;
+                    if (fancy) g.radial(ex, ey, 26 + 3 * MathUtil.sin(tt * 4f + tx), 0xaa6dff6d, 0x006dff6d);
+                    g.color(0xff14501c);
+                    g.fillRoundRect(ex - 12, ey - 12, ex + 12, ey + 12, 4);
                     g.color(0xff6dff6d);
-                    g.fillRoundRect(x + T / 2 - 8, y + T / 2 - lift - 8, x + T / 2 + 8, y + T / 2 - lift + 8, 3);
+                    g.fillRoundRect(ex - 8, ey - 8, ex + 8, ey + 8, 3);
+                    g.color(0xffe0ffe0);
+                    g.fillRoundRect(ex - 6, ey - 6, ex - 1, ey - 1, 2);
                     if (bi >= 0 && boxHp[bi] < BOX_HP) {
                         float f = boxHp[bi] / BOX_HP;
                         g.color(0xcc000000);
-                        g.fillRoundRect(x + 2, y - lift - 18, x + T - 2, y - lift - 6, 4);
+                        g.fillRoundRect(x + 2, y - lift - 20, x + T - 2, y - lift - 6, 5);
                         g.color(0xff6dff6d);
-                        g.fillRoundRect(x + 4, y - lift - 16, x + 4 + (T - 8) * f, y - lift - 8, 3);
+                        g.fillRoundRect(x + 4, y - lift - 18, x + 4 + (T - 8) * f, y - lift - 8, 4);
                     }
                 }
             }
@@ -1660,6 +1909,7 @@ final class World {
         }
         float look = s.ang;
         if (s == player && aimActive) look = aimAng;
+        else if (s == player && hasLock()) look = MathUtil.angleTo(s.hx(), s.hy(), lockX, lockY);
         Snake.drawHead(g, s.hx(), s.hy(), s.radius, s.ang, look, s.color1, s.color2, s.type.id, s.type.accent,
                 alpha, flash, tt + s.index, s.tongueTimer > 0 ? s.tongueTimer / 0.35f : 0f);
         if (s.spawnShield > 0) {
@@ -1670,18 +1920,64 @@ final class World {
         }
     }
 
+    static int projColor(int kind) {
+        switch (kind) {
+            case Projectile.PELLET:
+                return 0xffffb030;
+            case Projectile.BOLT:
+                return 0xff4ac8ff;
+            case Projectile.SUPERBOLT:
+                return 0xffffe94a;
+            case Projectile.SHARD:
+                return 0xffaaeeff;
+            case Projectile.BALL:
+                return 0xffff6fb5;
+            case Projectile.SHURIKEN:
+                return 0xffff3a6a;
+            case Projectile.GLOB:
+            case Projectile.MEGAGLOB:
+                return 0xffa6ff3a;
+            case Projectile.FLAME:
+                return 0xffff7a2a;
+            default:
+                return 0xffffa62e;
+        }
+    }
+
+    private void drawTrail(Gfx g, Projectile p, int color, float width) {
+        float px = p.x, py = p.y;
+        for (int k = 0; k < p.trailCount; k++) {
+            float x = p.trailX[k], y = p.trailY[k];
+            float f = 1f - (k + 1f) / (Projectile.TRAIL + 1f);
+            g.color(MathUtil.withAlpha(color, 0.7f * f));
+            g.line(px, py, x, y, width * (0.35f + 0.65f * f));
+            px = x;
+            py = y;
+        }
+    }
+
     private void drawProjectiles(Gfx g, float l, float t, float r, float b, float tt) {
+        boolean fancy = !lowGraphics;
         for (Projectile p : proj) {
             if (!p.active) continue;
             if (p.x < l - 300 || p.x > r + 300 || p.y < t - 300 || p.y > b + 300) continue;
+            int col = projColor(p.kind);
+            if (fancy && !p.isBomb() && p.kind != Projectile.FLAME) {
+                drawTrail(g, p, col, p.radius * 1.6f);
+                g.radial(p.x, p.y, p.radius * 3.4f, MathUtil.withAlpha(col, 0.7f), col & 0x00ffffff);
+            }
             switch (p.kind) {
                 case Projectile.PELLET:
-                    g.color(0x88ff9a2a);
-                    g.line(p.x, p.y, p.x - p.vx * 0.025f, p.y - p.vy * 0.025f, p.radius * 1.4f);
+                    if (!fancy) {
+                        g.color(0x88ff9a2a);
+                        g.line(p.x, p.y, p.x - p.vx * 0.025f, p.y - p.vy * 0.025f, p.radius * 1.4f);
+                    }
                     g.color(0xff8a3a10);
                     g.fillCircle(p.x, p.y, p.radius + 2);
-                    g.color(0xffffe066);
+                    g.color(0xffffd060);
                     g.fillCircle(p.x, p.y, p.radius);
+                    g.color(0xffffffff);
+                    g.fillCircle(p.x - p.radius * 0.25f, p.y - p.radius * 0.25f, p.radius * 0.45f);
                     break;
                 case Projectile.BOLT:
                 case Projectile.SUPERBOLT: {
@@ -1693,6 +1989,14 @@ final class World {
                     g.line(p.x, p.y, p.x - p.vx * tl, p.y - p.vy * tl, p.radius * 1.3f);
                     g.color(0xffffffff);
                     g.line(p.x, p.y, p.x - p.vx * tl * 0.7f, p.y - p.vy * tl * 0.7f, p.radius * 0.6f);
+                    if (fancy) {
+                        // Crackling arcs
+                        float a = (float) Math.atan2(p.vy, p.vx) + MathUtil.PI / 2;
+                        float j = MathUtil.rand(-1f, 1f) * p.radius * 1.4f;
+                        g.color(0xccffffff);
+                        g.line(p.x - p.vx * tl * 0.3f, p.y - p.vy * tl * 0.3f,
+                                p.x - p.vx * tl * 0.5f + MathUtil.cos(a) * j, p.y - p.vy * tl * 0.5f + MathUtil.sin(a) * j, 2);
+                    }
                     break;
                 }
                 case Projectile.BOMB:
@@ -1703,16 +2007,20 @@ final class World {
                     g.color(0x40000000);
                     g.fillCircle(p.x, p.y, br * (1f - 0.3f * hgt / 190f));
                     // Landing marker
-                    g.color(0x55ff3a2a);
-                    g.strokeCircle(p.targetX, p.targetY, p.aoe * (0.6f + 0.4f * f), 4);
+                    float pulse = 0.5f + 0.5f * MathUtil.sin(tt * 14f);
+                    g.color(MathUtil.withAlpha(0xffff3a2a, 0.25f + 0.25f * pulse));
+                    g.fillCircle(p.targetX, p.targetY, p.aoe * f);
+                    g.color(0xaaff3a2a);
+                    g.strokeCircle(p.targetX, p.targetY, p.aoe, 4);
                     float by = p.y - hgt;
+                    float fl = 0.7f + 0.3f * MathUtil.sin(tt * 40f);
+                    if (fancy) g.radial(p.x + br * 0.6f, by - br * 0.9f, br * 1.6f * fl, 0xccffb02a, 0x00ff7a1a);
                     g.color(0xff1a1a22);
                     g.fillCircle(p.x, by, br + 3);
                     g.color(p.kind == Projectile.MEGABOMB ? 0xffb02a2a : 0xff3a3a48);
                     g.fillCircle(p.x, by, br);
                     g.color(0x88ffffff);
                     g.fillCircle(p.x - br * 0.35f, by - br * 0.35f, br * 0.3f);
-                    float fl = 0.7f + 0.3f * MathUtil.sin(tt * 40f);
                     g.color(0xffffa32a);
                     g.fillCircle(p.x + br * 0.6f, by - br * 0.9f, br * 0.45f * fl);
                     g.color(0xffffff8a);
@@ -1731,8 +2039,6 @@ final class World {
                     poly4[5] = p.y - sa * len;
                     poly4[6] = p.x + sa * p.radius * 0.8f;
                     poly4[7] = p.y - ca * p.radius * 0.8f;
-                    g.color(0x8899e6ff);
-                    g.line(p.x, p.y, p.x - p.vx * 0.03f, p.y - p.vy * 0.03f, p.radius * 1.2f);
                     g.color(0xff4aa8e0);
                     g.fillPoly(poly4, 4);
                     g.color(0xffe8ffff);
@@ -1740,8 +2046,6 @@ final class World {
                     break;
                 }
                 case Projectile.BALL: {
-                    g.color(0x66ff6fb5);
-                    g.line(p.x, p.y, p.x - p.vx * 0.03f, p.y - p.vy * 0.03f, p.radius * 1.4f);
                     g.color(0xff7a3cff);
                     g.fillCircle(p.x, p.y, p.radius + 2.5f);
                     g.color(0xffff6fb5);
@@ -1762,7 +2066,7 @@ final class World {
                         poly4[3] = p.y + MathUtil.sin(a + 0.7f) * p.radius * 0.5f;
                         poly4[4] = p.x + MathUtil.cos(a - 0.7f) * p.radius * 0.5f;
                         poly4[5] = p.y + MathUtil.sin(a - 0.7f) * p.radius * 0.5f;
-                        g.color(0xffc8c8d8);
+                        g.color(0xffd8d8e8);
                         g.fillPoly(poly4, 3);
                     }
                     g.color(0xffff3a6a);
@@ -1775,9 +2079,10 @@ final class World {
                     float hgt = MathUtil.sin(f * MathUtil.PI) * (p.kind == Projectile.MEGAGLOB ? 170 : 120);
                     g.color(0x40000000);
                     g.fillCircle(p.x, p.y, p.radius * 0.8f);
-                    g.color(0x55a6ff3a);
+                    g.color(0x88a6ff3a);
                     g.strokeCircle(p.targetX, p.targetY, p.aoe * (0.6f + 0.4f * f), 4);
                     float by = p.y - hgt;
+                    if (fancy) g.radial(p.x, by, p.radius * 2.6f, 0x99a6ff3a, 0x00a6ff3a);
                     g.color(0xff3a1a66);
                     g.fillCircle(p.x, by, p.radius + 3);
                     g.color(0xffa6ff3a);
@@ -1789,12 +2094,15 @@ final class World {
                 case Projectile.FLAME:
                 default: {
                     float f = p.traveled / p.range;
-                    g.color(MathUtil.withAlpha(0xffff4a1a, 0.75f * (1f - f)));
-                    g.fillCircle(p.x, p.y, p.radius * 1.15f);
-                    g.color(MathUtil.withAlpha(0xffffb42a, 0.9f * (1f - f * 0.8f)));
-                    g.fillCircle(p.x, p.y, p.radius * 0.75f);
-                    g.color(MathUtil.withAlpha(0xffffff9a, 1f - f));
-                    g.fillCircle(p.x, p.y, p.radius * 0.35f);
+                    if (fancy) {
+                        g.radial(p.x, p.y, p.radius * 1.8f, MathUtil.withAlpha(0xffff5a1a, 0.8f * (1f - f)), 0x00ff3a0a);
+                        g.radial(p.x, p.y, p.radius * 0.9f, MathUtil.withAlpha(0xffffe070, 1f - f * 0.7f), 0x00ffa62e);
+                    } else {
+                        g.color(MathUtil.withAlpha(0xffff4a1a, 0.75f * (1f - f)));
+                        g.fillCircle(p.x, p.y, p.radius * 1.15f);
+                        g.color(MathUtil.withAlpha(0xffffb42a, 0.9f * (1f - f * 0.8f)));
+                        g.fillCircle(p.x, p.y, p.radius * 0.75f);
+                    }
                     break;
                 }
             }
@@ -1802,31 +2110,64 @@ final class World {
     }
 
     private void drawBushes(Gfx g, float l, float t, float r, float b, float tt, boolean playerIn) {
+        boolean fancy = !lowGraphics;
         int tx0 = Math.max(0, (int) (l / T) - 1), tx1 = Math.min(n - 1, (int) (r / T) + 1);
         int ty0 = Math.max(0, (int) (t / T) - 1), ty1 = Math.min(n - 1, (int) (b / T) + 1);
-        float a = playerIn ? 0.75f : 1f;
-        for (int pass = 0; pass < (lowGraphics ? 2 : 3); pass++) {
-            int c = pass == 0 ? 0xff23602a : (pass == 1 ? 0xff3f9b3c : 0xff5cbf4e);
+        float a = playerIn ? 0.72f : 1f;
+        int passes = fancy ? 5 : 2;
+        for (int pass = 0; pass < passes; pass++) {
+            int c;
+            if (fancy) c = pass == 0 ? 0x33000000 : pass == 1 ? 0xff1e5426 : pass == 2 ? 0xff3a9a3a : pass == 3 ? 0xff5cc04c : 0xff8ae070;
+            else c = pass == 0 ? 0xff23602a : 0xff3f9b3c;
             g.color(MathUtil.withAlpha(c, a));
             for (int ty = ty0; ty <= ty1; ty++) {
                 for (int tx = tx0; tx <= tx1; tx++) {
                     if (!bush[ty * n + tx]) continue;
                     float x = tx * T + T / 2, y = ty * T + T / 2;
                     float sway = MathUtil.sin(tt * 1.6f + tx * 0.7f + ty * 1.3f) * 2.5f;
-                    if (pass == 0) {
-                        g.fillCircle(x - 14 + sway, y - 12, 30);
-                        g.fillCircle(x + 14 + sway, y - 10, 30);
-                        g.fillCircle(x - 12 + sway, y + 14, 30);
-                        g.fillCircle(x + 14 + sway, y + 14, 30);
-                    } else if (pass == 1) {
-                        g.fillCircle(x - 14 + sway, y - 14, 24);
-                        g.fillCircle(x + 14 + sway, y - 12, 24);
-                        g.fillCircle(x - 12 + sway, y + 12, 24);
-                        g.fillCircle(x + 14 + sway, y + 12, 24);
-                    } else {
-                        g.fillCircle(x - 18 + sway, y - 20, 9);
-                        g.fillCircle(x + 10 + sway, y - 18, 8);
-                        g.fillCircle(x - 6 + sway, y + 6, 8);
+                    int hsh = hash(tx, ty);
+                    float jx = ((hsh & 7) - 3.5f), jy = (((hsh >>> 3) & 7) - 3.5f);
+                    if (!fancy) {
+                        float rr = pass == 0 ? 30 : 24;
+                        g.fillCircle(x - 14 + sway, y - 12, rr);
+                        g.fillCircle(x + 14 + sway, y - 10, rr);
+                        g.fillCircle(x - 12 + sway, y + 14, rr);
+                        g.fillCircle(x + 14 + sway, y + 14, rr);
+                        continue;
+                    }
+                    switch (pass) {
+                        case 0:
+                            g.fillCircle(x + 8, y + 14, 38);
+                            break;
+                        case 1:
+                            g.fillCircle(x - 14 + sway + jx, y - 12 + jy, 31);
+                            g.fillCircle(x + 14 + sway, y - 10, 31);
+                            g.fillCircle(x - 12 + sway, y + 14, 31);
+                            g.fillCircle(x + 14 + sway + jy, y + 14 + jx, 31);
+                            break;
+                        case 2:
+                            g.fillCircle(x - 14 + sway + jx, y - 15 + jy, 25);
+                            g.fillCircle(x + 14 + sway, y - 13, 25);
+                            g.fillCircle(x - 12 + sway, y + 11, 25);
+                            g.fillCircle(x + 14 + sway + jy, y + 11 + jx, 25);
+                            break;
+                        case 3:
+                            g.fillCircle(x - 17 + sway + jx, y - 21 + jy, 13);
+                            g.fillCircle(x + 11 + sway, y - 19, 12);
+                            g.fillCircle(x - 7 + sway, y + 4, 11);
+                            break;
+                        default:
+                            g.fillCircle(x - 20 + sway + jx, y - 25 + jy, 5);
+                            g.fillCircle(x + 8 + sway, y - 23, 4);
+                            if ((hsh & 31) == 0) {
+                                // Rare little flower
+                                g.color(MathUtil.withAlpha(0xffff7ab0, a));
+                                g.fillCircle(x + 4 + sway, y + 2, 6);
+                                g.color(MathUtil.withAlpha(0xffffe14a, a));
+                                g.fillCircle(x + 4 + sway, y + 2, 2.5f);
+                                g.color(MathUtil.withAlpha(c, a));
+                            }
+                            break;
                     }
                 }
             }
@@ -1835,6 +2176,7 @@ final class World {
 
     private void drawLabels(Gfx g, float l, float t, float r, float b) {
         Snake viewer = player;
+        boolean fancy = !lowGraphics;
         for (int i = 0; i < snakeCount; i++) {
             Snake s = snakes[i];
             if (!s.alive) continue;
@@ -1842,39 +2184,138 @@ final class World {
             if (x < l - 150 || x > r + 150 || y < t - 150 || y > b + 150) continue;
             if (viewer != null && isHiddenFromViewer(s, viewer, x, y)) continue;
             float hr = s.radius * 1.18f;
-            float barW = 96, barH = 17;
-            float by = y - hr - 40;
+            float barW = 100, barH = 18;
+            float by = y - hr - 42;
             float f = MathUtil.clamp(s.hp / s.maxHp, 0, 1);
+            s.hpShown += (f - s.hpShown) * 0.08f;
+            if (s.hpShown < f) s.hpShown = f;
             boolean mine = s.isPlayer;
-            g.color(0xdd111122);
-            g.fillRoundRect(x - barW / 2 - 3, by - 3, x + barW / 2 + 3, by + barH + 3, 7);
-            g.color(mine ? 0xff2e8f2e : 0xff8f2424);
-            g.fillRoundRect(x - barW / 2, by, x + barW / 2, by + barH, 5);
-            g.color(mine ? 0xff58e04a : 0xffff4a3a);
-            g.fillRoundRect(x - barW / 2, by, x - barW / 2 + barW * f, by + barH, 5);
+            g.color(0xee0c0c1a);
+            g.fillRoundRect(x - barW / 2 - 4, by - 4, x + barW / 2 + 4, by + barH + 4, 9);
+            g.color(0xff3a2030);
+            g.fillRoundRect(x - barW / 2, by, x + barW / 2, by + barH, 6);
+            // Trailing "damage" chunk, then the real value
+            g.color(0xfffff2c0);
+            g.fillRoundRect(x - barW / 2, by, x - barW / 2 + barW * s.hpShown, by + barH, 6);
+            int top = mine ? 0xff8cff6a : 0xffff7a5a, bot = mine ? 0xff2ea82e : 0xffc8202a;
+            if (f > 0) {
+                if (fancy) g.vertical(x - barW / 2, by, x - barW / 2 + barW * f, by + barH, top, bot);
+                else {
+                    g.color(bot);
+                    g.fillRect(x - barW / 2, by, x - barW / 2 + barW * f, by + barH);
+                }
+                g.color(0x55ffffff);
+                g.fillRoundRect(x - barW / 2 + 2, by + 2, x - barW / 2 + Math.max(4, barW * f - 2), by + 6, 3);
+            }
             g.color(0xffffffff);
-            g.text(Integer.toString((int) Math.ceil(s.hp)), x, by + barH - 2.5f, 17, Gfx.ALIGN_CENTER, 3, 0xff000000);
+            g.text(Integer.toString((int) Math.ceil(s.hp)), x, by + barH - 3f, 18, Gfx.ALIGN_CENTER, 3, 0xff000000);
             g.color(mine ? 0xff9cff8a : 0xffffffff);
-            g.text(s.name, x, by - 8, 22, Gfx.ALIGN_CENTER, 4, 0xff000000);
+            g.text(s.name, x, by - 9, 23, Gfx.ALIGN_CENTER, 4, 0xff000000);
             if (s.cubes > 0) {
-                float cxp = x + barW / 2 + 18;
-                Icons.cube(g, cxp, by + barH / 2, 22, 1f);
+                float cxp = x + barW / 2 + 20;
+                Icons.cube(g, cxp, by + barH / 2, 24, 1f);
                 g.color(0xffffffff);
                 g.text(Integer.toString(s.cubes), cxp, by + barH / 2 + 7, 18, Gfx.ALIGN_CENTER, 3, 0xff000000);
             }
             if (mine) {
-                float ay = by + barH + 6;
+                float ay = by + barH + 7;
                 float sw = (barW - 8) / 3f;
                 for (int k = 0; k < 3; k++) {
                     float x0 = x - barW / 2 + k * (sw + 4);
-                    g.color(0xdd111122);
-                    g.fillRoundRect(x0 - 1, ay - 1, x0 + sw + 1, ay + 9, 3);
+                    g.color(0xee0c0c1a);
+                    g.fillRoundRect(x0 - 2, ay - 2, x0 + sw + 2, ay + 10, 4);
                     float fill = MathUtil.clamp(s.ammo - k, 0, 1);
-                    g.color(fill >= 1 ? 0xffff9a2a : 0xff9a5a1a);
+                    g.color(fill >= 1 ? 0xffffa62e : 0xff9a5a1a);
                     if (fill > 0) g.fillRoundRect(x0, ay, x0 + sw * fill, ay + 8, 3);
                 }
             }
         }
+    }
+
+    // ------------------------------------------------------------------ auto-aim lock-on
+
+    /** The player's current auto-aim target (nearest visible enemy), smoothed for display. */
+    Snake lockTarget;
+    float lockX, lockY, lockAnim;
+    private boolean lockValid;
+
+    void updateLock(float dt) {
+        Snake p = player;
+        lockValid = false;
+        if (p == null || !p.alive) {
+            lockTarget = null;
+            return;
+        }
+        float range = Math.max(p.type.range, p.type.superRange) * 1.1f;
+        if (findAim(p, range, p.type.projSpeed)) {
+            // findAim also returns boxes when no snake is around; only lock onto snakes
+            Snake best = null;
+            float bd = Float.MAX_VALUE;
+            float ax = p.hx() + MathUtil.cos(aimOutAng) * aimOutDist, ay = p.hy() + MathUtil.sin(aimOutAng) * aimOutDist;
+            for (int i = 0; i < snakeCount; i++) {
+                Snake o = snakes[i];
+                if (o == p || !o.alive || !visibleTo(o, p)) continue;
+                if (ax < o.minX - 80 || ax > o.maxX + 80 || ay < o.minY - 80 || ay > o.maxY + 80) continue;
+                float d = MathUtil.dist2(ax, ay, o.hx(), o.hy());
+                if (d < bd) {
+                    bd = d;
+                    best = o;
+                }
+            }
+            if (best != null) {
+                if (best != lockTarget) {
+                    lockAnim = 0;
+                    lockX = ax;
+                    lockY = ay;
+                }
+                lockTarget = best;
+                lockValid = true;
+                float k = Math.min(1f, dt * 16f);
+                lockX += (ax - lockX) * k;
+                lockY += (ay - lockY) * k;
+                lockAnim = Math.min(1f, lockAnim + dt * 5f);
+                return;
+            }
+        }
+        lockTarget = null;
+    }
+
+    boolean hasLock() {
+        return lockValid && lockTarget != null && lockTarget.alive;
+    }
+
+    private void drawLockOn(Gfx g, float tt) {
+        if (!hasLock() || player == null || !player.alive) return;
+        float x = lockX, y = lockY;
+        float a = lockAnim;
+        float size = 46f + (1f - a) * 40f + 4f * MathUtil.sin(tt * 6f);
+        int col = player.superReady() ? 0xffffd23f : 0xffff3a3a;
+        // Dotted guide line from the head
+        float hx = player.hx(), hy = player.hy();
+        float d = MathUtil.dist(hx, hy, x, y);
+        int dots = (int) (d / 34f);
+        float off = (tt * 90f) % 34f;
+        g.color(MathUtil.withAlpha(0xffffffff, 0.35f * a));
+        for (int k = 1; k < dots; k++) {
+            float f = (k * 34f + off) / d;
+            if (f >= 1f) break;
+            g.fillCircle(hx + (x - hx) * f, hy + (y - hy) * f, 3.5f);
+        }
+        if (!lowGraphics) g.radial(x, y, size * 1.2f, MathUtil.withAlpha(col, 0.25f * a), col & 0x00ffffff);
+        g.save();
+        g.translate(x, y);
+        g.rotate(tt * 90f);
+        for (int k = 0; k < 4; k++) {
+            g.rotate(90);
+            g.color(MathUtil.withAlpha(0xff14142a, a));
+            g.arc(0, 0, size, -28, 56, 11);
+            g.color(MathUtil.withAlpha(col, a));
+            g.arc(0, 0, size, -26, 52, 6);
+        }
+        g.restore();
+        g.color(MathUtil.withAlpha(col, a));
+        g.strokeCircle(x, y, 10, 4);
+        g.fillCircle(x, y, 3.5f);
     }
 
     private void drawAim(Gfx g) {
@@ -1974,7 +2415,7 @@ final class World {
 
     private void drawPoison(Gfx g, float l, float t, float r, float b, float tt) {
         if (!zoneActive()) return;
-        int fog = 0x7a2fb04a;
+        int fog = 0x8a2a9a40;
         g.color(fog);
         float L = Math.max(l, -2000), R = Math.min(r, size + 2000), Tp = Math.max(t, -2000), B = Math.min(b, size + 2000);
         if (zoneT > Tp) g.fillRect(L, Tp, R, Math.min(zoneT, B));
@@ -1985,6 +2426,7 @@ final class World {
             if (zoneR < R) g.fillRect(Math.max(zoneR, L), midT, R, midB);
         }
         // Puffy cloud edge
+        boolean fancy = !lowGraphics;
         float step = 70f;
         g.color(0x993fd05a);
         for (int side = 0; side < 4; side++) {
@@ -1996,9 +2438,10 @@ final class World {
             float start = (float) Math.floor(from / step) * step;
             for (float p = start; p <= to; p += step) {
                 float wob = MathUtil.sin(tt * 2f + p * 0.05f) * 10f;
-                float rad = 46f + MathUtil.sin(tt * 1.3f + p * 0.11f) * 10f;
-                if (horiz) g.fillCircle(p, fixed + wob, rad);
-                else g.fillCircle(fixed + wob, p, rad);
+                float rad = 50f + MathUtil.sin(tt * 1.3f + p * 0.11f) * 12f;
+                float cx = horiz ? p : fixed + wob, cy = horiz ? fixed + wob : p;
+                if (fancy) g.radial(cx, cy, rad * 1.5f, 0xbb62e070, 0x0040c050);
+                else g.fillCircle(cx, cy, rad);
             }
         }
     }

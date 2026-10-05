@@ -6,6 +6,10 @@ final class Particles {
     static final int SPARK = 1;
     static final int RING = 2;
     static final int SMOKE = 3;
+    /** Bright radial flash (muzzle flashes, impacts). */
+    static final int FLASH = 4;
+    /** Expanding fireball with a hot core. */
+    static final int FIRE = 5;
 
     private static final int MAX = 1600;
     private final float[] x = new float[MAX], y = new float[MAX], vx = new float[MAX], vy = new float[MAX];
@@ -68,6 +72,14 @@ final class Particles {
             add(SMOKE, px + MathUtil.cos(a) * sz * 0.3f, py + MathUtil.sin(a) * sz * 0.3f,
                     MathUtil.cos(a) * s, MathUtil.sin(a) * s, sz * MathUtil.rand(0.6f, 1.1f), c, l * MathUtil.rand(0.7f, 1.1f));
         }
+    }
+
+    void flash(float px, float py, float radius, int c, float l) {
+        add(FLASH, px, py, 0, 0, radius, c, l);
+    }
+
+    void fireball(float px, float py, float radius, float l) {
+        add(FIRE, px, py, 0, 0, radius, 0xffff8a2a, l);
     }
 
     void text(float px, float py, String s, int c, float sz) {
@@ -150,6 +162,30 @@ final class Particles {
                     float rr = sz * (1f - f * f * 0.85f);
                     g.color(MathUtil.withAlpha(color[i], f));
                     g.strokeCircle(px, py, rr, 4f + 10f * f);
+                    break;
+                }
+                case FLASH: {
+                    float rr = sz * (0.6f + 0.4f * (1f - f));
+                    if (low) {
+                        g.color(MathUtil.withAlpha(color[i], f * 0.5f));
+                        g.fillCircle(px, py, rr * 0.6f);
+                    } else {
+                        g.radial(px, py, rr, MathUtil.withAlpha(color[i], f), color[i] & 0x00ffffff);
+                        g.radial(px, py, rr * 0.45f, MathUtil.withAlpha(0xffffffff, f * 0.9f), 0x00ffffff);
+                    }
+                    break;
+                }
+                case FIRE: {
+                    float k = 1f - f;
+                    float rr = sz * (0.35f + 0.65f * (float) Math.sqrt(k));
+                    if (low) {
+                        g.color(MathUtil.withAlpha(0xffff8a2a, f * 0.7f));
+                        g.fillCircle(px, py, rr * 0.8f);
+                    } else {
+                        g.radial(px, py, rr, MathUtil.withAlpha(0xffff6a1a, f * 0.85f), 0x00ff3a0a);
+                        g.radial(px, py, rr * 0.6f, MathUtil.withAlpha(0xffffd84a, f), 0x00ffa62e);
+                        g.radial(px, py, rr * 0.3f, MathUtil.withAlpha(0xffffffff, f * f), 0x00ffffcc);
+                    }
                     break;
                 }
                 case SMOKE:

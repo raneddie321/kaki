@@ -100,7 +100,37 @@ final class BotBrain {
         if (target != null && reaction <= 0 && (!early || provoked || targetDist < me.type.range * 0.55f)) shootAt(target, targetDist);
         else if (target == null && me.ammo >= 2.5f) shootBox();
 
+        // Skilled bots sidestep shots that are about to hit their head
+        if (!poisonDanger && MathUtil.rand() < skill * 0.6f) {
+            float dodge = incomingDodge(hx, hy);
+            if (dodge != NO_DODGE) {
+                goalAng = dodge;
+                urgency = Math.max(urgency, 0.7f);
+                if (skill > 0.55f && me.mass > 60) wantBoost = true;
+            }
+        }
         desired = avoid(goalAng, urgency);
+    }
+
+    private static final float NO_DODGE = -999f;
+
+    private float incomingDodge(float hx, float hy) {
+        float danger = me.radius * 2.4f;
+        for (Projectile p : w.proj) {
+            if (!p.active || p.owner == me || p.isBomb()) continue;
+            float dx = hx - p.x, dy = hy - p.y;
+            if (dx > 380 || dx < -380 || dy > 380 || dy < -380) continue;
+            float v = (float) Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+            if (v < 1f) continue;
+            float ux = p.vx / v, uy = p.vy / v;
+            float along = dx * ux + dy * uy;
+            if (along <= 0 || along > 340) continue;
+            float side = dx * -uy + dy * ux;
+            if (Math.abs(side) > danger) continue;
+            float s = side >= 0 ? 1f : -1f;
+            return (float) Math.atan2(ux * s, -uy * s);
+        }
+        return NO_DODGE;
     }
 
     private float distToZoneEdge(float x, float y) {

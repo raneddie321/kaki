@@ -177,12 +177,22 @@ final class Ui {
         g.fillRoundRect(l + 4 * u, t + 10 * u, r + 4 * u, bt + 10 * u, rad);
         g.color(INK);
         g.fillRoundRect(l - 5 * u, t - 5 * u, r + 5 * u, bt + 5 * u, rad + 4 * u);
+        float lip = Math.min(12 * u, (bt - t) * 0.12f);
         g.color(MathUtil.darker(color, 0.35f));
         g.fillRoundRect(l, t, r, bt, rad);
         g.color(color);
-        g.fillRoundRect(l, t, r, bt - Math.min(12 * u, (bt - t) * 0.12f), rad);
-        g.color(MathUtil.withAlpha(0xffffffff, 0.25f));
-        g.fillRoundRect(l + 12 * u, t + 8 * u, r - 12 * u, t + (bt - t) * 0.35f, rad * 0.6f);
+        g.fillRoundRect(l, t, r, bt - lip, rad);
+        // Glossy gradient face
+        g.save();
+        g.clip(l, t + rad * 0.5f, r, bt - lip - rad * 0.5f);
+        g.vertical(l, t, r, bt - lip, MathUtil.lighter(color, 0.25f), MathUtil.darker(color, 0.12f));
+        g.restore();
+        g.color(MathUtil.withAlpha(0xffffffff, 0.3f));
+        g.fillRoundRect(l + 12 * u, t + 7 * u, r - 12 * u, t + (bt - t) * 0.36f, rad * 0.6f);
+        if (pressedNow) {
+            g.color(0x22000000);
+            g.fillRoundRect(l, t, r, bt, rad);
+        }
         if (b.label == null) return;
         float cy = (t + bt) / 2;
         g.color(0xffffffff);
@@ -211,6 +221,13 @@ final class Ui {
         g.fillRoundRect(l - 6 * u, t - 6 * u, r + 6 * u, b + 6 * u, 32 * u);
         g.color(color);
         g.fillRoundRect(l, t, r, b, 26 * u);
+        // Subtle top light
+        g.save();
+        g.clip(l, t + 26 * u, r, b - 26 * u);
+        g.vertical(l, t, r, b, MathUtil.withAlpha(0xffffffff, 0.08f), 0x00ffffff);
+        g.restore();
+        g.color(MathUtil.withAlpha(0xffffffff, 0.12f));
+        g.strokeRoundRect(l + 3 * u, t + 3 * u, r - 3 * u, b - 3 * u, 23 * u, 2 * u);
     }
 
     void coin(Gfx g, float x, float y, float s) {
