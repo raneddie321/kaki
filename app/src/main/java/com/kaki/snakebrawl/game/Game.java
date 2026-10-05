@@ -84,7 +84,13 @@ public final class Game {
             public void vibrate(int millis) {
                 if (profile.vibration) host.vibrate(millis);
             }
+
+            @Override
+            public Object loadImage(String assetPath) {
+                return host.loadImage(assetPath);
+            }
         };
+        HeroArt.load(host);
         meta = new MetaScreens(this);
         newDemo();
         layout();
@@ -195,9 +201,8 @@ public final class Game {
     }
 
     private void startGame() {
-        Brawler b = Brawler.ALL[profile.selected];
         int wm = profile.mode == 0 ? World.MODE_SHOWDOWN : World.MODE_ENDLESS;
-        world = new World(gated, wm, b, profile.palette(), profile.levels[b.id], wm == World.MODE_SHOWDOWN ? 9 : 11, profile.trophies);
+        world = new World(gated, wm, Brawler.HERO, null, profile.heroLevel, wm == World.MODE_SHOWDOWN ? 9 : 11, profile.trophies);
         world.showDamage = profile.damageNumbers;
         world.lowGraphics = profile.lowGraphics;
         world.fx.low = profile.lowGraphics;
@@ -298,16 +303,9 @@ public final class Game {
             case 1:
                 for (int k = 0; k < 3; k++) ui.coin(g, -70 * u + k * 70 * u, artY + MathUtil.sin(clock * 4 + k) * 8 * u, 90 * u);
                 break;
-            case 2: {
-                Brawler b = Brawler.ALL[profile.selected];
-                ui.snakeArt(g, b, Skin.ALL[popArt].paletteFor(b), 0, artY, 1.3f * u, clock);
+            case 3:
+                HeroArt.draw(g, 0, artY + 10 * u, 34 * u, clock, clock, 1f, 0, false);
                 break;
-            }
-            case 3: {
-                Brawler b = Brawler.ALL[popArt];
-                ui.snakeArt(g, b, new int[]{b.color1, b.color2}, 0, artY, 1.3f * u, clock);
-                break;
-            }
             case 4:
                 MetaScreens.drawBox(g, 0, artY, 150 * u, popArt == 1, clock, u);
                 break;
@@ -377,6 +375,10 @@ public final class Game {
             if (dx * dx + dy * dy > (10 * u) * (10 * u)) p.targetAng = (float) Math.atan2(dy, dx);
         }
         p.boostInput = boostPtr >= 0;
+        if (p.isHero) {
+            float dx = moveX - moveOx, dy = moveY - moveOy;
+            p.moveInput = movePtr >= 0 && dx * dx + dy * dy > (14 * u) * (14 * u);
+        }
 
         world.aimActive = false;
         float dead = atkR * 0.28f;
@@ -577,7 +579,6 @@ public final class Game {
                 layout();
                 break;
             case B_BRAWLERS:
-                meta.viewBrawler = profile.selected;
                 setScreen(BRAWLERS);
                 break;
             case B_SHOP:
@@ -657,8 +658,8 @@ public final class Game {
                         profile.mode == 0 ? "SHOWDOWN" : "ENDLESS", profile.mode == 0 ? "Last snake standing" : "Grow forever",
                         profile.mode == 0 ? 0xff3fa0ff : 0xffb35cff);
                 float pl = padL + 30 * u;
-                ui.add(B_BRAWLERS, pl, b - 110 * u, pl + 470 * u, b, "BRAWLERS", null, 0xff4ad04a);
-                ui.add(B_SHOP, pl, padT + 200 * u, pl + 300 * u, padT + 330 * u, "SHOP", "Skins & boxes", 0xffff5ab5);
+                ui.add(B_BRAWLERS, pl, b - 110 * u, pl + 470 * u, b, "HERO", "Upgrades", 0xff4ad04a);
+                ui.add(B_SHOP, pl, padT + 200 * u, pl + 300 * u, padT + 330 * u, "SHOP", "Boxes & deals", 0xffff5ab5);
                 ui.add(B_SETTINGS, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, null, null, 0xff8a8fb8);
                 break;
             }
@@ -758,18 +759,19 @@ public final class Game {
         g.color(0xffffe066);
         g.text(Integer.toString(profile.coins), cl + 92 * u, tt + 64 * u, 54 * u, Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
         g.color(0xffd8dcff);
-        g.text("Wins " + profile.wins + "   Best length " + profile.bestLen, tl + 10 * u, tt + 140 * u, 32 * u,
+        g.text("Wins " + profile.wins + "   Best score " + profile.bestLen, tl + 10 * u, tt + 140 * u, 32 * u,
                 Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
 
-        // Selected brawler showcase
-        Brawler b = Brawler.ALL[profile.selected];
+        // Hero showcase
+        Brawler b = Brawler.HERO;
         float pl = padL + 30 * u, pb = h - padB - 150 * u, pt = pb - 250 * u, pr = pl + 470 * u;
         ui.panel(g, pl, pt, pr, pb, 0xdd22264a);
-        g.color(b.color1);
+        g.color(0xffffd23f);
         g.text(b.name, pl + 30 * u, pt + 70 * u, 64 * u, Gfx.ALIGN_LEFT, 7 * u, 0xff0e1024);
         g.color(0xffd8dcff);
-        g.text("LVL " + profile.levels[b.id], pr - 30 * u, pt + 64 * u, 38 * u, Gfx.ALIGN_RIGHT, 5 * u, 0xff0e1024);
-        ui.snakeArt(g, b, profile.palette(), (pl + pr) / 2, pt + 165 * u, 1.45f * u, clock);
+        g.text("POWER " + profile.heroLevel, pl + 30 * u, pt + 120 * u, 36 * u, Gfx.ALIGN_LEFT, 5 * u, 0xff0e1024);
+        g.text("VS " + (profile.mode == 0 ? 9 : 11) + " SNAKES", pl + 30 * u, pt + 170 * u, 32 * u, Gfx.ALIGN_LEFT, 5 * u, 0xff0e1024);
+        HeroArt.draw(g, pr - 110 * u, pt + 140 * u, 46 * u, clock * 0.8f, clock, 1f, 0, false);
 
         for (int i = 0; i < ui.count; i++) {
             Ui.Btn bt = ui.btns[i];
@@ -822,7 +824,7 @@ public final class Game {
         g.color(0xff6dff6d);
         g.text(Integer.toString(p.cubes), sx + 176 * u, pauseY + 14 * u, 40 * u, Gfx.ALIGN_LEFT, 5 * u, 0xff14142a);
         g.color(0xffffd23f);
-        g.text("LEN " + (int) p.mass, sx + 250 * u, pauseY + 14 * u, 40 * u, Gfx.ALIGN_LEFT, 5 * u, 0xff14142a);
+        g.text("SCORE " + (int) p.mass, sx + 250 * u, pauseY + 14 * u, 40 * u, Gfx.ALIGN_LEFT, 5 * u, 0xff14142a);
 
         // Kill feed
         float fy = pauseY + 90 * u;
@@ -903,7 +905,7 @@ public final class Game {
             g.color(MathUtil.withAlpha(0xffffffff, a));
             g.text(profile.leftHanded ? "Drag RIGHT side to steer  •  Left stick: tap = auto-aim, drag = aim" : "Drag LEFT side to steer  •  Right stick: tap = auto-aim, drag = aim", cx, h * 0.62f, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, MathUtil.withAlpha(0xff14142a, a));
-            g.text("Hold BOOST to sprint  •  Hit snakes to charge your SUPER", cx, h * 0.62f + 44 * u, 32 * u,
+            g.text("Tap DASH to dodge snake bites  •  Hit snakes to charge your SUPER", cx, h * 0.62f + 44 * u, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, MathUtil.withAlpha(0xff14142a, a));
         }
 
@@ -934,7 +936,7 @@ public final class Game {
         g.fillCircle(kx, ky, moveR * 0.45f);
 
         // Boost button
-        boolean canBoost = p.mass > Snake.MIN_BOOST_MASS;
+        boolean canBoost = p.heroDashCooldown <= 0;
         g.color(0xff14142a);
         g.fillCircle(boostCX, boostCY, boostR + 5 * u);
         g.color(boostPtr >= 0 ? 0xff2fc0ff : (canBoost ? 0xff1d8fd0 : 0xff5a5a6a));
@@ -950,7 +952,12 @@ public final class Game {
             poly[5] = boostCY + 20 * u;
             g.fillPoly(poly, 3);
         }
-        g.text("BOOST", boostCX, boostCY + boostR + 34 * u, 28 * u, Gfx.ALIGN_CENTER, 4 * u, 0xff14142a);
+        if (!canBoost) {
+            g.color(0xff2fc0ff);
+            g.arc(boostCX, boostCY, boostR - 5 * u, -90, 360 * (1f - p.heroDashCooldown / Snake.HERO_DASH_COOLDOWN), 8 * u);
+            g.color(0xffffffff);
+        }
+        g.text("DASH", boostCX, boostCY + boostR + 34 * u, 28 * u, Gfx.ALIGN_CENTER, 4 * u, 0xff14142a);
 
         // Super button with charge ring
         boolean ready = p.superReady();
@@ -1142,13 +1149,13 @@ public final class Game {
         if (pt + ph > maxB) ph = maxB - pt;
         ui.panel(g, pl, pt, pl + pw, pt + ph, 0xee22264a);
         Snake player = world.player;
-        ui.snakeArt(g, player.type, player.palette, pl + 175 * u, pt + ph / 2, 0.95f * u, clock);
+        HeroArt.draw(g, pl + 175 * u, pt + ph / 2 + 10 * u, 38 * u, clock * 0.7f, 0, 1f, 0, false);
 
         float sx = pl + 380 * u, sy = pt + 70 * u, row = Math.min(62 * u, (ph - 50 * u) / 5.4f);
         float vx = pl + pw - 50 * u;
         resultRow(g, "KNOCKOUTS", Integer.toString(resKills), 0xffffffff, sx, vx, sy);
         sy += row;
-        resultRow(g, "LENGTH", (resNewBest ? "NEW BEST! " : "") + resLength, resNewBest ? 0xffffd23f : 0xffffffff, sx, vx, sy);
+        resultRow(g, "SCORE", (resNewBest ? "NEW BEST! " : "") + resLength, resNewBest ? 0xffffd23f : 0xffffffff, sx, vx, sy);
         sy += row;
         resultRow(g, "POWER CUBES", Integer.toString(resCubes), 0xff6dff6d, sx, vx, sy);
         sy += row;

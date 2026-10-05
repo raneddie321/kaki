@@ -1,26 +1,23 @@
 # Snake Brawl 🐍💥
 
-A snake.io-style arena game crossed with Brawl Stars, for Android.
+A hero-versus-snakes arena game for Android, mixing snake.io with Brawl Stars.
 
-Grow your snake by eating orbs like in slither.io. You also carry a weapon: shoot other snakes,
-charge a **Super**, hide in bushes, break power-cube boxes, and be the last snake standing while the
-poison closes in.
+You play one hero on foot, armed with a blaster, against a pit of slither.io-style snakes. The
+snakes grow by eating orbs, bite you, and fight each other. Shoot them, dodge their bites, break
+power-cube crates, hide in bushes, and be the last one standing while the poison closes in.
 
 ## Gameplay
 
-- **Steer**: drag anywhere on the left half of the screen (floating joystick).
-- **Attack**: on the right stick, *tap* to auto-aim at the closest snake or *drag* to aim, then release.
-  Drag back to the centre to cancel. You have 3 ammo bars that reload over time.
-- **Super**: hitting snakes charges the star button. When it glows, tap or drag it to unleash.
-- **Boost**: hold the blue button to sprint. Boosting burns length and leaves food behind.
-- **Ways to knock out a snake**
-  - Shoot it until its health runs out.
-  - Make it crash its head into your body (classic snake.io).
-  - Head-on collisions: the smaller snake loses.
-- Knocked-out snakes burst into big orbs and drop their power cubes.
-- **Power cube boxes**: shoot the crates to get power cubes (+10% health and damage each).
-- **Bushes**: snakes inside bushes are invisible to enemies unless they come close or attack.
-- **Regeneration**: health refills after 3 seconds without attacking or taking damage.
+- **Move**: drag anywhere on the left half of the screen. The hero stops when you let go.
+- **Attack (Blaster)**: on the right stick, *tap* to auto-aim or *drag* to aim, then release.
+  Each shot is a 3-bolt burst. You have 3 ammo bars that reload over time.
+- **Super (Rocket Rain)**: hitting snakes charges the star button. When it glows, aim it to call
+  down 6 rockets.
+- **Dash**: the blue button does a quick dodge that makes snake bites miss (2.5 s cooldown).
+- **Snakes**: their heads bite you; bigger snakes bite harder. They can't run through you.
+  Snakes also kill each other: a snake that crashes its head into another snake's body dies.
+- **Power cubes** (from crates and knocked-out snakes): +10% health and damage each.
+- **Bushes**: snakes inside bushes are hidden unless you get close.
 
 ### Modes
 
@@ -29,30 +26,30 @@ poison closes in.
 | **Showdown** | 10 snakes, no respawns. Poison starts closing in after 25 s. Last snake standing wins. Earn trophies by rank. |
 | **Endless** | Classic io mode on a bigger map. Bots respawn. Grow as big as you can. |
 
-### Brawlers
+### Snakes
 
-| Brawler | Role | Price | Attack | Super |
-| --- | --- | --- | --- | --- |
-| **Viper** | Shotgunner | free | Fang Spray: 5 venom pellets | Nova Blast: huge pellet wave with knockback |
-| **Volt** | Sniper | free | Spark Bolt: long-range lightning bolt | Rail Storm: 8 bolts that fly through walls |
-| **Boomer** | Thrower | free | Fuse Bomb: lobbed over walls, splash damage | Mega Bomb: giant blast |
-| **Blaze** | Tank | free | Flame Breath: short-range fire cone | Rampage: dash that slices through snake bodies |
-| **Frost** | Controller | 500 | Ice Shards: 3 shards that slow snakes | Blizzard: freezing blast around you |
-| **Ziggy** | Ricochet | 800 | Bouncy Balls: 3 balls that bounce off walls | Pinball Party: 12 balls in every direction |
-| **Toxin** | Poisoner | 1200 | Venom Glob: leaves a poison puddle | Toxic Cloud: huge toxic swamp |
-| **Shade** | Assassin | 2000 | Shuriken Fan: 3 fast shurikens | Shadow Step: teleport and turn invisible |
-
-Bots get smarter, stronger and fancier as your trophy count goes up.
+Bot snakes come in 8 types, each with its own weapon: Viper (shotgun), Volt (sniper),
+Boomer (bombs), Blaze (flamethrower and dash), Frost (slowing ice), Ziggy (bouncing balls),
+Toxin (poison puddles) and Shade (shurikens and invisibility). They get smarter and stronger as
+your trophy count goes up.
 
 ### Coins, shop and upgrades
 
-- Every match pays coins based on your rank, knockouts and length.
-- **Shop: Offers** has a free gift every 4 hours, a Brawl Box (coins, a skin or a free upgrade),
-  a Mega Box (a guaranteed new skin plus coins), and a daily skin deal at 40% off.
-- **Shop: Skins** has 20 snake skins, from Lime and Tiger up to Rainbow, Gold and Diamond.
-  An equipped skin applies to every brawler.
-- **Shop: Brawlers**: unlock the four new brawlers.
-- **Brawlers screen**: pick a brawler and upgrade its power level (1 to 7, +6% health and damage per level).
+- Every match pays coins based on your rank, knockouts and score.
+- **Shop**: a free gift every 4 hours, a Brawl Box (coins or a free upgrade), a Mega Box
+  (a guaranteed upgrade plus coins), and a daily upgrade deal at 40% off.
+- **Hero screen**: upgrade your power level from 1 to 7 (+6% health and damage per level).
+
+## Hero model
+
+`HeroArt` draws `assets/hero/hero_00.png` … `hero_15.png` if they exist: 16 directional sprites,
+where frame *i* faces *i* × 22.5° clockwise from screen-right. Otherwise it draws a vector
+placeholder. Render the sprites from a `.glb` model with:
+
+```bash
+cd tools/render_hero && npm install
+CHROMIUM=/path/to/chrome node render.mjs /path/to/hero.glb        # add --yaw-offset=90 if it faces the wrong way
+```
 
 ### Settings
 
@@ -85,15 +82,15 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-1.1.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-1.1.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-1.2.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-1.2.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**
 Google Play needs the same key for every update. To use your own key:
 
 ```bash
-KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=3 VERSION_NAME=1.2 ./build.sh
+KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=4 VERSION_NAME=1.3 ./build.sh
 ```
 
 The app targets API 35 and runs on Android 5.0 (API 21) and newer. It needs no permissions.

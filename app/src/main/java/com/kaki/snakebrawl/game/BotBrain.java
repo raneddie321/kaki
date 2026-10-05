@@ -66,7 +66,7 @@ final class BotBrain {
             if (o == me || !o.alive || !w.visibleTo(o, me)) continue;
             float d = MathUtil.dist(hx, hy, o.hx(), o.hy());
             if (d > 950) continue;
-            float score = d + (o.hp / o.maxHp) * 250f - (o == lastTarget ? 120 : 0) - (o == me.lastAttacker ? 150 : 0);
+            float score = d + (o.hp / o.maxHp) * 250f - (o == lastTarget ? 120 : 0) - (o == me.lastAttacker ? 150 : 0) - (o.isHero ? 260 : 0);
             if (score < bestScore) {
                 bestScore = score;
                 target = o;
@@ -113,6 +113,12 @@ final class BotBrain {
         if (strafeTimer <= 0) {
             strafeTimer = MathUtil.rand(1.2f, 2.8f);
             strafeDir = MathUtil.rand() < 0.5f ? 1f : -1f;
+        }
+        // Snakes love to bite the hero
+        if (t.isHero && me.hp > me.maxHp * 0.4f && dist < 520 && aggression > 0.45f) {
+            wantBoost = dist < 300 && me.mass > 60 && MathUtil.rand() < skill;
+            float tt = Math.min(0.5f, dist / 600f);
+            return MathUtil.angleTo(hx, hy, t.hx() + t.vx * tt, t.hy() + t.vy * tt);
         }
         // Big snakes try to cut smaller snakes off, slither.io style
         if (me.mass > t.mass * 1.35f && dist < 600 && skill > 0.4f) {

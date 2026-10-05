@@ -191,6 +191,25 @@ public final class MainActivity extends Activity implements Platform {
     }
 
     @Override
+    public Object loadImage(String assetPath) {
+        java.io.InputStream in = null;
+        try {
+            in = getAssets().open(assetPath);
+            return android.graphics.BitmapFactory.decodeStream(in);
+        } catch (java.io.IOException e) {
+            return null;
+        } finally {
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (java.io.IOException ignored) {
+                    // nothing to do
+                }
+            }
+        }
+    }
+
+    @Override
     public void vibrate(int millis) {
         if (view != null) {
             view.performHapticFeedback(millis > 100 ? HapticFeedbackConstants.LONG_PRESS : HapticFeedbackConstants.VIRTUAL_KEY);

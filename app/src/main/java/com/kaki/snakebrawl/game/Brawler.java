@@ -10,6 +10,7 @@ final class Brawler {
     static final int ZIGGY = 5;
     static final int TOXIN = 6;
     static final int SHADE = 7;
+    static final int HERO_ID = 8;
 
     static final int MAX_LEVEL = 7;
     /** Coins to go from level i+1 to i+2. */
@@ -128,6 +129,14 @@ final class Brawler {
                     3300, 560, 540, 1.15f, 1.12f, 2800, 420,
                     2, 4, 3, 5, 4, 2000, 1600),
     };
+
+    /** The player's character. Snakes (bots) use the brawlers in {@link #ALL}. */
+    static final Brawler HERO = new Brawler(HERO_ID, "HERO", "Snake Hunter",
+            "Blaster", "Fires a 3-shot burst of energy bolts.",
+            "Rocket Rain", "Calls down 6 rockets on an area.",
+            0xff3fa0ff, 0xff1d3f8a, 0xffffd23f,
+            3300, 330, 680, 1.3f, 1.0f, 3400, 650,
+            5, 4, 4, 4, 4, 0, 1900);
 
     /** Colors used for bot snakes so each one is easy to tell apart. */
     static final int[][] BOT_SKINS = {

@@ -29,6 +29,9 @@ public interface Gfx {
     void text(String s, float x, float y, float size, int align, float outline, int outlineColor);
     float measureText(String s, float size);
 
+    /** Draws an image from {@link Platform#loadImage} stretched into the rectangle. */
+    void image(Object img, float l, float t, float r, float b, float alpha);
+
     /** Intersects the clip with a rectangle (undone by restore). */
     void clip(float l, float t, float r, float b);
 

@@ -1,0 +1,10 @@
+{
+  "name": "render-hero",
+  "private": true,
+  "type": "module",
+  "description": "Renders the hero .glb model into directional sprites for the game",
+  "dependencies": {
+    "playwright-core": "1.55.0",
+    "three": "0.179.1"
+  }
+}
