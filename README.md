@@ -1,3 +1,96 @@
-# primeCODE v2
+# Snake Brawl 🐍💥
 
-ITS GONNA BE COOL
+A snake.io-style arena game crossed with Brawl Stars, for Android.
+
+Grow your snake by eating orbs like in slither.io. You also carry a weapon: shoot other snakes,
+charge a **Super**, hide in bushes, break power-cube boxes, and be the last snake standing while the
+poison closes in.
+
+## Gameplay
+
+- **Steer**: drag anywhere on the left half of the screen (floating joystick).
+- **Attack**: on the right stick, *tap* to auto-aim at the closest snake or *drag* to aim, then release.
+  Drag back to the centre to cancel. You have 3 ammo bars that reload over time.
+- **Super**: hitting snakes charges the star button. When it glows, tap or drag it to unleash.
+- **Boost**: hold the blue button to sprint. Boosting burns length and leaves food behind.
+- **Ways to knock out a snake**
+  - Shoot it until its health runs out.
+  - Make it crash its head into your body (classic snake.io).
+  - Head-on collisions: the smaller snake loses.
+- Knocked-out snakes burst into big orbs and drop their power cubes.
+- **Power cube boxes**: shoot the crates to get power cubes (+10% health and damage each).
+- **Bushes**: snakes inside bushes are invisible to enemies unless they come close or attack.
+- **Regeneration**: health refills after 3 seconds without attacking or taking damage.
+
+### Modes
+
+| Mode | Description |
+| --- | --- |
+| **Showdown** | 10 snakes, no respawns. Poison starts closing in after 25 s. Last snake standing wins. Earn trophies by rank. |
+| **Endless** | Classic io mode on a bigger map. Bots respawn. Grow as big as you can. |
+
+### Brawlers
+
+| Brawler | Role | Attack | Super |
+| --- | --- | --- | --- |
+| **Viper** | Shotgunner | Fang Spray: 5 venom pellets | Nova Blast: huge pellet wave with knockback |
+| **Volt** | Sniper | Spark Bolt: long-range lightning bolt | Rail Storm: 8 bolts that fly through walls |
+| **Boomer** | Thrower | Fuse Bomb: lobbed over walls, splash damage | Mega Bomb: giant blast |
+| **Blaze** | Tank | Flame Breath: short-range fire cone | Rampage: dash that slices through snake bodies |
+
+Bots get smarter as your trophy count goes up.
+
+## Project layout
+
+```
+app/src/main/java/com/kaki/snakebrawl/        Android host (Activity, View, Canvas adapter)
+app/src/main/java/com/kaki/snakebrawl/game/   The game itself, plain Java with no Android imports
+app/src/main/res, assets                       Icons, sounds, Lilita One font (SIL OFL)
+desktop/src/                                   Desktop test harness: headless simulation and screenshots
+tools/gen_sounds.py                            Regenerates the sound effects
+build.sh                                       Builds the signed APK and AAB
+```
+
+All game logic and rendering goes through a small `Gfx` interface, so the same code runs on
+Android (`android.graphics.Canvas`) and on the desktop (Java2D) for testing.
+
+## Building
+
+`build.sh` builds without Gradle, using `aapt2`, `javac`, `d8`/`dx`, `zipalign`, `apksigner` and
+`bundletool`. On Ubuntu/Debian:
+
+```bash
+sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 apksigner zipalign dalvik-exchange
+./build.sh
+```
+
+This produces:
+
+- `dist/SnakeBrawl-1.0.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-1.0.aab`: the Android App Bundle for Google Play.
+
+Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
+is generated and its password is written next to it. **Keep that key safe and never commit it.**
+Google Play needs the same key for every update. To use your own key:
+
+```bash
+KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=2 VERSION_NAME=1.1 ./build.sh
+```
+
+The app targets API 35 and runs on Android 5.0 (API 21) and newer. It needs no permissions.
+
+## Desktop test harness
+
+```bash
+mkdir -p /tmp/sb && javac -d /tmp/sb app/src/main/java/com/kaki/snakebrawl/game/*.java desktop/src/com/kaki/snakebrawl/*/*.java
+java -cp /tmp/sb com.kaki.snakebrawl.game.SimTest balance 20         # bot-only matches: stats and timings
+java -cp /tmp/sb com.kaki.snakebrawl.game.SimTest play 8             # scripted player through the touch API
+java -cp /tmp/sb com.kaki.snakebrawl.game.SimTest stress 1280 576 4  # render every frame with random input
+java -cp /tmp/sb com.kaki.snakebrawl.game.SimTest shots out 2400 1080  # screenshots of every screen
+java -cp /tmp/sb com.kaki.snakebrawl.game.IconGen app/src/main/res store-icon-512.png
+```
+
+## Credits
+
+Font: [Lilita One](https://fonts.google.com/specimen/Lilita+One) by Juan Montoreano, SIL Open Font
+License 1.1 (see `app/src/main/assets/fonts/OFL.txt`). All other art and sounds are generated in code.
