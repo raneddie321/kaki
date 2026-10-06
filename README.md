@@ -70,6 +70,20 @@ Bots get smarter, stronger and fancier as your trophy count goes up.
 - There is no online server yet, so club members and your duo partner are computer players.
   Playing with real friends needs an online backend or local Wi-Fi play.
 
+### Play with friends on Wi-Fi
+
+**FRIENDS** on the main menu lets two phones on the same Wi-Fi (or one phone's hotspot) play together:
+
+- One phone taps **HOST A ROOM**, the other **JOIN A ROOM**. Rooms are found automatically; if not,
+  type the address shown on the host's screen.
+- The host picks **TOGETHER** (team up against 4 bot pairs) or **VERSUS** (fight each other plus 8 bots).
+- Both phones run the same match in lockstep: they share a random seed, exchange only their controls
+  (60 small packets a second) and compare a checksum every 2 seconds. If a phone disconnects or the
+  games get out of sync, the friend's snake is taken over by a bot.
+- Ports: TCP 47321 (game), UDP 47322 (room announcements).
+- Test: `java -cp /tmp/sb com.snakebrawl.myapp.game.SimTest net 0 60` runs two games over localhost
+  and checks they stay identical every tick.
+
 ### Coin store (real money)
 
 The shop's **COINS** tab sells five coin packs (500 to 15,000 coins, $0.99 to $14.99).
@@ -113,18 +127,18 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-2.0.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-2.0.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-2.1.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-2.1.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**
 Google Play needs the same key for every update. To use your own key:
 
 ```bash
-KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=12 VERSION_NAME=2.1 ./build.sh
+KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=13 VERSION_NAME=2.2 ./build.sh
 ```
 
-The app targets API 36 and runs on Android 7.0 (API 24) and newer. It needs no permissions.
+The app targets API 36 and runs on Android 7.0 (API 24) and newer. It asks only for network permissions (granted automatically), used by Wi-Fi play.
 
 ## Desktop test harness
 

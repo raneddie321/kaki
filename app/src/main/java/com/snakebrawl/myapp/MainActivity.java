@@ -281,6 +281,32 @@ public final class MainActivity extends Activity implements Platform {
         input.requestFocus();
     }
 
+    private android.net.wifi.WifiManager.MulticastLock multicastLock;
+
+    @Override
+    public void setNetworkDiscovery(final boolean on) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (on && multicastLock == null) {
+                        android.net.wifi.WifiManager wm =
+                                (android.net.wifi.WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+                        if (wm == null) return;
+                        multicastLock = wm.createMulticastLock("snakebrawl-rooms");
+                        multicastLock.setReferenceCounted(false);
+                        multicastLock.acquire();
+                    } else if (!on && multicastLock != null) {
+                        multicastLock.release();
+                        multicastLock = null;
+                    }
+                } catch (RuntimeException ignored) {
+                    // Discovery is optional; typing the address still works
+                }
+            }
+        });
+    }
+
     @Override
     public boolean launchPurchase(String productId) {
         // Google Play Billing is not integrated yet: the game falls back to its test checkout.

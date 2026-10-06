@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.snakebrawl.myapp">
 
+    <!-- Wi-Fi play with friends: sockets, and hearing room announcements on the local network -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
+
     <application
         android:allowBackup="true"
         android:hardwareAccelerated="true"

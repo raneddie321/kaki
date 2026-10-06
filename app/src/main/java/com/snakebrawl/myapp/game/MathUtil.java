@@ -5,7 +5,11 @@ import java.util.Random;
 final class MathUtil {
     static final float PI = (float) Math.PI;
     static final float TAU = (float) (Math.PI * 2);
-    static final Random RNG = new Random();
+    /** Default random source. A World swaps in its own seeded generator while it simulates. */
+    static final Random GLOBAL = new Random();
+    static Random RNG = GLOBAL;
+    /** Cosmetic randomness (particles) that must never affect the simulation. */
+    static final Random FX = new Random();
 
     private MathUtil() {}
 
@@ -19,6 +23,14 @@ final class MathUtil {
 
     static int randInt(int n) {
         return RNG.nextInt(n);
+    }
+
+    static float frand(float lo, float hi) {
+        return lo + FX.nextFloat() * (hi - lo);
+    }
+
+    static float frand() {
+        return FX.nextFloat();
     }
 
     static float clamp(float v, float lo, float hi) {
@@ -46,15 +58,15 @@ final class MathUtil {
     }
 
     static float angleTo(float x1, float y1, float x2, float y2) {
-        return (float) Math.atan2(y2 - y1, x2 - x1);
+        return (float) StrictMath.atan2(y2 - y1, x2 - x1);
     }
 
     static float cos(float a) {
-        return (float) Math.cos(a);
+        return (float) StrictMath.cos(a);
     }
 
     static float sin(float a) {
-        return (float) Math.sin(a);
+        return (float) StrictMath.sin(a);
     }
 
     static float sqrt(float v) {

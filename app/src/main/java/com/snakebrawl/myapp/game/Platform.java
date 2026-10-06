@@ -47,4 +47,10 @@ public interface Platform {
      * case the game shows its simulated test checkout instead.
      */
     boolean launchPurchase(String productId);
+
+    /**
+     * Turns Wi-Fi room discovery on or off. On Android this holds a multicast lock so the phone
+     * can hear room announcements from other phones on the network.
+     */
+    void setNetworkDiscovery(boolean on);
 }

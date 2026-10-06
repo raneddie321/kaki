@@ -2,11 +2,11 @@ package com.snakebrawl.myapp.game;
 
 /** Top-level game: screens, HUD, touch controls and progression. Host-agnostic. */
 public final class Game {
-    static final int MENU = 0, BRAWLERS = 1, PLAY = 2, RESULT = 3, SHOP = 4, SETTINGS = 5, ONBOARD = 6, CLUB = 7;
+    static final int MENU = 0, BRAWLERS = 1, PLAY = 2, RESULT = 3, SHOP = 4, SETTINGS = 5, ONBOARD = 6, CLUB = 7, FRIENDS = 8;
     private static final float STEP = 1f / 60f;
 
     static final int B_PLAY = 1, B_MODE = 2, B_BRAWLERS = 3, B_SHOP = 4, B_SETTINGS = 5, B_BACK = 6,
-            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_CLUB = 11, B_YES = 90, B_NO = 91, B_OK = 92,
+            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_CLUB = 11, B_FRIENDS = 12, B_YES = 90, B_NO = 91, B_OK = 92,
             B_SHEET_BUY = 93, B_SHEET_CANCEL = 94;
 
     // Popup actions confirmed with YES
@@ -22,6 +22,19 @@ public final class Game {
     final Ui ui = new Ui();
     private final MetaScreens meta;
     private SocialScreens social;
+    private FriendsScreen friends;
+
+    // Wi-Fi match (lockstep: both phones simulate the same world from the same inputs)
+    private static final int NET_DELAY = 4, NET_RING = 512, NET_HASH_EVERY = 120;
+    NetSession net;
+    private boolean netHost;
+    /** The last result came from a Wi-Fi match. */
+    private boolean resNet;
+    int netTick;
+    private final NetInput netIn = new NetInput();
+    private final NetInput[] netLocal = new NetInput[NET_RING], netRemote = new NetInput[NET_RING];
+    private final int[] netHashTick = new int[64], netHashVal = new int[64];
+    private float netStall;
     float w = 1920, h = 1080, u = 1;
     private float insL, insT, insR, insB;
     float padL, padT, padR, padB;
@@ -110,9 +123,20 @@ public final class Game {
             public void requestText(String title, String initial, int maxLength, boolean numeric, TextCallback callback) {
                 host.requestText(title, initial, maxLength, numeric, callback);
             }
+
+            @Override
+            public void setNetworkDiscovery(boolean on) {
+                host.setNetworkDiscovery(on);
+            }
         };
         meta = new MetaScreens(this);
         social = new SocialScreens(this);
+        friends = new FriendsScreen(this);
+        for (int i = 0; i < NET_RING; i++) {
+            netLocal[i] = new NetInput();
+            netRemote[i] = new NetInput();
+            netLocal[i].tick = netRemote[i].tick = -1;
+        }
         newDemo();
         if (!profile.onboarded) screen = ONBOARD;
         layout();
@@ -400,6 +424,10 @@ public final class Game {
             case CLUB:
                 setScreen(MENU);
                 return true;
+            case FRIENDS:
+                friends.cancel();
+                setScreen(MENU);
+                return true;
             case ONBOARD:
                 return true;
             case RESULT:
@@ -423,6 +451,7 @@ public final class Game {
     }
 
     private void goMenu() {
+        endNet();
         world = null;
         paused = false;
         newDemo();
@@ -450,6 +479,139 @@ public final class Game {
                 if (mate.level < profile.levels[b.id]) mate.level = profile.levels[b.id];
             }
         }
+        configureWorld();
+    }
+
+    /** Starts a Wi-Fi match. Both phones call this with the same seed and mode. */
+    void startNetGame(NetSession session, NetSession.Msg friend, long seed, int lobbyMode) {
+        net = session;
+        netHost = session.host;
+        netTick = 0;
+        netStall = 0;
+        netIn.clear();
+        for (int i = 0; i < NET_RING; i++) netLocal[i].tick = netRemote[i].tick = -1;
+        for (int i = 0; i < netHashTick.length; i++) netHashTick[i] = -1;
+        // The first few ticks have no input yet on either phone
+        for (int t = 0; t < NET_DELAY; t++) {
+            NetInput li = netLocal[t];
+            li.clear();
+            li.tick = t;
+            NetInput ri = netRemote[t];
+            ri.clear();
+            ri.tick = t;
+        }
+        Brawler mine = Brawler.ALL[profile.selected];
+        Brawler theirs = Brawler.ALL[Profile.clamp(friend.brawler, 0, Brawler.ALL.length - 1)];
+        int[] myPal = profile.palette();
+        int[] theirPal = friend.palette != null && friend.palette.length >= 2 ? friend.palette : new int[]{theirs.color1, theirs.color2};
+        int myLvl = profile.levels[mine.id], theirLvl = Profile.clamp(friend.level, 1, Brawler.MAX_LEVEL);
+        int wm = lobbyMode == FriendsScreen.VERSUS ? World.MODE_SHOWDOWN : World.MODE_DUO;
+        int trophies = netHost ? profile.trophies : friend.trophies;
+        java.util.Random prev = MathUtil.RNG;
+        MathUtil.RNG = new java.util.Random(seed);
+        try {
+            if (netHost) {
+                world = new World(gated, wm, mine, myPal, myLvl, theirs, theirPal, theirLvl, 0, 8, trophies);
+            } else {
+                world = new World(gated, wm, theirs, theirPal, theirLvl, mine, myPal, myLvl, 1, 8, trophies);
+            }
+        } finally {
+            MathUtil.RNG = prev;
+        }
+        world.snakes[netHost ? 0 : 1].name = profile.displayName();
+        world.snakes[netHost ? 1 : 0].name = friend.name;
+        world.banner(wm == World.MODE_DUO ? "TEAM UP WITH " + friend.name.toUpperCase() + "!" : "BEAT " + friend.name.toUpperCase() + "!");
+        configureWorld();
+    }
+
+    /** Snake controlled by the friend's phone. */
+    private Snake netFriend() {
+        return world.snakes[netHost ? 1 : 0];
+    }
+
+    private void netUpdate(float dt) {
+        NetSession.Msg m;
+        while (net != null && (m = net.poll()) != null) {
+            if (m.type == NetSession.M_INPUT) {
+                NetInput ri = netRemote[m.input.tick % NET_RING];
+                ri.copyFrom(m.input);
+            } else if (m.type == NetSession.M_HASH) {
+                int k = (m.tick / NET_HASH_EVERY) % netHashTick.length;
+                if (netHashTick[k] == m.tick && netHashVal[k] != m.hash) {
+                    dropNet("OUT OF SYNC", "The two phones got out of sync, so " + netFriend().name + " is now played by a bot.");
+                    return;
+                }
+            }
+        }
+        if (net != null && net.state == NetSession.ST_CLOSED) {
+            dropNet("FRIEND LEFT", (net.closeReason != null ? net.closeReason : "Connection lost")
+                    + ". Their snake is now played by a bot.");
+            return;
+        }
+        acc += dt;
+        int steps = 0;
+        while (acc >= STEP && steps < 6) {
+            NetInput host, guest;
+            NetInput remote = netRemote[netTick % NET_RING];
+            if (remote.tick != netTick) {
+                // Waiting for the friend's controls for this tick
+                netStall += dt;
+                acc = Math.min(acc, STEP * 4);
+                break;
+            }
+            netStall = 0;
+            applyControls();
+            // Controls entered now take effect NET_DELAY ticks later on both phones
+            int future = netTick + NET_DELAY;
+            NetInput li = netLocal[future % NET_RING];
+            li.copyFrom(netIn);
+            li.tick = future;
+            Snake me = world.player;
+            if (me == null || !me.alive || screen != PLAY) {
+                li.clear();
+                li.tick = future;
+            }
+            net.sendInput(li);
+            netIn.attack = NetInput.NONE;
+            netIn.steer = false;
+            NetInput local = netLocal[netTick % NET_RING];
+            host = netHost ? local : remote;
+            guest = netHost ? remote : local;
+            world.netStep(STEP, host, guest);
+            if (netTick % NET_HASH_EVERY == 0) {
+                int k = (netTick / NET_HASH_EVERY) % netHashTick.length;
+                netHashTick[k] = netTick;
+                netHashVal[k] = world.stateHash();
+                net.sendHash(netTick, netHashVal[k]);
+            }
+            netTick++;
+            acc -= STEP;
+            steps++;
+        }
+        if (steps == 6) acc = 0;
+        world.updateCamera(dt, w, h);
+    }
+
+    /** Continues the match without the friend's phone: their snake becomes a bot. */
+    private void dropNet(String title, String text) {
+        if (net == null) return;
+        Snake f = netFriend();
+        net.close();
+        net = null;
+        acc = 0;
+        if (world != null) {
+            world.makeBot(f);
+            world.banner(title);
+        }
+        if (screen == PLAY && f.alive) showInfo(title, text, 0, 0);
+    }
+
+    private void endNet() {
+        if (net != null) net.close();
+        net = null;
+    }
+
+    private void configureWorld() {
         world.showDamage = profile.damageNumbers;
         world.lowGraphics = profile.lowGraphics;
         world.fx.low = profile.lowGraphics;
@@ -464,6 +626,7 @@ public final class Game {
 
     private void finishGame(boolean win) {
         Snake p = world.player;
+        resNet = net != null || world.humans > 1;
         resWin = win;
         resKills = p.kills;
         resLength = (int) p.mass;
@@ -589,14 +752,23 @@ public final class Game {
     // ------------------------------------------------------------------ update
 
     private void update(float dt) {
+        if (screen == FRIENDS) friends.update(dt);
         if (screen != PLAY && screen != RESULT) {
             demo.update(dt);
             demo.updateCamera(dt, w, h);
             return;
         }
         if (world == null) return;
-        if (screen == PLAY && paused) return;
+        if (net != null) {
+            netUpdate(dt);
+        } else {
+            if (screen == PLAY && paused) return;
+            localUpdate(dt);
+        }
+        checkMatchEnd(dt);
+    }
 
+    private void localUpdate(float dt) {
         acc += dt;
         int steps = 0;
         while (acc >= STEP && steps < 5) {
@@ -607,7 +779,9 @@ public final class Game {
         }
         if (steps == 5) acc = 0;
         world.updateCamera(dt, w, h);
+    }
 
+    private void checkMatchEnd(float dt) {
         if (screen == PLAY) {
             Snake p = world.player;
             Snake mate = world.mateOf(p);
@@ -646,9 +820,10 @@ public final class Game {
         }
         if (movePtr >= 0) {
             float dx = moveX - moveOx, dy = moveY - moveOy;
-            if (dx * dx + dy * dy > (10 * u) * (10 * u)) p.targetAng = (float) Math.atan2(dy, dx);
+            if (dx * dx + dy * dy > (10 * u) * (10 * u)) steer(p, (float) Math.atan2(dy, dx));
         }
-        p.boostInput = boostPtr >= 0;
+        if (net != null) netIn.boost = boostPtr >= 0;
+        else p.boostInput = boostPtr >= 0;
 
         world.aimActive = false;
         float dead = atkR * 0.28f;
@@ -696,8 +871,24 @@ public final class Game {
             ang = p.ang;
             dist = range * 0.8f;
         }
-        if (sup) p.trySuper(world, ang, dist);
-        else p.tryAttack(world, ang, dist);
+        if (net != null) {
+            netIn.attack = sup ? NetInput.SUPER : NetInput.ATTACK;
+            netIn.atkAng = ang;
+            netIn.atkDist = dist;
+        } else if (sup) {
+            p.trySuper(world, ang, dist);
+        } else {
+            p.tryAttack(world, ang, dist);
+        }
+    }
+
+    private void steer(Snake p, float ang) {
+        if (net != null) {
+            netIn.steer = true;
+            netIn.ang = ang;
+        } else {
+            p.targetAng = ang;
+        }
     }
 
     private void releaseControls() {
@@ -756,7 +947,7 @@ public final class Game {
                 moveY = y;
                 if (p != null && p.alive) {
                     float dx = x - moveOx, dy = y - moveOy;
-                    if (dx * dx + dy * dy > 100 * u * u) p.targetAng = (float) Math.atan2(dy, dx);
+                    if (dx * dx + dy * dy > 100 * u * u) steer(p, (float) Math.atan2(dy, dx));
                 }
             }
             return;
@@ -845,8 +1036,15 @@ public final class Game {
         }
         switch (id) {
             case B_PLAY:
-            case B_AGAIN:
                 startGame();
+                break;
+            case B_AGAIN:
+                if (resNet) {
+                    goMenu();
+                    setScreen(FRIENDS);
+                } else {
+                    startGame();
+                }
                 break;
             case B_MODE:
                 profile.mode = profile.mode == 0 ? 2 : (profile.mode == 2 ? 1 : 0);
@@ -866,6 +1064,9 @@ public final class Game {
             case B_CLUB:
                 setScreen(CLUB);
                 break;
+            case B_FRIENDS:
+                setScreen(FRIENDS);
+                break;
             case B_BACK:
                 setScreen(MENU);
                 break;
@@ -879,6 +1080,7 @@ public final class Game {
                 break;
             default:
                 if (SocialScreens.handles(id)) social.onButton(id);
+                else if (FriendsScreen.handles(id)) friends.onButton(id);
                 else meta.onButton(id);
                 break;
         }
@@ -956,6 +1158,8 @@ public final class Game {
                 ui.add(B_SHOP, pl, padT + 200 * u, pl + 300 * u, padT + 330 * u, "SHOP", "Skins & boxes", 0xffff5ab5);
                 String club = Clubs.name(profile);
                 ui.add(B_CLUB, pl, padT + 360 * u, pl + 300 * u, padT + 490 * u, "CLUB", club != null ? club : "Join a club!", 0xff3fb6a8);
+                ui.add(B_FRIENDS, r - bw - 30 * u - 430 * u, b - bh - 150 * u, r - bw - 30 * u, b - bh - 30 * u, "FRIENDS",
+                        "Play together on Wi-Fi", 0xff6a5cff);
                 ui.add(B_SETTINGS, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, null, null, 0xff8a8fb8);
                 break;
             }
@@ -970,12 +1174,15 @@ public final class Game {
             case RESULT: {
                 float cx = w / 2, b = h - padB - 40 * u;
                 ui.add(B_MENU, cx - 470 * u, b - 130 * u, cx - 30 * u, b, "MENU", null, 0xff3fa0ff);
-                ui.add(B_AGAIN, cx + 30 * u, b - 130 * u, cx + 470 * u, b, "PLAY AGAIN", null, 0xffffc928);
+                ui.add(B_AGAIN, cx + 30 * u, b - 130 * u, cx + 470 * u, b, resNet ? "FRIENDS" : "PLAY AGAIN", null, 0xffffc928);
                 break;
             }
             case ONBOARD:
             case CLUB:
                 if (social != null) social.layout();
+                break;
+            case FRIENDS:
+                if (friends != null) friends.layout();
                 break;
             default:
                 meta.layout();
@@ -1080,6 +1287,10 @@ public final class Game {
             case CLUB:
                 demo.render(g);
                 social.render(g);
+                break;
+            case FRIENDS:
+                demo.render(g);
+                friends.render(g);
                 break;
             default:
                 demo.render(g);

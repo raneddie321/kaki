@@ -103,6 +103,21 @@ final class World {
     private final int botTrophies;
 
     World(Platform platform, int mode, Brawler playerType, int[] playerPalette, int playerLevel, int botCount, int trophies) {
+        this(platform, mode, playerType, playerPalette, playerLevel, null, null, 1, 0, botCount, trophies);
+    }
+
+    /** Random source for this match. Seeded identically on both phones in a Wi-Fi game. */
+    final java.util.Random rng;
+    /** Number of human-controlled snakes (snakes[0] and, in a Wi-Fi game, snakes[1]). */
+    final int humans;
+
+    /**
+     * Full constructor. With a guest brawler, snakes[0] is the host and snakes[1] the guest;
+     * {@code localIndex} picks which of them this phone controls.
+     */
+    World(Platform platform, int mode, Brawler playerType, int[] playerPalette, int playerLevel, Brawler guestType,
+            int[] guestPalette, int guestLevel, int localIndex, int botCount, int trophies) {
+        this.rng = MathUtil.RNG;
         this.platform = platform;
         this.botTrophies = trophies;
         this.mode = mode;
@@ -117,7 +132,8 @@ final class World {
         for (int i = 0; i < proj.length; i++) proj[i] = new Projectile();
 
         boolean hasPlayer = playerType != null;
-        snakeCount = botCount + (hasPlayer ? 1 : 0);
+        humans = hasPlayer ? (guestType != null ? 2 : 1) : 0;
+        snakeCount = botCount + humans;
         snakes = new Snake[snakeCount];
         drawOrder = new Snake[snakeCount];
         for (int i = 0; i < snakeCount; i++) {
@@ -150,12 +166,14 @@ final class World {
         float startMass = br ? 40f : 45f;
         for (int i = 0; i < snakeCount; i++) {
             Snake s = snakes[i];
-            if (hasPlayer && i == 0) {
+            if (i < humans) {
+                Brawler ht = i == 0 ? playerType : guestType;
+                int[] pal = i == 0 ? playerPalette : guestPalette;
                 s.isPlayer = true;
                 s.name = "You";
-                s.setColors(playerPalette != null ? playerPalette : new int[]{playerType.color1, playerType.color2});
-                s.level = Math.max(1, Math.min(Brawler.MAX_LEVEL, playerLevel));
-                s.spawn(playerType, spX[i], spY[i], spA[i], startMass);
+                s.setColors(pal != null ? pal : new int[]{ht.color1, ht.color2});
+                s.level = Math.max(1, Math.min(Brawler.MAX_LEVEL, i == 0 ? playerLevel : guestLevel));
+                s.spawn(ht, spX[i], spY[i], spA[i], startMass);
             } else {
                 s.name = names[i % names.length];
                 dressBot(s, i);
@@ -165,7 +183,7 @@ final class World {
                 s.brain = new BotBrain(this, s, trophies);
             }
         }
-        player = hasPlayer ? snakes[0] : null;
+        player = hasPlayer ? snakes[Math.min(localIndex, humans - 1)] : null;
         focus = hasPlayer ? player : snakes[0];
         camX = focus.hx();
         camY = focus.hy();
@@ -488,6 +506,63 @@ final class World {
     private float streakTimer;
 
     void update(float dt) {
+        java.util.Random prev = MathUtil.RNG;
+        MathUtil.RNG = rng;
+        try {
+            simulate(dt);
+        } finally {
+            MathUtil.RNG = prev;
+        }
+    }
+
+    /** One lockstep tick of a Wi-Fi game: applies both players' inputs, then simulates. */
+    void netStep(float dt, NetInput host, NetInput guest) {
+        java.util.Random prev = MathUtil.RNG;
+        MathUtil.RNG = rng;
+        try {
+            applyInput(snakes[0], host);
+            if (humans > 1) applyInput(snakes[1], guest);
+            simulate(dt);
+        } finally {
+            MathUtil.RNG = prev;
+        }
+    }
+
+    private void applyInput(Snake s, NetInput in) {
+        if (in == null || !s.alive || s.brain != null) return;
+        if (in.steer) s.targetAng = in.ang;
+        s.boostInput = in.boost;
+        if (in.attack == NetInput.ATTACK) s.tryAttack(this, in.atkAng, in.atkDist);
+        else if (in.attack == NetInput.SUPER) s.trySuper(this, in.atkAng, in.atkDist);
+    }
+
+    /** Turns a human snake into a bot, e.g. when the friend's phone disconnects. */
+    void makeBot(Snake s) {
+        if (s.brain == null) s.brain = new BotBrain(this, s, botTrophies);
+        s.boostInput = false;
+    }
+
+    /** Cheap fingerprint of the simulation, compared between phones to detect desyncs. */
+    int stateHash() {
+        int h = orbCount * 31 + projCountForHash();
+        for (int i = 0; i < snakeCount; i++) {
+            Snake s = snakes[i];
+            h = h * 31 + (s.alive ? 1 : 0);
+            h = h * 31 + Float.floatToIntBits(s.hx());
+            h = h * 31 + Float.floatToIntBits(s.hy());
+            h = h * 31 + Float.floatToIntBits(s.hp);
+            h = h * 31 + Float.floatToIntBits(s.mass);
+        }
+        return h;
+    }
+
+    private int projCountForHash() {
+        int c = 0;
+        for (Projectile p : proj) if (p.active) c++;
+        return c;
+    }
+
+    private void simulate(float dt) {
         if (hitStop > 0) {
             hitStop -= dt;
             return;
@@ -1132,7 +1207,7 @@ final class World {
             float cx = ax + bx * t, cy = ay + by * t;
             float rr = s.radius + p.radius;
             if (MathUtil.dist2(cx, cy, sxj, syj) < rr * rr) {
-                float ang = (float) Math.atan2(p.vy, p.vx);
+                float ang = (float) StrictMath.atan2(p.vy, p.vx);
                 int color = p.kind == Projectile.FLAME ? 0xffff8a2a : (p.kind == Projectile.PELLET || p.kind == Projectile.BALL ? 0xffffe066 : 0xff9af0ff);
                 fx.sparks(cx, cy, 7, color, 300, 0.25f);
                 fx.flash(cx, cy, 48, projColor(p.kind), 0.14f);
@@ -1593,7 +1668,7 @@ final class World {
             camX += (f.hx() - camX) * k;
             camY += (f.hy() - camY) * k;
             float base = screenH / 900f * (mode == MODE_DEMO ? 0.85f : 1f);
-            float target = base * zoomMult * (float) Math.pow(19f / f.radius, 0.5f);
+            float target = base * zoomMult * (float) StrictMath.pow(19f / f.radius, 0.5f);
             if (f.boosting) target *= 0.96f;
             zoom += (target - zoom) * Math.min(1f, dt * 2f);
         }
@@ -2130,7 +2205,7 @@ final class World {
                     g.line(p.x, p.y, p.x - p.vx * tl * 0.7f, p.y - p.vy * tl * 0.7f, p.radius * 0.6f);
                     if (fancy) {
                         // Crackling arcs
-                        float a = (float) Math.atan2(p.vy, p.vx) + MathUtil.PI / 2;
+                        float a = (float) StrictMath.atan2(p.vy, p.vx) + MathUtil.PI / 2;
                         float j = MathUtil.rand(-1f, 1f) * p.radius * 1.4f;
                         g.color(0xccffffff);
                         g.line(p.x - p.vx * tl * 0.3f, p.y - p.vy * tl * 0.3f,
@@ -2167,7 +2242,7 @@ final class World {
                     break;
                 }
                 case Projectile.SHARD: {
-                    float a = (float) Math.atan2(p.vy, p.vx);
+                    float a = (float) StrictMath.atan2(p.vy, p.vx);
                     float ca = MathUtil.cos(a), sa = MathUtil.sin(a);
                     float len = p.radius * 2.6f;
                     poly4[0] = p.x + ca * len;

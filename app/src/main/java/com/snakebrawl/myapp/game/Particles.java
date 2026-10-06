@@ -46,17 +46,17 @@ final class Particles {
     void burst(float px, float py, int n, int c, float speed, float sz, float l) {
         if (low) n = (n + 1) / 2;
         for (int k = 0; k < n; k++) {
-            float a = MathUtil.rand(0, MathUtil.TAU);
-            float s = speed * MathUtil.rand(0.3f, 1f);
-            add(DOT, px, py, MathUtil.cos(a) * s, MathUtil.sin(a) * s, sz * MathUtil.rand(0.6f, 1.2f), c, l * MathUtil.rand(0.6f, 1.1f));
+            float a = MathUtil.frand(0, MathUtil.TAU);
+            float s = speed * MathUtil.frand(0.3f, 1f);
+            add(DOT, px, py, MathUtil.cos(a) * s, MathUtil.sin(a) * s, sz * MathUtil.frand(0.6f, 1.2f), c, l * MathUtil.frand(0.6f, 1.1f));
         }
     }
 
     void sparks(float px, float py, int n, int c, float speed, float l) {
         for (int k = 0; k < n; k++) {
-            float a = MathUtil.rand(0, MathUtil.TAU);
-            float s = speed * MathUtil.rand(0.4f, 1f);
-            add(SPARK, px, py, MathUtil.cos(a) * s, MathUtil.sin(a) * s, MathUtil.rand(2.5f, 4.5f), c, l * MathUtil.rand(0.5f, 1f));
+            float a = MathUtil.frand(0, MathUtil.TAU);
+            float s = speed * MathUtil.frand(0.4f, 1f);
+            add(SPARK, px, py, MathUtil.cos(a) * s, MathUtil.sin(a) * s, MathUtil.frand(2.5f, 4.5f), c, l * MathUtil.frand(0.5f, 1f));
         }
     }
 
@@ -67,10 +67,10 @@ final class Particles {
     void smoke(float px, float py, int n, int c, float sz, float l) {
         if (low) n = (n + 1) / 2;
         for (int k = 0; k < n; k++) {
-            float a = MathUtil.rand(0, MathUtil.TAU);
-            float s = MathUtil.rand(10, 60);
+            float a = MathUtil.frand(0, MathUtil.TAU);
+            float s = MathUtil.frand(10, 60);
             add(SMOKE, px + MathUtil.cos(a) * sz * 0.3f, py + MathUtil.sin(a) * sz * 0.3f,
-                    MathUtil.cos(a) * s, MathUtil.sin(a) * s, sz * MathUtil.rand(0.6f, 1.1f), c, l * MathUtil.rand(0.7f, 1.1f));
+                    MathUtil.cos(a) * s, MathUtil.sin(a) * s, sz * MathUtil.frand(0.6f, 1.1f), c, l * MathUtil.frand(0.7f, 1.1f));
         }
     }
 
@@ -94,7 +94,7 @@ final class Particles {
             textCount--;
         }
         int i = textCount++;
-        tx[i] = px + MathUtil.rand(-12, 12);
+        tx[i] = px + MathUtil.frand(-12, 12);
         ty[i] = py;
         tlife[i] = 0.9f;
         tsize[i] = sz;

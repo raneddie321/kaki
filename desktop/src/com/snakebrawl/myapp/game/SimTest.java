@@ -73,6 +73,9 @@ public final class SimTest {
         public void requestText(String title, String initial, int maxLength, boolean numeric, TextCallback callback) {
             callback.onText(nextText);
         }
+
+        @Override
+        public void setNetworkDiscovery(boolean on) {}
     }
 
     public static void main(String[] args) throws Exception {
@@ -87,6 +90,10 @@ public final class SimTest {
                 break;
             case "stress":
                 stress(Integer.parseInt(args[1]), Integer.parseInt(args[2]), args.length > 3 ? Integer.parseInt(args[3]) : 1);
+                break;
+            case "net":
+                net(args.length > 1 ? Integer.parseInt(args[1]) : 0, args.length > 2 ? Float.parseFloat(args[2]) : 90f,
+                        args.length > 3 ? args[3] : null);
                 break;
             case "shots":
                 shots(args.length > 1 ? args[1] : "shots", args.length > 2 ? Integer.parseInt(args[2]) : 2400,
@@ -344,6 +351,112 @@ public final class SimTest {
             System.out.printf("stress game %d: screen=%d steps=%d%n", gi, game.screenId(), steps);
         }
         System.out.printf("%dx%d: %d frames, avg java2d frame %.2f ms%n", width, height, frames, renderNanos / 1e6 / Math.max(1, frames));
+    }
+
+    // ------------------------------------------------------------------ Wi-Fi play
+
+    /** Two games in one process connected over localhost: checks the lobby and lockstep sync. */
+    static void net(int lobbyMode, float seconds, String shotDir) throws Exception {
+        DesktopPlatform hp = new DesktopPlatform(), gp = new DesktopPlatform();
+        hp.strings.put("nickname", "HostRan");
+        gp.strings.put("nickname", "GuestEddie");
+        hp.prefs.put("brawler", 1);
+        gp.prefs.put("brawler", 3);
+        gp.prefs.put("skin", 18);
+        gp.prefs.put("ownedSkins", 1 | 1 << 18);
+        Game host = new Game(hp), guest = new Game(gp);
+        host.resize(W, H);
+        guest.resize(W, H);
+        Font font = shotDir != null ? Font.createFont(Font.TRUETYPE_FONT, new File("app/src/main/assets/fonts/LilitaOne-Regular.ttf")) : null;
+        if (shotDir != null) new File(shotDir).mkdirs();
+
+        tapBtn(host, Game.B_FRIENDS);
+        if (shotDir != null) shot(host, font, (int) W, (int) H, shotDir + "/f0_friends.png");
+        tapBtn(host, 600); // host
+        if (lobbyMode == 1) tapBtn(host, 602); // versus
+        tapBtn(guest, Game.B_FRIENDS);
+        tapBtn(guest, 601); // join
+        gp.nextText = "127.0.0.1";
+        Thread.sleep(300);
+        if (shotDir != null) shot(guest, font, (int) W, (int) H, shotDir + "/f1_searching.png");
+        tapBtn(guest, 605); // type address
+        long until = System.currentTimeMillis() + 8000;
+        while (System.currentTimeMillis() < until) {
+            host.tick(DT);
+            guest.tick(DT);
+            Ui.Btn st = host.ui.find(604);
+            if (st != null && st.enabled && guest.ui.find(603) != null && guest.screenId() == Game.FRIENDS
+                    && "LEAVE".equals(guest.ui.find(603).label)) break;
+            Thread.sleep(5);
+        }
+        if (shotDir != null) {
+            run(host, 0.3f);
+            shot(host, font, (int) W, (int) H, shotDir + "/f2_host_lobby.png");
+            shot(guest, font, (int) W, (int) H, shotDir + "/f3_guest_lobby.png");
+        }
+        tapBtn(host, 604); // start
+        until = System.currentTimeMillis() + 5000;
+        while (guest.screenId() != Game.PLAY && System.currentTimeMillis() < until) {
+            guest.tick(DT);
+            Thread.sleep(5);
+        }
+        if (host.screenId() != Game.PLAY || guest.screenId() != Game.PLAY) {
+            throw new IllegalStateException("match did not start: host=" + host.screenId() + " guest=" + guest.screenId());
+        }
+        Pilot hpil = new Pilot(host), gpil = new Pilot(guest);
+        int checked = 0;
+        float t = 0;
+        boolean shotTaken = false;
+        long stallNs = 0;
+        while (t < seconds && (host.screenId() == Game.PLAY || guest.screenId() == Game.PLAY)) {
+            if (REALTIME) Thread.sleep(16);
+            if (host.screenId() == Game.PLAY) hpil.step(DT);
+            if (guest.screenId() == Game.PLAY) gpil.step(DT);
+            host.tick(DT);
+            guest.tick(DT);
+            t += DT;
+            if (host.net == null || guest.net == null) throw new IllegalStateException("connection dropped at " + t + "s");
+            // Wait until both phones reach the same tick, then compare their worlds directly
+            long w0 = System.nanoTime();
+            while (host.netTick != guest.netTick && System.nanoTime() - w0 < 2_000_000_000L) {
+                if (host.netTick < guest.netTick) host.tick(DT);
+                else guest.tick(DT);
+                Thread.sleep(0, 200000);
+            }
+            stallNs += System.nanoTime() - w0;
+            if (host.netTick == guest.netTick) {
+                int a = host.currentWorld().stateHash(), b = guest.currentWorld().stateHash();
+                if (a != b) throw new IllegalStateException("DESYNC at tick " + host.netTick);
+                checked++;
+            }
+            if (shotDir != null && !shotTaken && t > 12) {
+                shot(host, font, (int) W, (int) H, shotDir + "/f4_host_play.png");
+                shot(guest, font, (int) W, (int) H, shotDir + "/f5_guest_play.png");
+                shotTaken = true;
+            }
+        }
+        World hw = host.currentWorld();
+        System.out.println("net mode=" + lobbyMode + " ticks=" + host.netTick + " checked=" + checked + " in sync, host alive="
+                + hw.snakes[0].alive + " guest alive=" + hw.snakes[1].alive + " aliveCount=" + hw.aliveCount
+                + " host screen=" + host.screenId() + " guest screen=" + guest.screenId()
+                + " wait ms=" + stallNs / 1_000_000);
+        // Guest leaves: the host carries on with a bot
+        guest.onBack();
+        while (guest.onBack()) guest.tick(DT);
+        tapBtnIfPresent(guest, Game.B_QUIT);
+        tapBtnIfPresent(guest, Game.B_MENU);
+        long u2 = System.currentTimeMillis() + 4000;
+        while (host.net != null && System.currentTimeMillis() < u2) {
+            host.tick(DT);
+            Thread.sleep(5);
+        }
+        System.out.println("after guest left: host net=" + (host.net == null ? "closed (bot took over)" : "still open"));
+    }
+
+    static final boolean REALTIME = System.getenv("REALTIME") != null;
+
+    static void tapBtnIfPresent(Game g, int id) {
+        if (g.ui.find(id) != null) tapBtn(g, id);
     }
 
     // ------------------------------------------------------------------ screenshots
