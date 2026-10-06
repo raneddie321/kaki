@@ -55,6 +55,8 @@ final class Snake {
     int dmgColor;
     int kills;
     int rank;
+    /** Team index in Duo Showdown, -1 when everyone is on their own. */
+    int team = -1;
     Snake lastAttacker;
     float lastAttackerTime;
     BotBrain brain;

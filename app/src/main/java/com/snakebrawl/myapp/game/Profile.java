@@ -17,6 +17,16 @@ final class Profile {
     final int[] levels = new int[Brawler.ALL.length];
     int nextGiftMinute;
 
+    // Player identity (asked on first launch)
+    String nickname;
+    int age;
+    boolean onboarded;
+
+    // Club: -1 none, 0..N-1 one of the built-in clubs, Clubs.CUSTOM for a club the player created
+    int club = -1;
+    String customClubName;
+    int customClubBadge;
+
     // Settings
     boolean sound, vibration, damageNumbers, lowGraphics, leftHanded, autoAim;
     int stickSize;  // 0 small, 1 medium, 2 large
@@ -36,7 +46,7 @@ final class Profile {
         bestLen = p.loadInt("bestLen", 0);
         totalKills = p.loadInt("totalKills", 0);
         hints = p.loadInt("hints", 0);
-        mode = clamp(p.loadInt("mode", 0), 0, 1);
+        mode = clamp(p.loadInt("mode", 0), 0, 2);
         skin = clamp(p.loadInt("skin", 0), 0, Skin.ALL.length - 1);
         ownedSkins = p.loadInt("ownedSkins", 1) | 1;
         // The four original brawlers are always free
@@ -46,6 +56,12 @@ final class Profile {
         if (!isUnlocked(selected)) selected = 0;
         if (!ownsSkin(skin)) skin = 0;
         nextGiftMinute = p.loadInt("nextGift", 0);
+        nickname = p.loadString("nickname", "");
+        age = p.loadInt("age", 0);
+        onboarded = p.loadInt("onboarded", 0) == 1 && nickname.length() > 0 && age > 0;
+        club = p.loadInt("club", -1);
+        customClubName = p.loadString("clubName", "");
+        customClubBadge = p.loadInt("clubBadge", 0);
 
         sound = p.loadInt("sound", 1) == 1;
         vibration = p.loadInt("vibration", 1) == 1;
@@ -73,6 +89,12 @@ final class Profile {
         for (int i = 0; i < levels.length; i++) p.saveInt("lvl" + i, levels[i]);
         p.saveInt("brawler", selected);
         p.saveInt("nextGift", nextGiftMinute);
+        p.saveString("nickname", nickname);
+        p.saveInt("age", age);
+        p.saveInt("onboarded", onboarded ? 1 : 0);
+        p.saveInt("club", club);
+        p.saveString("clubName", customClubName);
+        p.saveInt("clubBadge", customClubBadge);
         p.saveInt("sound", sound ? 1 : 0);
         p.saveInt("vibration", vibration ? 1 : 0);
         p.saveInt("dmgNumbers", damageNumbers ? 1 : 0);
@@ -115,6 +137,15 @@ final class Profile {
     int upgradeCost(int b) {
         int lvl = levels[b];
         return lvl >= Brawler.MAX_LEVEL ? -1 : Brawler.UPGRADE_COST[lvl - 1];
+    }
+
+    /** Players under 13 can't make real-money purchases. */
+    boolean canPurchase() {
+        return age >= 13;
+    }
+
+    String displayName() {
+        return nickname == null || nickname.length() == 0 ? "You" : nickname;
     }
 
     boolean giftReady() {

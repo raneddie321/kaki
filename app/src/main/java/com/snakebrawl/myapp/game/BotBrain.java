@@ -63,7 +63,7 @@ final class BotBrain {
         float targetDist = 0;
         for (int i = 0; i < w.snakeCount; i++) {
             Snake o = w.snakes[i];
-            if (o == me || !o.alive || !w.visibleTo(o, me)) continue;
+            if (o == me || !o.alive || World.sameTeam(o, me) || !w.visibleTo(o, me)) continue;
             float d = MathUtil.dist(hx, hy, o.hx(), o.hy());
             if (d > 950) continue;
             float score = d + (o.hp / o.maxHp) * 250f - (o == lastTarget ? 120 : 0) - (o == me.lastAttacker ? 150 : 0) + (o.isPlayer ? 340 : 0);
@@ -92,11 +92,21 @@ final class BotBrain {
             goalAng = combatMove(target, targetDist);
         } else {
             goalAng = foodGoal(hx, hy);
+            // Duo partners stick together and rush in when their partner is under attack
+            Snake mate = w.mateOf(me);
+            if (mate != null && mate.alive) {
+                float md = MathUtil.dist(hx, hy, mate.hx(), mate.hy());
+                boolean help = mate.sinceDamaged < 3f && md < 1300f;
+                if (md > 520f || help) {
+                    goalAng = MathUtil.angleTo(hx, hy, mate.hx(), mate.hy());
+                    wantBoost = (md > 900f || help) && me.mass > 55f;
+                }
+            }
         }
 
         // Shooting happens independently of where we steer. Early on bots mostly farm unless provoked.
         boolean provoked = me.lastAttacker == target && me.sinceDamaged < 4f;
-        boolean early = w.mode == World.MODE_SHOWDOWN && w.matchTime < 18f;
+        boolean early = (w.mode == World.MODE_SHOWDOWN || w.mode == World.MODE_DUO) && w.matchTime < 18f;
         if (target != null && reaction <= 0 && (!early || provoked || targetDist < me.type.range * 0.55f)) shootAt(target, targetDist);
         else if (target == null && me.ammo >= 2.5f) shootBox();
 

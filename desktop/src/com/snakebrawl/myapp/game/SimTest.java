@@ -47,6 +47,32 @@ public final class SimTest {
         public boolean launchPurchase(String productId) {
             return false;
         }
+
+        final Map<String, String> strings = new HashMap<>();
+        String nextText = "Tester";
+
+        DesktopPlatform() {
+            // Tests start past the first-launch setup unless they clear these.
+            prefs.put("onboarded", 1);
+            prefs.put("age", 20);
+            strings.put("nickname", "Tester");
+        }
+
+        @Override
+        public String loadString(String key, String def) {
+            String v = strings.get(key);
+            return v == null ? def : v;
+        }
+
+        @Override
+        public void saveString(String key, String value) {
+            strings.put(key, value);
+        }
+
+        @Override
+        public void requestText(String title, String initial, int maxLength, boolean numeric, TextCallback callback) {
+            callback.onText(nextText);
+        }
     }
 
     public static void main(String[] args) throws Exception {
@@ -253,7 +279,8 @@ public final class SimTest {
         long frames = 0, renderNanos = 0;
         for (int gi = 0; gi < games; gi++) {
             pf.prefs.put("brawler", gi % 4);
-            pf.prefs.put("mode", gi % 2);
+            pf.prefs.put("mode", gi % 3);
+            pf.prefs.put("club", gi % 2 == 0 ? 1 : -1);
             Game game = new Game(pf);
             game.resize(width, height);
             game.setInsets(gi % 3 == 0 ? 80 : 0, 0, 0, 0);
@@ -338,11 +365,85 @@ public final class SimTest {
         pf.prefs.put("skin", 18);
         pf.prefs.put("lvl0", 4);
         pf.prefs.put("brawler", 2);
+        // First launch: nickname and age
+        DesktopPlatform fresh = new DesktopPlatform();
+        fresh.prefs.remove("onboarded");
+        fresh.prefs.remove("age");
+        fresh.strings.clear();
+        fresh.prefs.put("brawler", 2);
+        Game ob = new Game(fresh);
+        ob.resize(width, height);
+        if (ob.screenId() != Game.ONBOARD) throw new IllegalStateException("no onboarding");
+        run(ob, 0.6f);
+        shot(ob, font, width, height, outDir + "/0a_onboard_name.png");
+        fresh.nextText = "Kaki!!King";
+        tapBtn(ob, 500);
+        run(ob, 0.3f);
+        shot(ob, font, width, height, outDir + "/0b_onboard_name_typed.png");
+        tapBtn(ob, 502);
+        for (int i = 0; i < 3; i++) tapBtn(ob, 504);
+        shot(ob, font, width, height, outDir + "/0c_onboard_age.png");
+        tapBtn(ob, 506);
+        run(ob, 0.6f);
+        shot(ob, font, width, height, outDir + "/0d_welcome.png");
+        if (!"KakiKing".equals(fresh.strings.get("nickname")) || fresh.loadInt("age", 0) != 12
+                || fresh.loadInt("onboarded", 0) != 1) {
+            throw new IllegalStateException("onboarding not saved: " + fresh.strings + " " + fresh.prefs);
+        }
+        Game again = new Game(fresh);
+        if (again.screenId() != Game.MENU) throw new IllegalStateException("onboarding shown twice");
+        // Under 13: purchases are blocked
+        again.resize(width, height);
+        tapBtn(again, Game.B_SHOP);
+        tapBtn(again, 303);
+        tapBtn(again, 351);
+        if (again.sheetPack >= 0) throw new IllegalStateException("under-13 checkout opened");
+        shot(again, font, width, height, outDir + "/0e_under13_blocked.png");
+
         Game game = new Game(pf);
         game.resize(width, height);
 
         run(game, 1.0f);
         shot(game, font, width, height, outDir + "/1_menu.png");
+
+        // Clubs
+        tapBtn(game, Game.B_CLUB);
+        run(game, 0.3f);
+        shot(game, font, width, height, outDir + "/1b_club_list.png");
+        tapBtn(game, 525); // needs 200 trophies
+        shot(game, font, width, height, outDir + "/1c_club_locked.png");
+        tapBtn(game, Game.B_OK);
+        tapBtn(game, 520);
+        tapBtn(game, Game.B_YES);
+        tapBtn(game, Game.B_OK);
+        if (pf.loadInt("club", -1) != 0) throw new IllegalStateException("club not joined");
+        run(game, 0.3f);
+        shot(game, font, width, height, outDir + "/1d_club_mine.png");
+        tapBtn(game, 542);
+        tapBtn(game, Game.B_YES);
+        pf.nextText = "Noodle Ninjas";
+        tapBtn(game, 540);
+        tapBtn(game, Game.B_OK);
+        tapBtn(game, 543);
+        run(game, 0.3f);
+        shot(game, font, width, height, outDir + "/1e_club_custom.png");
+        tapBtn(game, Game.B_BACK);
+        run(game, 0.5f);
+        shot(game, font, width, height, outDir + "/1f_menu_club.png");
+        {
+            Game duo = new Game(pf);
+            duo.resize(width, height);
+            tapBtn(duo, Game.B_CLUB);
+            tapBtn(duo, 541);
+            if (duo.screenId() != Game.PLAY || duo.currentWorld().mode != World.MODE_DUO) throw new IllegalStateException("duo did not start");
+            Pilot dp = new Pilot(duo);
+            for (float t = 0; t < 16 && duo.screenId() == Game.PLAY; t += DT) {
+                dp.step(DT);
+                duo.tick(DT);
+            }
+            shot(duo, font, width, height, outDir + "/1g_duo.png");
+            pf.prefs.put("mode", 0);
+        }
 
         tapBtn(game, Game.B_BRAWLERS);
         tapBtn(game, 100 + 6); // view TOXIN (locked)

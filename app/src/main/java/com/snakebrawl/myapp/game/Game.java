@@ -2,16 +2,16 @@ package com.snakebrawl.myapp.game;
 
 /** Top-level game: screens, HUD, touch controls and progression. Host-agnostic. */
 public final class Game {
-    static final int MENU = 0, BRAWLERS = 1, PLAY = 2, RESULT = 3, SHOP = 4, SETTINGS = 5;
+    static final int MENU = 0, BRAWLERS = 1, PLAY = 2, RESULT = 3, SHOP = 4, SETTINGS = 5, ONBOARD = 6, CLUB = 7;
     private static final float STEP = 1f / 60f;
 
     static final int B_PLAY = 1, B_MODE = 2, B_BRAWLERS = 3, B_SHOP = 4, B_SETTINGS = 5, B_BACK = 6,
-            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_YES = 90, B_NO = 91, B_OK = 92,
+            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_CLUB = 11, B_YES = 90, B_NO = 91, B_OK = 92,
             B_SHEET_BUY = 93, B_SHEET_CANCEL = 94;
 
     // Popup actions confirmed with YES
     static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
-            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7;
+            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9;
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
     private static final int[] RANK_COINS = {50, 40, 32, 26, 20, 15, 11, 8, 5, 3};
@@ -21,6 +21,7 @@ public final class Game {
     final Profile profile;
     final Ui ui = new Ui();
     private final MetaScreens meta;
+    private SocialScreens social;
     float w = 1920, h = 1080, u = 1;
     private float insL, insT, insR, insB;
     float padL, padT, padR, padB;
@@ -90,9 +91,26 @@ public final class Game {
             public boolean launchPurchase(String productId) {
                 return host.launchPurchase(productId);
             }
+
+            @Override
+            public String loadString(String key, String def) {
+                return host.loadString(key, def);
+            }
+
+            @Override
+            public void saveString(String key, String value) {
+                host.saveString(key, value);
+            }
+
+            @Override
+            public void requestText(String title, String initial, int maxLength, boolean numeric, TextCallback callback) {
+                host.requestText(title, initial, maxLength, numeric, callback);
+            }
         };
         meta = new MetaScreens(this);
+        social = new SocialScreens(this);
         newDemo();
+        if (!profile.onboarded) screen = ONBOARD;
         layout();
     }
 
@@ -153,6 +171,11 @@ public final class Game {
 
     /** Starts buying a coin pack: real Play Billing if the host supports it, else the test checkout. */
     void startPurchase(int pack) {
+        if (!profile.canPurchase()) {
+            showInfo("ASK A GROWN-UP", "Players under 13 can't buy coins. You can still earn lots of coins by playing, "
+                    + "getting knockouts and claiming free gifts!", 1, 0);
+            return;
+        }
         if (host.launchPurchase(CoinStore.PRODUCT_IDS[pack])) return;
         sheetPack = pack;
         sheetPhase = 0;
@@ -365,7 +388,10 @@ public final class Game {
             case BRAWLERS:
             case SHOP:
             case SETTINGS:
+            case CLUB:
                 setScreen(MENU);
+                return true;
+            case ONBOARD:
                 return true;
             case RESULT:
                 goMenu();
@@ -394,10 +420,27 @@ public final class Game {
         setScreen(MENU);
     }
 
-    private void startGame() {
+    static int worldMode(int profileMode) {
+        return profileMode == 0 ? World.MODE_SHOWDOWN : (profileMode == 2 ? World.MODE_DUO : World.MODE_ENDLESS);
+    }
+
+    /** Your Duo partner: a member of your club, or a friendly bot if you have no club. */
+    String partnerName() {
+        return profile.club >= 0 ? Clubs.memberName(profile, 0) : "Buddy";
+    }
+
+    void startGame() {
         Brawler b = Brawler.ALL[profile.selected];
-        int wm = profile.mode == 0 ? World.MODE_SHOWDOWN : World.MODE_ENDLESS;
-        world = new World(gated, wm, b, profile.palette(), profile.levels[b.id], wm == World.MODE_SHOWDOWN ? 9 : 11, profile.trophies);
+        int wm = worldMode(profile.mode);
+        world = new World(gated, wm, b, profile.palette(), profile.levels[b.id], wm == World.MODE_ENDLESS ? 11 : 9, profile.trophies);
+        world.player.name = profile.displayName();
+        if (wm == World.MODE_DUO) {
+            Snake mate = world.mateOf(world.player);
+            if (mate != null) {
+                mate.name = partnerName();
+                if (mate.level < profile.levels[b.id]) mate.level = profile.levels[b.id];
+            }
+        }
         world.showDamage = profile.damageNumbers;
         world.lowGraphics = profile.lowGraphics;
         world.fx.low = profile.lowGraphics;
@@ -421,6 +464,14 @@ public final class Game {
             resRank = win ? 1 : Math.max(1, p.rank);
             resDelta = TROPHY_TABLE[Profile.clamp(resRank - 1, 0, TROPHY_TABLE.length - 1)];
             resCoins = RANK_COINS[Profile.clamp(resRank - 1, 0, RANK_COINS.length - 1)] + p.kills * 8 + Math.min(30, resLength / 15);
+            if (win) profile.wins++;
+        } else if (world.mode == World.MODE_DUO) {
+            resRank = win ? 1 : Math.max(1, p.rank);
+            int[] duoTrophies = {9, 6, 3, 0, -2};
+            int[] duoCoins = {50, 36, 24, 14, 6};
+            int ri = Profile.clamp(resRank - 1, 0, 4);
+            resDelta = duoTrophies[ri];
+            resCoins = duoCoins[ri] + p.kills * 8 + Math.min(30, resLength / 15);
             if (win) profile.wins++;
         } else {
             resRank = 0;
@@ -475,7 +526,10 @@ public final class Game {
     private void popupButton(int id) {
         int action = popAction, arg = popArg;
         closePopup();
-        if (id == B_YES) meta.perform(action, arg);
+        if (id == B_YES) {
+            if (action == ACT_JOIN_CLUB || action == ACT_LEAVE_CLUB) social.perform(action, arg);
+            else meta.perform(action, arg);
+        }
     }
 
     private void renderPopup(Gfx g) {
@@ -547,10 +601,19 @@ public final class Game {
 
         if (screen == PLAY) {
             Snake p = world.player;
+            Snake mate = world.mateOf(p);
+            boolean teamAlive = p.alive || (mate != null && mate.alive);
+            if (!p.alive && movePtr >= 0) releaseControls();
             if (endTimer < 0) {
-                if (!p.alive) {
+                if (!teamAlive) {
                     endTimer = 1.8f;
                     endIsWin = false;
+                    releaseControls();
+                } else if (world.mode == World.MODE_DUO && world.aliveTeams() <= 1) {
+                    endTimer = 1.6f;
+                    endIsWin = true;
+                    p.rank = 1;
+                    world.banner("VICTORY!");
                     releaseControls();
                 } else if (world.mode == World.MODE_SHOWDOWN && world.aliveCount <= 1) {
                     endTimer = 1.6f;
@@ -776,7 +839,7 @@ public final class Game {
                 startGame();
                 break;
             case B_MODE:
-                profile.mode = 1 - profile.mode;
+                profile.mode = profile.mode == 0 ? 2 : (profile.mode == 2 ? 1 : 0);
                 profile.save();
                 layout();
                 break;
@@ -790,6 +853,9 @@ public final class Game {
             case B_SETTINGS:
                 setScreen(SETTINGS);
                 break;
+            case B_CLUB:
+                setScreen(CLUB);
+                break;
             case B_BACK:
                 setScreen(MENU);
                 break;
@@ -802,7 +868,8 @@ public final class Game {
                 layout();
                 break;
             default:
-                meta.onButton(id);
+                if (SocialScreens.handles(id)) social.onButton(id);
+                else meta.onButton(id);
                 break;
         }
     }
@@ -869,12 +936,16 @@ public final class Game {
                 float bw = 400 * u, bh = 150 * u;
                 float r = w - padR - 30 * u, b = h - padB - 30 * u;
                 ui.add(B_PLAY, r - bw, b - bh, r, b, "PLAY", null, 0xffffc928);
+                String[] modeNames = {"SHOWDOWN", "ENDLESS", "DUO SHOWDOWN"};
+                String[] modeSubs = {"Last snake standing", "Grow forever", "You + " + partnerName() + " vs 4 teams"};
+                int[] modeCols = {0xff3fa0ff, 0xffb35cff, 0xffff7a2e};
                 ui.add(B_MODE, r - bw - 30 * u - 430 * u, b - bh, r - bw - 30 * u, b,
-                        profile.mode == 0 ? "SHOWDOWN" : "ENDLESS", profile.mode == 0 ? "Last snake standing" : "Grow forever",
-                        profile.mode == 0 ? 0xff3fa0ff : 0xffb35cff);
+                        modeNames[profile.mode], modeSubs[profile.mode], modeCols[profile.mode]);
                 float pl = padL + 30 * u;
                 ui.add(B_BRAWLERS, pl, b - 110 * u, pl + 470 * u, b, "BRAWLERS", null, 0xff4ad04a);
                 ui.add(B_SHOP, pl, padT + 200 * u, pl + 300 * u, padT + 330 * u, "SHOP", "Skins & boxes", 0xffff5ab5);
+                String club = Clubs.name(profile);
+                ui.add(B_CLUB, pl, padT + 360 * u, pl + 300 * u, padT + 490 * u, "CLUB", club != null ? club : "Join a club!", 0xff3fb6a8);
                 ui.add(B_SETTINGS, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, null, null, 0xff8a8fb8);
                 break;
             }
@@ -892,6 +963,10 @@ public final class Game {
                 ui.add(B_AGAIN, cx + 30 * u, b - 130 * u, cx + 470 * u, b, "PLAY AGAIN", null, 0xffffc928);
                 break;
             }
+            case ONBOARD:
+            case CLUB:
+                if (social != null) social.layout();
+                break;
             default:
                 meta.layout();
                 break;
@@ -914,6 +989,11 @@ public final class Game {
             case MENU:
                 demo.render(g);
                 renderMenu(g);
+                break;
+            case ONBOARD:
+            case CLUB:
+                demo.render(g);
+                social.render(g);
                 break;
             default:
                 demo.render(g);
@@ -998,8 +1078,17 @@ public final class Game {
         g.color(0xffffe066);
         g.text(Integer.toString(profile.coins), cl + 92 * u, tt + 64 * u, 54 * u, Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
         g.color(0xffd8dcff);
-        g.text("Wins " + profile.wins + "   Best length " + profile.bestLen, tl + 10 * u, tt + 140 * u, 32 * u,
-                Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
+        // Player card: club badge, nickname and wins
+        float nx = tl + 10 * u;
+        if (profile.club >= 0) {
+            Clubs.drawBadge(g, Clubs.badge(profile), tl + 30 * u, tt + 128 * u, 40 * u);
+            nx = tl + 62 * u;
+        }
+        g.color(0xffffffff);
+        g.text(profile.displayName(), nx, tt + 142 * u, 38 * u, Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
+        g.color(0xffd8dcff);
+        g.text("Wins " + profile.wins, nx + g.measureText(profile.displayName(), 38 * u) + 24 * u, tt + 142 * u, 30 * u,
+                Gfx.ALIGN_LEFT, 4 * u, Ui.INK);
 
         // Selected brawler showcase
         Brawler b = Brawler.ALL[profile.selected];
@@ -1117,13 +1206,15 @@ public final class Game {
 
         // Top centre: snakes left / poison timer
         float cx = w / 2;
-        if (wd.mode == World.MODE_SHOWDOWN) {
+        if (wd.mode == World.MODE_SHOWDOWN || wd.mode == World.MODE_DUO) {
+            boolean duo = wd.mode == World.MODE_DUO;
             g.color(0xcc0e1024);
             g.fillRoundRect(cx - 170 * u, padT, cx + 170 * u, padT + 92 * u, 28 * u);
             g.color(0xffd8dcff);
-            g.text("SNAKES LEFT", cx, padT + 32 * u, 28 * u, Gfx.ALIGN_CENTER, 4 * u, 0xff14142a);
+            g.text(duo ? "TEAMS LEFT" : "SNAKES LEFT", cx, padT + 32 * u, 28 * u, Gfx.ALIGN_CENTER, 4 * u, 0xff14142a);
             g.color(0xffffffff);
-            g.text(Integer.toString(wd.aliveCount), cx, padT + 80 * u, 50 * u, Gfx.ALIGN_CENTER, 6 * u, 0xff14142a);
+            g.text(Integer.toString(duo ? wd.aliveTeams() : wd.aliveCount), cx, padT + 80 * u, 50 * u, Gfx.ALIGN_CENTER, 6 * u, 0xff14142a);
+            if (duo) drawPartnerHud(g, wd, p);
             if (wd.matchTime < World.ZONE_START) {
                 int secs = (int) Math.ceil(World.ZONE_START - wd.matchTime);
                 g.color(0xff8cff6a);
@@ -1147,7 +1238,7 @@ public final class Game {
         }
 
         drawMinimap(g);
-        if (wd.mode != World.MODE_SHOWDOWN) drawLeaderboard(g);
+        if (wd.mode == World.MODE_ENDLESS) drawLeaderboard(g);
 
         // Banner
         if (wd.bannerText != null && wd.bannerTime > 0) {
@@ -1175,6 +1266,62 @@ public final class Game {
 
         if (!p.alive || endTimer >= 0) return;
         drawControls(g, p);
+    }
+
+    /** Partner health card, respawn countdown and an edge arrow pointing to your partner. */
+    private void drawPartnerHud(Gfx g, World wd, Snake p) {
+        Snake mate = wd.mateOf(p);
+        if (mate == null) return;
+        // Card under the minimap
+        float cl = mapX, ct = mapY + mapS + 20 * u, cr = mapX + mapS;
+        g.color(0xcc0e1024);
+        g.fillRoundRect(cl - 6 * u, ct, cr + 6 * u, ct + 92 * u, 16 * u);
+        g.color(0xff8ad8ff);
+        g.text("PARTNER", cl + 6 * u, ct + 28 * u, 22 * u, Gfx.ALIGN_LEFT, 3 * u, Ui.INK);
+        g.color(0xffffffff);
+        String nm = mate.name.length() > 11 ? mate.name.substring(0, 11) : mate.name;
+        g.text(nm, cl + 6 * u, ct + 56 * u, 28 * u, Gfx.ALIGN_LEFT, 4 * u, Ui.INK);
+        float f = mate.alive ? MathUtil.clamp(mate.hp / mate.maxHp, 0, 1) : 0f;
+        g.color(0xff3a2030);
+        g.fillRoundRect(cl + 6 * u, ct + 66 * u, cr - 6 * u, ct + 82 * u, 6 * u);
+        if (f > 0) g.vertical(cl + 6 * u, ct + 66 * u, cl + 6 * u + (cr - cl - 12 * u) * f, ct + 82 * u, 0xff8ad8ff, 0xff2a7ad8);
+        if (!mate.alive) {
+            g.color(0xffff7a6a);
+            g.text(p.alive ? "Respawns if you survive" : "Knocked out", cl + 6 * u, ct + 80 * u, 18 * u, Gfx.ALIGN_LEFT, 3 * u, Ui.INK);
+        }
+        // Respawn countdown for the player
+        if (!p.alive && mate.alive) {
+            int secs = (int) Math.ceil(World.DUO_RESPAWN - p.deadTime);
+            g.color(0xaa0e1024);
+            g.fillRoundRect(w / 2 - 330 * u, h * 0.62f - 70 * u, w / 2 + 330 * u, h * 0.62f + 40 * u, 30 * u);
+            g.color(0xffffffff);
+            g.text("RESPAWNING IN " + Math.max(0, secs), w / 2, h * 0.62f, 58 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
+            g.color(0xff8ad8ff);
+            g.text("Watching " + mate.name, w / 2, h * 0.62f + 32 * u, 26 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        }
+        // Edge arrow towards the partner when off screen
+        if (mate.alive && p.alive) {
+            float sx = w / 2 + (mate.hx() - wd.camX) * wd.zoom, sy = h / 2 + (mate.hy() - wd.camY) * wd.zoom;
+            float m = 70 * u;
+            if (sx < m || sx > w - m || sy < m || sy > h - m) {
+                float ang = MathUtil.angleTo(w / 2, h / 2, sx, sy);
+                float ax = MathUtil.clamp(sx, m, w - m), ay = MathUtil.clamp(sy, m + 60 * u, h - m);
+                float ca = MathUtil.cos(ang), sa = MathUtil.sin(ang);
+                g.color(Ui.INK);
+                g.fillCircle(ax, ay, 34 * u);
+                g.color(0xff2a7ad8);
+                g.fillCircle(ax, ay, 29 * u);
+                poly[0] = ax + ca * 44 * u;
+                poly[1] = ay + sa * 44 * u;
+                poly[2] = ax + ca * 20 * u - sa * 16 * u;
+                poly[3] = ay + sa * 20 * u + ca * 16 * u;
+                poly[4] = ax + ca * 20 * u + sa * 16 * u;
+                poly[5] = ay + sa * 20 * u - ca * 16 * u;
+                g.fillPoly(poly, 3);
+                g.color(0xffffffff);
+                g.text(mate.name.substring(0, 1), ax, ay + 10 * u, 28 * u, Gfx.ALIGN_CENTER, 0, 0);
+            }
+        }
     }
 
     private void drawControls(Gfx g, Snake p) {
@@ -1336,6 +1483,13 @@ public final class Game {
             g.fillRect(zr, zt, x0 + s, zb);
         }
         Snake p = wd.player;
+        Snake mate = p != null ? wd.mateOf(p) : null;
+        if (mate != null && mate.alive) {
+            g.color(0xff14142a);
+            g.fillCircle(x0 + mate.hx() * k, y0 + mate.hy() * k, 8 * u);
+            g.color(0xff3fa0ff);
+            g.fillCircle(x0 + mate.hx() * k, y0 + mate.hy() * k, 5.5f * u);
+        }
         if (p != null && p.alive) {
             g.color(0xff14142a);
             g.fillCircle(x0 + p.hx() * k, y0 + p.hy() * k, 8 * u);

@@ -5,6 +5,8 @@ final class World {
     static final int MODE_SHOWDOWN = 0;
     static final int MODE_ENDLESS = 1;
     static final int MODE_DEMO = 2;
+    /** Duo Showdown: teams of two, last team standing. */
+    static final int MODE_DUO = 3;
 
     static final float T = 64f;
     static final byte EMPTY = 0, WALL = 1, BOX = 2;
@@ -104,13 +106,14 @@ final class World {
         this.platform = platform;
         this.botTrophies = trophies;
         this.mode = mode;
-        this.n = mode == MODE_SHOWDOWN ? 66 : (mode == MODE_ENDLESS ? 80 : 56);
+        boolean br = mode == MODE_SHOWDOWN || mode == MODE_DUO;
+        this.n = br ? 66 : (mode == MODE_ENDLESS ? 80 : 56);
         this.size = n * T;
         this.tiles = new byte[n * n];
         this.bush = new boolean[n * n];
         this.grid = new SegGrid(size);
-        this.orbTarget = mode == MODE_SHOWDOWN ? 480 : (mode == MODE_ENDLESS ? 760 : 420);
-        this.boxTarget = mode == MODE_SHOWDOWN ? 14 : (mode == MODE_ENDLESS ? 18 : 8);
+        this.orbTarget = br ? 480 : (mode == MODE_ENDLESS ? 760 : 420);
+        this.boxTarget = br ? 14 : (mode == MODE_ENDLESS ? 18 : 8);
         for (int i = 0; i < proj.length; i++) proj[i] = new Projectile();
 
         boolean hasPlayer = playerType != null;
@@ -125,11 +128,16 @@ final class World {
         // Spawn points on a ring so nobody starts on top of someone else
         float[] spX = new float[snakeCount], spY = new float[snakeCount], spA = new float[snakeCount];
         float a0 = MathUtil.rand(0, MathUtil.TAU);
+        boolean duo = mode == MODE_DUO;
+        int groups = duo ? (snakeCount + 1) / 2 : snakeCount;
         for (int i = 0; i < snakeCount; i++) {
-            float a = a0 + MathUtil.TAU * i / snakeCount;
-            spX[i] = size / 2 + MathUtil.cos(a) * size * 0.36f;
-            spY[i] = size / 2 + MathUtil.sin(a) * size * 0.36f;
+            int gi = duo ? i / 2 : i;
+            float a = a0 + MathUtil.TAU * gi / groups;
+            float side = duo ? ((i & 1) == 0 ? -90f : 90f) : 0f;
+            spX[i] = size / 2 + MathUtil.cos(a) * size * 0.36f - MathUtil.sin(a) * side;
+            spY[i] = size / 2 + MathUtil.sin(a) * size * 0.36f + MathUtil.cos(a) * side;
             spA[i] = a + MathUtil.PI;
+            snakes[i].team = duo ? gi : -1;
         }
         generateMap(spX, spY);
 
@@ -139,7 +147,7 @@ final class World {
         zoneB = size;
 
         String[] names = shuffledNames();
-        float startMass = mode == MODE_SHOWDOWN ? 40f : 45f;
+        float startMass = br ? 40f : 45f;
         for (int i = 0; i < snakeCount; i++) {
             Snake s = snakes[i];
             if (hasPlayer && i == 0) {
@@ -152,7 +160,7 @@ final class World {
                 s.name = names[i % names.length];
                 dressBot(s, i);
                 Brawler b = Brawler.ALL[MathUtil.randInt(Brawler.ALL.length)];
-                float m = mode == MODE_SHOWDOWN ? startMass : MathUtil.rand(45, 260);
+                float m = br ? startMass : MathUtil.rand(45, 260);
                 s.spawn(b, spX[i], spY[i], spA[i], m);
                 s.brain = new BotBrain(this, s, trophies);
             }
@@ -166,6 +174,7 @@ final class World {
         for (int i = 0; i < boxTarget; i++) spawnBox();
         countAlive();
         if (mode == MODE_SHOWDOWN) banner("SHOWDOWN!");
+        else if (mode == MODE_DUO) banner("DUO SHOWDOWN!");
         else if (mode == MODE_ENDLESS) banner("ENDLESS BRAWL!");
     }
 
@@ -176,6 +185,45 @@ final class World {
         else s.setColors(Brawler.BOT_SKINS[(i + MathUtil.randInt(Brawler.BOT_SKINS.length)) % Brawler.BOT_SKINS.length]);
         int lvl = 1 + botTrophies / 250 + (MathUtil.rand() < 0.3f ? 1 : 0) - (MathUtil.rand() < 0.4f ? 1 : 0);
         s.level = Math.max(1, Math.min(Brawler.MAX_LEVEL, lvl));
+    }
+
+    static final float DUO_RESPAWN = 5f;
+
+    static boolean sameTeam(Snake a, Snake b) {
+        return a != null && b != null && a != b && a.team >= 0 && a.team == b.team;
+    }
+
+    Snake mateOf(Snake s) {
+        if (s.team < 0) return null;
+        for (int i = 0; i < snakeCount; i++) if (sameTeam(s, snakes[i])) return snakes[i];
+        return null;
+    }
+
+    /** Teams with at least one living member (duo), or living snakes otherwise. */
+    int aliveTeams() {
+        if (mode != MODE_DUO) return aliveCount;
+        int mask = 0;
+        for (int i = 0; i < snakeCount; i++) if (snakes[i].alive && snakes[i].team >= 0) mask |= 1 << snakes[i].team;
+        return Integer.bitCount(mask);
+    }
+
+    private void respawnNear(Snake s, Snake mate) {
+        float a = mate.ang + MathUtil.PI;
+        float x = mate.hx() + MathUtil.cos(a) * 160, y = mate.hy() + MathUtil.sin(a) * 160;
+        for (int k = 0; k < 12 && solidCircle(x, y, 60); k++) {
+            a += 0.5f;
+            x = mate.hx() + MathUtil.cos(a) * 160;
+            y = mate.hy() + MathUtil.sin(a) * 160;
+        }
+        x = MathUtil.clamp(x, 80, size - 80);
+        y = MathUtil.clamp(y, 80, size - 80);
+        int kills = s.kills;
+        s.spawn(s.type, x, y, mate.ang, 40f);
+        s.kills = kills;
+        if (s.brain != null) s.brain.reset();
+        fx.ring(x, y, 120, 0xff9ae6ff, 0.5f);
+        fx.flash(x, y, 140, 0xff9ae6ff, 0.3f);
+        if (s.isPlayer) banner("BACK IN THE FIGHT!");
     }
 
     private static String[] shuffledNames() {
@@ -329,7 +377,7 @@ final class World {
     }
 
     boolean zoneActive() {
-        return mode == MODE_SHOWDOWN && matchTime > ZONE_START;
+        return (mode == MODE_SHOWDOWN || mode == MODE_DUO) && matchTime > ZONE_START;
     }
 
     private void spawnBox() {
@@ -458,7 +506,11 @@ final class World {
             Snake s = snakes[i];
             if (!s.alive) {
                 s.deadTime += dt;
-                if (mode != MODE_SHOWDOWN && !s.isPlayer && s.deadTime > 3.5f) respawnBot(s);
+                if (mode == MODE_DUO) {
+                    // Duo: you come back next to your partner while they survive
+                    Snake mate = mateOf(s);
+                    if (mate != null && mate.alive && s.deadTime > DUO_RESPAWN) respawnNear(s, mate);
+                } else if (mode != MODE_SHOWDOWN && !s.isPlayer && s.deadTime > 3.5f) respawnBot(s);
                 continue;
             }
             if (s.brain != null) s.brain.update(dt);
@@ -472,7 +524,10 @@ final class World {
         updateAreas(dt);
 
         for (int i = 0; i < boxCount; i++) if (boxFlash[i] > 0) boxFlash[i] -= dt;
-        if (mode != MODE_SHOWDOWN && boxCount < boxTarget) {
+        if (mode == MODE_ENDLESS || mode == MODE_DEMO) {
+            if (boxCount >= boxTarget) boxRespawnTimer = 0;
+        }
+        if ((mode == MODE_ENDLESS || mode == MODE_DEMO) && boxCount < boxTarget) {
             boxRespawnTimer += dt;
             if (boxRespawnTimer > 12f) {
                 boxRespawnTimer = 0;
@@ -512,7 +567,7 @@ final class World {
     }
 
     private void updateZone() {
-        if (mode != MODE_SHOWDOWN) return;
+        if (mode != MODE_SHOWDOWN && mode != MODE_DUO) return;
         float t = MathUtil.clamp((matchTime - ZONE_START) / (ZONE_END - ZONE_START), 0, 1);
         float half = size / 2 * (1f - t);
         zoneL = size / 2 - half;
@@ -677,7 +732,9 @@ final class World {
 
     private void updateFocus(float dt) {
         if (player != null) {
-            focus = player;
+            // While you wait to respawn in Duo, the camera follows your partner
+            Snake mate = mateOf(player);
+            focus = !player.alive && player.deadTime > 1.2f && mate != null && mate.alive ? mate : player;
             return;
         }
         focusTimer -= dt;
@@ -706,7 +763,7 @@ final class World {
                 int bi = id / Snake.MAX_SEG, j = id % Snake.MAX_SEG;
                 if (bi == ai) continue;
                 Snake b = snakes[bi];
-                if (!b.alive || j >= b.segs) continue;
+                if (!b.alive || j >= b.segs || sameTeam(a, b)) continue;
                 float rr = (a.radius + b.radius) * 0.78f;
                 if (MathUtil.dist2(hx, hy, b.sx[j], b.sy[j]) >= rr * rr) continue;
                 if (a.spawnShield > 0 || b.spawnShield > 0) continue;
@@ -1069,7 +1126,7 @@ final class World {
             int id = q[k];
             Snake s = snakes[id / Snake.MAX_SEG];
             int j = id % Snake.MAX_SEG;
-            if (s == p.owner || !s.alive || j >= s.segs) continue;
+            if (s == p.owner || !s.alive || j >= s.segs || sameTeam(s, p.owner)) continue;
             float sxj = s.sx[j], syj = s.sy[j];
             float t = len2 > 0 ? MathUtil.clamp(((sxj - ax) * bx + (syj - ay) * by) / len2, 0, 1) : 0;
             float cx = ax + bx * t, cy = ay + by * t;
@@ -1270,7 +1327,7 @@ final class World {
     }
 
     void hurt(Snake v, float dmg, Snake by, float x, float y, float kAng, float knock, int cause) {
-        if (!v.alive) return;
+        if (!v.alive || sameTeam(v, by)) return;
         if (v.spawnShield > 0 && cause != CAUSE_POISON) {
             fx.ring(v.hx(), v.hy(), v.radius * 2.2f, 0xaaffffff, 0.25f);
             return;
@@ -1325,12 +1382,16 @@ final class World {
     void kill(Snake v, Snake by, int cause) {
         if (!v.alive) return;
         flushDamageText(v);
-        int aliveBefore = 0;
-        for (int i = 0; i < snakeCount; i++) if (snakes[i].alive) aliveBefore++;
+        int aliveBefore = mode == MODE_DUO ? aliveTeams() : 0;
+        if (mode != MODE_DUO) for (int i = 0; i < snakeCount; i++) if (snakes[i].alive) aliveBefore++;
         v.alive = false;
         v.deadTime = 0;
         v.hp = 0;
         v.rank = aliveBefore;
+        if (mode == MODE_DUO) {
+            Snake mate = mateOf(v);
+            if (mate != null && !mate.alive) mate.rank = aliveBefore; // whole team is out
+        }
         v.burstLeft = 0;
         v.dashTime = 0;
 
@@ -1412,6 +1473,7 @@ final class World {
     // ------------------------------------------------------------------ queries for AI / aim
 
     boolean visibleTo(Snake target, Snake viewer) {
+        if (sameTeam(target, viewer)) return true;
         if (target.invisTime > 0 && target.revealTime <= 0) {
             return viewer != null && viewer.alive && MathUtil.dist2(target.hx(), target.hy(), viewer.hx(), viewer.hy()) < 150 * 150;
         }
@@ -1434,7 +1496,7 @@ final class World {
         boolean found = false;
         for (int i = 0; i < snakeCount; i++) {
             Snake o = snakes[i];
-            if (o == s || !o.alive || !visibleTo(o, s)) continue;
+            if (o == s || !o.alive || sameTeam(o, s) || !visibleTo(o, s)) continue;
             if (hx < o.minX - range || hx > o.maxX + range || hy < o.minY - range || hy > o.maxY + range) continue;
             for (int j = 0; j < o.segs; j += 2) {
                 float d2 = MathUtil.dist2(hx, hy, o.sx[j], o.sy[j]);
@@ -1922,7 +1984,7 @@ final class World {
     }
 
     private boolean isHiddenFromViewer(Snake s, Snake viewer, float x, float y) {
-        if (s == viewer || s.revealTime > 0) return false;
+        if (s == viewer || s.revealTime > 0 || sameTeam(s, viewer)) return false;
         if (s.invisTime > 0) {
             return viewer == null || !viewer.alive || MathUtil.dist2(x, y, viewer.hx(), viewer.hy()) > 150 * 150;
         }
@@ -2274,7 +2336,8 @@ final class World {
             // Trailing "damage" chunk, then the real value
             g.color(0xfffff2c0);
             g.fillRoundRect(x - barW / 2, by, x - barW / 2 + barW * s.hpShown, by + barH, 6);
-            int top = mine ? 0xff8cff6a : 0xffff7a5a, bot = mine ? 0xff2ea82e : 0xffc8202a;
+            boolean ally = sameTeam(s, player);
+            int top = mine ? 0xff8cff6a : ally ? 0xff8ad8ff : 0xffff7a5a, bot = mine ? 0xff2ea82e : ally ? 0xff2a7ad8 : 0xffc8202a;
             if (f > 0) {
                 if (fancy) g.vertical(x - barW / 2, by, x - barW / 2 + barW * f, by + barH, top, bot);
                 else {
@@ -2286,7 +2349,7 @@ final class World {
             }
             g.color(0xffffffff);
             g.text(Integer.toString((int) Math.ceil(s.hp)), x, by + barH - 3f, 18, Gfx.ALIGN_CENTER, 3, 0xff000000);
-            g.color(mine ? 0xff9cff8a : 0xffffffff);
+            g.color(mine ? 0xff9cff8a : ally ? 0xff8ad8ff : 0xffffffff);
             g.text(s.name, x, by - 9, 23, Gfx.ALIGN_CENTER, 4, 0xff000000);
             if (s.cubes > 0) {
                 float cxp = x + barW / 2 + 20;
@@ -2331,7 +2394,7 @@ final class World {
             float ax = p.hx() + MathUtil.cos(aimOutAng) * aimOutDist, ay = p.hy() + MathUtil.sin(aimOutAng) * aimOutDist;
             for (int i = 0; i < snakeCount; i++) {
                 Snake o = snakes[i];
-                if (o == p || !o.alive || !visibleTo(o, p)) continue;
+                if (o == p || !o.alive || sameTeam(o, p) || !visibleTo(o, p)) continue;
                 if (ax < o.minX - 80 || ax > o.maxX + 80 || ay < o.minY - 80 || ay > o.maxY + 80) continue;
                 float d = MathUtil.dist2(ax, ay, o.hx(), o.hy());
                 if (d < bd) {

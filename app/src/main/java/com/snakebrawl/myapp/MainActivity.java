@@ -224,6 +224,64 @@ public final class MainActivity extends Activity implements Platform {
     }
 
     @Override
+    public String loadString(String key, String def) {
+        return prefs.getString(key, def);
+    }
+
+    @Override
+    public void saveString(String key, String value) {
+        prefs.edit().putString(key, value).apply();
+    }
+
+    @Override
+    public void requestText(String title, String initial, int maxLength, boolean numeric, final TextCallback callback) {
+        final android.widget.EditText input = new android.widget.EditText(this);
+        input.setSingleLine(true);
+        input.setText(initial);
+        input.setSelection(input.getText().length());
+        input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(maxLength)});
+        input.setInputType(numeric ? android.text.InputType.TYPE_CLASS_NUMBER
+                : android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        int pad = (int) (20 * getResources().getDisplayMetrics().density);
+        android.widget.FrameLayout box = new android.widget.FrameLayout(this);
+        box.setPadding(pad, pad / 2, pad, 0);
+        box.addView(input);
+        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
+                .setTitle(title)
+                .setView(box)
+                .setPositiveButton(android.R.string.ok, new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int which) {
+                        callback.onText(input.getText().toString());
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int which) {
+                        callback.onText(null);
+                    }
+                })
+                .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                    @Override
+                    public void onCancel(android.content.DialogInterface d) {
+                        callback.onText(null);
+                    }
+                })
+                .create();
+        dialog.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(android.content.DialogInterface d) {
+                hideSystemUi();
+            }
+        });
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+        dialog.show();
+        input.requestFocus();
+    }
+
+    @Override
     public boolean launchPurchase(String productId) {
         // Google Play Billing is not integrated yet: the game falls back to its test checkout.
         // To go live, start a BillingClient purchase flow here and call

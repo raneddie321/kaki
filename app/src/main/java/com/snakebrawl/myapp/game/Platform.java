@@ -29,6 +29,18 @@ public interface Platform {
 
     void vibrate(int millis);
 
+    String loadString(String key, String def);
+
+    void saveString(String key, String value);
+
+    /** Receives text typed by the player, or null if the dialog was cancelled. */
+    interface TextCallback {
+        void onText(String text);
+    }
+
+    /** Shows the system keyboard in a small dialog to type a line of text. */
+    void requestText(String title, String initial, int maxLength, boolean numeric, TextCallback callback);
+
     /**
      * Starts a real store purchase (Google Play Billing) and reports back through
      * {@link Game#onPurchaseResult}. Returns false if real billing is not available, in which

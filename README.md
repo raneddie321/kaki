@@ -31,6 +31,7 @@ poison closes in.
 | --- | --- |
 | **Showdown** | 10 snakes, no respawns. Poison starts closing in after 25 s. Last snake standing wins. Earn trophies by rank. |
 | **Endless** | Classic io mode on a bigger map. Bots respawn. Grow as big as you can. |
+| **Duo Showdown** | You and a clubmate against 4 other pairs. Teammates can't hurt each other, a knocked-out partner respawns after 5 s while their mate is alive, and the last pair standing wins. |
 
 ### Brawlers
 
@@ -56,6 +57,17 @@ Bots get smarter, stronger and fancier as your trophy count goes up.
   An equipped skin applies to every brawler.
 - **Shop: Brawlers**: unlock the four new brawlers.
 - **Brawlers screen**: pick a brawler and upgrade its power level (1 to 7, +6% health and damage per level).
+
+### First launch, clubs and duo
+
+- On first launch the game asks for a **nickname** (2 to 14 characters, or tap RANDOM NAME) and an
+  **age**. Players under 13 can't buy coins with real money.
+- **Club**: join one of six clubs (some need trophies) or create your own with a name and badge.
+  The club screen lists the members and their trophies.
+- **Play Duo** from the club screen to team up with your club's duo partner. The partner card under
+  the minimap shows their health and respawn timer.
+- There is no online server yet, so club members and your duo partner are computer players.
+  Playing with real friends needs an online backend or local Wi-Fi play.
 
 ### Coin store (real money)
 
@@ -100,15 +112,15 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-1.8.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-1.8.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-1.9.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-1.9.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**
 Google Play needs the same key for every update. To use your own key:
 
 ```bash
-KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=10 VERSION_NAME=1.9 ./build.sh
+KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=11 VERSION_NAME=2.0 ./build.sh
 ```
 
 The app targets API 36 and runs on Android 7.0 (API 24) and newer. It needs no permissions.
