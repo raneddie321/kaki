@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Snake Brawl">
+<meta name="theme-color" content="#0d1030">
+<title>Snake Brawl</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+  @font-face { font-family: 'Lilita'; src: url('LilitaOne-Regular.ttf') format('truetype'); font-display: block; }
+  html, body { margin: 0; height: 100%; background: #0d1030; overflow: hidden; overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  canvas { display: block; touch-action: none; position: fixed; left: 0; top: 0; }
+  #insets { position: fixed; visibility: hidden; pointer-events: none;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  #loading, #rotate { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #ffd23f; font: 32px Lilita, sans-serif; text-align: center; background: #0d1030; z-index: 2; }
+  #rotate { display: none; z-index: 3; }
+  #rotate .phone { width: 60px; height: 100px; border: 6px solid #ffd23f; border-radius: 14px; margin-bottom: 24px;
+    animation: turn 1.8s ease-in-out infinite; }
+  @keyframes turn { 0%, 30% { transform: rotate(0deg); } 60%, 100% { transform: rotate(-90deg); } }
+  @media (orientation: portrait) and (max-width: 900px) { #rotate { display: flex; } }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="insets"></div>
+<div id="loading">LOADING...</div>
+<div id="rotate"><div class="phone"></div>Turn your phone sideways<br><span style="font-size:20px;color:#b8bdf0">Snake Brawl plays in landscape</span></div>
+<script src="sb.js"></script>
+<script src="classes.js"></script>
+<script>main();</script>
+<script>
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
+</script>
+</body>
+</html>

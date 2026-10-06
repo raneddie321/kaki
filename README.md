@@ -140,6 +140,17 @@ KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE
 
 The app targets API 36 and runs on Android 7.0 (API 24) and newer. It asks only for network permissions (granted automatically), used by Wi-Fi play.
 
+## Browser version (iPhone, iPad and any phone)
+
+`web/build.sh` compiles the same game code to JavaScript with [TeaVM](https://teavm.org) and writes a
+static site to `dist/web` (plus `dist/SnakeBrawl-web-<version>.zip`). Host the folder on any static
+web host (GitHub Pages, Netlify, ...), open it in Safari and choose **Share > Add to Home Screen** to
+get a full-screen app icon. After the first visit it also works offline.
+
+Everything works except Wi-Fi play with friends, because browsers cannot open sockets
+(`web/src/.../NetSession.java` is a stub that hides the FRIENDS button).
+Progress is saved in the browser's local storage. Needs JDK 11+ and Maven.
+
 ## Desktop test harness
 
 ```bash

@@ -32,6 +32,8 @@ import java.util.concurrent.TimeUnit;
  * the send methods and {@link #close()}, none of which block.
  */
 final class NetSession {
+    /** False in the browser build, which cannot open sockets. */
+    static final boolean AVAILABLE = true;
     static final int TCP_PORT = 47321;
     static final int UDP_PORT = 47322;
     static final int PROTOCOL = 1;
