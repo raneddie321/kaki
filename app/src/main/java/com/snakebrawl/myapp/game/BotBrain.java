@@ -138,7 +138,7 @@ final class BotBrain {
             float side = dx * -uy + dy * ux;
             if (Math.abs(side) > danger) continue;
             float s = side >= 0 ? 1f : -1f;
-            return (float) StrictMath.atan2(ux * s, -uy * s);
+            return (float) MathUtil.atan2(ux * s, -uy * s);
         }
         return NO_DODGE;
     }

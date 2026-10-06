@@ -2,7 +2,6 @@ package com.snakebrawl.myapp.game;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -34,6 +33,8 @@ import java.util.concurrent.TimeUnit;
 final class NetSession {
     /** False in the browser build, which cannot open sockets. */
     static final boolean AVAILABLE = true;
+    /** True: rooms are found on the local Wi-Fi and joined by address. */
+    static final boolean LAN = true;
     static final int TCP_PORT = 47321;
     static final int UDP_PORT = 47322;
     static final int PROTOCOL = 1;
@@ -275,7 +276,7 @@ final class NetSession {
         writer.start();
         try {
             while (true) {
-                Msg m = read(in);
+                Msg m = NetCodec.read(in);
                 lastRecv = System.nanoTime();
                 if (m.type == M_PING) continue;
                 if (m.type == M_BYE) {
@@ -291,53 +292,6 @@ final class NetSession {
         }
     }
 
-    private static Msg read(DataInputStream in) throws IOException {
-        Msg m = new Msg();
-        m.type = in.readUnsignedByte();
-        switch (m.type) {
-            case M_HELLO: {
-                m.protocol = in.readInt();
-                m.name = in.readUTF();
-                m.brawler = in.readInt();
-                m.level = in.readInt();
-                m.trophies = in.readInt();
-                int n = in.readUnsignedByte();
-                m.palette = new int[n];
-                for (int i = 0; i < n; i++) m.palette[i] = in.readInt();
-                break;
-            }
-            case M_START:
-                m.seed = in.readLong();
-                m.mode = in.readInt();
-                break;
-            case M_MODE:
-                m.mode = in.readInt();
-                break;
-            case M_INPUT: {
-                NetInput ni = m.input;
-                ni.tick = in.readInt();
-                int f = in.readUnsignedByte();
-                ni.steer = (f & 1) != 0;
-                ni.boost = (f & 2) != 0;
-                ni.attack = f >> 2;
-                ni.ang = in.readFloat();
-                ni.atkAng = in.readFloat();
-                ni.atkDist = in.readFloat();
-                break;
-            }
-            case M_HASH:
-                m.tick = in.readInt();
-                m.hash = in.readInt();
-                break;
-            case M_BYE:
-            case M_PING:
-                break;
-            default:
-                throw new IOException("bad message " + m.type);
-        }
-        return m;
-    }
-
     private void fail(String reason) {
         if (state == ST_CLOSED) return;
         closeReason = reason;
@@ -351,7 +305,7 @@ final class NetSession {
             long now = System.nanoTime();
             if (now - lastPing > 1_000_000_000L) {
                 lastPing = now;
-                send(new byte[]{(byte) M_PING});
+                send(NetCodec.single(M_PING));
             }
             if (now - lastRecv > 8_000_000_000L) fail("Lost connection to your friend");
         }
@@ -365,65 +319,23 @@ final class NetSession {
     }
 
     void sendHello(String name, int brawler, int level, int trophies, int[] palette) {
-        ByteArrayOutputStream bo = new ByteArrayOutputStream();
-        DataOutputStream o = new DataOutputStream(bo);
-        try {
-            o.writeByte(M_HELLO);
-            o.writeInt(PROTOCOL);
-            o.writeUTF(name);
-            o.writeInt(brawler);
-            o.writeInt(level);
-            o.writeInt(trophies);
-            int n = Math.min(palette.length, 16);
-            o.writeByte(n);
-            for (int i = 0; i < n; i++) o.writeInt(palette[i]);
-        } catch (IOException ignored) {
-            // cannot happen with a byte array
-        }
-        send(bo.toByteArray());
+        send(NetCodec.hello(name, brawler, level, trophies, palette));
     }
 
     void sendStart(long seed, int mode) {
-        ByteArrayOutputStream bo = new ByteArrayOutputStream();
-        DataOutputStream o = new DataOutputStream(bo);
-        try {
-            o.writeByte(M_START);
-            o.writeLong(seed);
-            o.writeInt(mode);
-        } catch (IOException ignored) {
-            // cannot happen
-        }
-        send(bo.toByteArray());
+        send(NetCodec.start(seed, mode));
     }
 
     void sendMode(int mode) {
-        send(new byte[]{(byte) M_MODE, (byte) (mode >>> 24), (byte) (mode >>> 16), (byte) (mode >>> 8), (byte) mode});
+        send(NetCodec.mode(mode));
     }
 
     void sendInput(NetInput in) {
-        byte[] b = new byte[18];
-        b[0] = (byte) M_INPUT;
-        putInt(b, 1, in.tick);
-        b[5] = (byte) ((in.steer ? 1 : 0) | (in.boost ? 2 : 0) | (in.attack << 2));
-        putInt(b, 6, Float.floatToIntBits(in.ang));
-        putInt(b, 10, Float.floatToIntBits(in.atkAng));
-        putInt(b, 14, Float.floatToIntBits(in.atkDist));
-        send(b);
+        send(NetCodec.input(in));
     }
 
     void sendHash(int tick, int hash) {
-        byte[] b = new byte[9];
-        b[0] = (byte) M_HASH;
-        putInt(b, 1, tick);
-        putInt(b, 5, hash);
-        send(b);
-    }
-
-    private static void putInt(byte[] b, int at, int v) {
-        b[at] = (byte) (v >>> 24);
-        b[at + 1] = (byte) (v >>> 16);
-        b[at + 2] = (byte) (v >>> 8);
-        b[at + 3] = (byte) v;
+        send(NetCodec.hash(tick, hash));
     }
 
     /** Ends the session and tells the other phone. Safe to call more than once. */
@@ -431,7 +343,7 @@ final class NetSession {
         if (closing) return;
         closing = true;
         if (state == ST_CONNECTED) {
-            outbox.offer(new byte[]{(byte) M_BYE});
+            outbox.offer(NetCodec.single(M_BYE));
             outbox.offer(new byte[0]);
         }
         state = ST_CLOSED;
@@ -483,6 +395,11 @@ final class NetSession {
     }
 
     // ------------------------------------------------------------------ addresses
+
+    /** Clears a shown join error so the next one is reported. */
+    void clearError() {
+        closeReason = null;
+    }
 
     /** This phone's Wi-Fi addresses, for showing to a friend who types it in. */
     static List<String> localAddresses() {

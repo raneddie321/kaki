@@ -571,6 +571,7 @@ public final class Game {
                 li.clear();
                 li.tick = future;
             }
+            NetCodec.normalize(li);
             net.sendInput(li);
             netIn.attack = NetInput.NONE;
             netIn.steer = false;
@@ -1159,7 +1160,7 @@ public final class Game {
                 String club = Clubs.name(profile);
                 ui.add(B_CLUB, pl, padT + 360 * u, pl + 300 * u, padT + 490 * u, "CLUB", club != null ? club : "Join a club!", 0xff3fb6a8);
                 if (NetSession.AVAILABLE) ui.add(B_FRIENDS, r - bw - 30 * u - 430 * u, b - bh - 150 * u, r - bw - 30 * u, b - bh - 30 * u, "FRIENDS",
-                        "Play together on Wi-Fi", 0xff6a5cff);
+                        NetSession.LAN ? "Play together on Wi-Fi" : "Play together online", 0xff6a5cff);
                 ui.add(B_SETTINGS, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, null, null, 0xff8a8fb8);
                 break;
             }
@@ -1904,8 +1905,8 @@ public final class Game {
         ui.trophy(g, sx + 250 * u, sy - 14 * u, 44 * u);
         g.color(resDelta > 0 ? 0xff9cff8a : (resDelta < 0 ? 0xffff7a6a : 0xffffffff));
         g.text((resDelta > 0 ? "+" : "") + resDelta, sx + 292 * u, sy, 46 * u, Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
-        g.color(0xffffffff);
-        g.text("Total " + profile.trophies, vx, sy, 38 * u, Gfx.ALIGN_RIGHT, 5 * u, Ui.INK);
+        g.color(0xffd8dcff);
+        g.text("Trophies: " + profile.trophies, vx, sy + 56 * u, 32 * u, Gfx.ALIGN_RIGHT, 4 * u, Ui.INK);
 
         for (int i = 0; i < ui.count; i++) ui.button(g, ui.btns[i]);
     }

@@ -167,7 +167,7 @@ final class Snake {
     }
 
     float turnRate() {
-        float r = 4.6f * (float) StrictMath.pow(17f / radius, 0.45f);
+        float r = 4.6f * (float) MathUtil.pow(17f / radius, 0.45f);
         return dashTime > 0 ? r * 0.35f : r;
     }
 
@@ -189,7 +189,7 @@ final class Snake {
         float ox = sx[0], oy = sy[0];
         sx[0] += MathUtil.cos(ang) * spd * dt + kbx * dt;
         sy[0] += MathUtil.sin(ang) * spd * dt + kby * dt;
-        float decay = (float) StrictMath.exp(-7f * dt);
+        float decay = (float) MathUtil.exp(-7f * dt);
         kbx *= decay;
         kby *= decay;
         vx = (sx[0] - ox) / dt;

@@ -1207,7 +1207,7 @@ final class World {
             float cx = ax + bx * t, cy = ay + by * t;
             float rr = s.radius + p.radius;
             if (MathUtil.dist2(cx, cy, sxj, syj) < rr * rr) {
-                float ang = (float) StrictMath.atan2(p.vy, p.vx);
+                float ang = (float) MathUtil.atan2(p.vy, p.vx);
                 int color = p.kind == Projectile.FLAME ? 0xffff8a2a : (p.kind == Projectile.PELLET || p.kind == Projectile.BALL ? 0xffffe066 : 0xff9af0ff);
                 fx.sparks(cx, cy, 7, color, 300, 0.25f);
                 fx.flash(cx, cy, 48, projColor(p.kind), 0.14f);
@@ -1668,7 +1668,7 @@ final class World {
             camX += (f.hx() - camX) * k;
             camY += (f.hy() - camY) * k;
             float base = screenH / 900f * (mode == MODE_DEMO ? 0.85f : 1f);
-            float target = base * zoomMult * (float) StrictMath.pow(19f / f.radius, 0.5f);
+            float target = base * zoomMult * (float) MathUtil.pow(19f / f.radius, 0.5f);
             if (f.boosting) target *= 0.96f;
             zoom += (target - zoom) * Math.min(1f, dt * 2f);
         }
@@ -2205,7 +2205,7 @@ final class World {
                     g.line(p.x, p.y, p.x - p.vx * tl * 0.7f, p.y - p.vy * tl * 0.7f, p.radius * 0.6f);
                     if (fancy) {
                         // Crackling arcs
-                        float a = (float) StrictMath.atan2(p.vy, p.vx) + MathUtil.PI / 2;
+                        float a = (float) MathUtil.atan2(p.vy, p.vx) + MathUtil.PI / 2;
                         float j = MathUtil.rand(-1f, 1f) * p.radius * 1.4f;
                         g.color(0xccffffff);
                         g.line(p.x - p.vx * tl * 0.3f, p.y - p.vy * tl * 0.3f,
@@ -2242,7 +2242,7 @@ final class World {
                     break;
                 }
                 case Projectile.SHARD: {
-                    float a = (float) StrictMath.atan2(p.vy, p.vx);
+                    float a = (float) MathUtil.atan2(p.vy, p.vx);
                     float ca = MathUtil.cos(a), sa = MathUtil.sin(a);
                     float len = p.radius * 2.6f;
                     poly4[0] = p.x + ca * len;

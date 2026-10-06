@@ -127,15 +127,15 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-2.1.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-2.1.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-2.2.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-2.2.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**
 Google Play needs the same key for every update. To use your own key:
 
 ```bash
-KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=13 VERSION_NAME=2.2 ./build.sh
+KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=14 VERSION_NAME=2.3 ./build.sh
 ```
 
 The app targets API 36 and runs on Android 7.0 (API 24) and newer. It asks only for network permissions (granted automatically), used by Wi-Fi play.
@@ -147,8 +147,15 @@ static site to `dist/web` (plus `dist/SnakeBrawl-web-<version>.zip`). Host the f
 web host (GitHub Pages, Netlify, ...), open it in Safari and choose **Share > Add to Home Screen** to
 get a full-screen app icon. After the first visit it also works offline.
 
-Everything works except Wi-Fi play with friends, because browsers cannot open sockets
-(`web/src/.../NetSession.java` is a stub that hides the FRIENDS button).
+Everything works, including playing with friends: in the browser **FRIENDS** is online instead of
+Wi-Fi. The host gets a 5-character room code and the friend types it in, from anywhere. The two
+browsers connect directly over WebRTC ([PeerJS](https://peerjs.com), bundled in `web/static/vendor`);
+PeerJS's free public server only introduces them. Some mobile networks block direct connections, in
+which case joining fails with an error; Wi-Fi usually works. Browser players can't join Android Wi-Fi
+rooms (different connection type).
+
+For lockstep across browser engines the simulation uses its own sin/cos/atan2/exp/pow
+(`MathUtil`), built only from exactly rounded operations, so Safari and Chrome compute identical results.
 Progress is saved in the browser's local storage. Needs JDK 11+ and Maven.
 
 ## Desktop test harness

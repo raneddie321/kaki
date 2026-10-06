@@ -58,15 +58,101 @@ final class MathUtil {
     }
 
     static float angleTo(float x1, float y1, float x2, float y2) {
-        return (float) StrictMath.atan2(y2 - y1, x2 - x1);
+        return (float) atan2(y2 - y1, x2 - x1);
     }
 
     static float cos(float a) {
-        return (float) StrictMath.cos(a);
+        return (float) cosD(a);
     }
 
     static float sin(float a) {
-        return (float) StrictMath.sin(a);
+        return (float) sinD(a);
+    }
+
+    // Deterministic math for multiplayer lockstep. These use only +, -, *, / and sqrt, which are
+    // exactly rounded everywhere, so every phone and every browser engine (where Math.sin and
+    // friends may differ in the last bit) computes bit-identical results.
+
+    private static final double DPI = Math.PI, DTAU = Math.PI * 2, HALF_PI = Math.PI / 2;
+
+    static double sinD(double x) {
+        if (x != x || x == Double.POSITIVE_INFINITY || x == Double.NEGATIVE_INFINITY) return Double.NaN;
+        x -= DTAU * Math.floor(x / DTAU + 0.5); // now in [-PI, PI]
+        if (x > HALF_PI) x = DPI - x;
+        else if (x < -HALF_PI) x = -DPI - x;
+        double x2 = x * x;
+        // Taylor series to x^17: error below 1e-14 on [-PI/2, PI/2]
+        return x * (1 - x2 / 6 * (1 - x2 / 20 * (1 - x2 / 42 * (1 - x2 / 72 * (1 - x2 / 110 * (1 - x2 / 156
+                * (1 - x2 / 210 * (1 - x2 / 272))))))));
+    }
+
+    static double cosD(double x) {
+        return sinD(x + HALF_PI);
+    }
+
+    static double atan2(double y, double x) {
+        if (x == 0 && y == 0) return 0;
+        if (x == 0) return y > 0 ? HALF_PI : -HALF_PI;
+        double a = atan(y / x);
+        if (x > 0) return a;
+        return y >= 0 ? a + DPI : a - DPI;
+    }
+
+    static double atan(double t) {
+        boolean neg = t < 0;
+        if (neg) t = -t;
+        boolean inv = t > 1;
+        if (inv) t = 1 / t;
+        // Two half-angle steps bring t below tan(PI/16), then a short series
+        t = t / (1 + Math.sqrt(1 + t * t));
+        t = t / (1 + Math.sqrt(1 + t * t));
+        double t2 = t * t;
+        double r = 4 * t * (1 - t2 * (1.0 / 3 - t2 * (1.0 / 5 - t2 * (1.0 / 7 - t2 * (1.0 / 9 - t2 * (1.0 / 11
+                - t2 * (1.0 / 13 - t2 * (1.0 / 15 - t2 / 17))))))));
+        if (inv) r = HALF_PI - r;
+        return neg ? -r : r;
+    }
+
+    static double exp(double x) {
+        if (x > 700) return Double.POSITIVE_INFINITY;
+        if (x < -700) return 0;
+        int halvings = 0;
+        while (x > 0.5 || x < -0.5) {
+            x *= 0.5;
+            halvings++;
+        }
+        double term = 1, sum = 1;
+        for (int i = 1; i < 18; i++) {
+            term *= x / i;
+            sum += term;
+        }
+        for (int i = 0; i < halvings; i++) sum *= sum;
+        return sum;
+    }
+
+    /** Natural log for positive x. */
+    static double log(double x) {
+        if (x <= 0) return Double.NEGATIVE_INFINITY;
+        int e = 0;
+        while (x > 1.5) {
+            x *= 0.5;
+            e++;
+        }
+        while (x < 0.75) {
+            x *= 2;
+            e--;
+        }
+        double z = (x - 1) / (x + 1), z2 = z * z, term = z, sum = 0;
+        for (int i = 1; i < 40; i += 2) {
+            sum += term / i;
+            term *= z2;
+        }
+        return 2 * sum + e * 0.6931471805599453;
+    }
+
+    static double pow(double a, double b) {
+        if (a == 0) return b == 0 ? 1 : 0;
+        return exp(b * log(a));
     }
 
     static float sqrt(float v) {
