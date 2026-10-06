@@ -304,6 +304,16 @@ final class Snake {
             if (hidden != null && hidden[i]) continue;
             float x = xs[i], y = ys[i];
             if (x < viewL - r || x > viewR + r || y < viewT - r || y > viewB + r) continue;
+            if (fancy && i + 1 < n) {
+                // Gentle slither wave across the body (visual only)
+                float dx = xs[i - 1] - xs[i + 1], dy = ys[i - 1] - ys[i + 1];
+                float dl = (float) Math.sqrt(dx * dx + dy * dy);
+                if (dl > 0.01f) {
+                    float wave = MathUtil.sin(time * 7f - i * 0.55f) * r * 0.14f * Math.min(1f, i / 5f);
+                    x += -dy / dl * wave;
+                    y += dx / dl * wave;
+                }
+            }
             float taper = i > n - 8 ? 0.55f + 0.45f * (n - 1 - i) / 7f : 1f;
             float rr = r * taper;
             int base = pal[((i + 1) / 3) % np];
@@ -508,9 +518,18 @@ final class Snake {
                 break;
         }
 
-        // Eyes
+        // Eyes (with an occasional blink)
         float lc = MathUtil.cos(lookAng), ls = MathUtil.sin(lookAng);
-        for (int sgn = -1; sgn <= 1; sgn += 2) {
+        boolean blink = fancy && (time * 0.8f) % 3.7f < 0.1f;
+        for (int sgn = -1; sgn <= 1 && blink; sgn += 2) {
+            float ex = x + ca * hr * 0.38f + px * hr * 0.48f * sgn;
+            float ey = y + sa * hr * 0.38f + py * hr * 0.48f * sgn;
+            g.color(MathUtil.withAlpha(MathUtil.darker(base, 0.3f), alpha));
+            g.fillCircle(ex, ey, hr * 0.36f);
+            g.color(MathUtil.withAlpha(0xff1a1a24, alpha));
+            g.line(ex - ca * hr * 0.25f, ey - sa * hr * 0.25f, ex + ca * hr * 0.25f, ey + sa * hr * 0.25f, hr * 0.09f);
+        }
+        for (int sgn = -1; sgn <= 1 && !blink; sgn += 2) {
             float ex = x + ca * hr * 0.38f + px * hr * 0.48f * sgn;
             float ey = y + sa * hr * 0.38f + py * hr * 0.48f * sgn;
             g.color(MathUtil.withAlpha(0xff1a1a24, alpha));

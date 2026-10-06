@@ -42,6 +42,11 @@ public final class SimTest {
 
         @Override
         public void vibrate(int millis) {}
+
+        @Override
+        public boolean launchPurchase(String productId) {
+            return false;
+        }
     }
 
     public static void main(String[] args) throws Exception {
@@ -376,6 +381,29 @@ public final class SimTest {
         tapBtn(game, 302); // brawlers tab
         run(game, 0.3f);
         shot(game, font, width, height, outDir + "/5_shop_brawlers.png");
+        tapBtn(game, 303); // coins tab
+        run(game, 0.4f);
+        shot(game, font, width, height, outDir + "/5b_shop_coins.png");
+        int before = pf.loadInt("coins", 0);
+        tapBtn(game, 351);
+        run(game, 0.4f);
+        shot(game, font, width, height, outDir + "/5c_checkout.png");
+        tapBtn(game, Game.B_SHEET_BUY);
+        run(game, 0.5f);
+        shot(game, font, width, height, outDir + "/5d_processing.png");
+        run(game, 1.1f);
+        shot(game, font, width, height, outDir + "/5e_success.png");
+        run(game, 1.4f);
+        shot(game, font, width, height, outDir + "/5f_coins_added.png");
+        game.onPause();
+        System.out.println("coins before " + before + " after " + pf.loadInt("coins", 0));
+        // Cancelling must not grant coins
+        tapBtn(game, 352);
+        run(game, 0.4f);
+        tap(game, width / 2f, 40);
+        run(game, 0.5f);
+        game.onPause();
+        System.out.println("after cancel " + pf.loadInt("coins", 0) + " sheet=" + game.sheetPack);
         tapBtn(game, Game.B_BACK);
 
         tapBtn(game, Game.B_SETTINGS);

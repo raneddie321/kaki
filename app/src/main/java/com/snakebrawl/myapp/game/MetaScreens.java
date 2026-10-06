@@ -5,9 +5,10 @@ final class MetaScreens {
     private static final int B_TILE = 100, B_SELECT = 150, B_UPGRADE = 151, B_UNLOCK = 152;
     private static final int B_SKIN = 200;
     private static final int B_TAB = 300, B_GIFT = 310, B_BOX = 311, B_MEGA = 312, B_DEAL = 313, B_SHOP_BRAWLER = 330;
+    private static final int B_PACK = 350;
     private static final int B_SETTING = 400, B_RESET = 420;
 
-    private static final String[] TABS = {"OFFERS", "SKINS", "BRAWLERS"};
+    private static final String[] TABS = {"OFFERS", "SKINS", "BRAWLERS", "COINS"};
     private static final String[] SETTING_NAMES = {"Sound", "Vibration", "Damage numbers", "Graphics",
             "Auto-aim on tap", "Left-handed controls", "Joystick size", "Camera"};
 
@@ -58,8 +59,8 @@ final class MetaScreens {
                 break;
             }
             case Game.SHOP: {
-                float tabW = 300 * u, tabT = padT + 130 * u;
-                float tabL = w / 2 - (tabW * 3 + 40 * u) / 2;
+                float tabW = 270 * u, tabT = padT + 130 * u;
+                float tabL = w / 2 - (tabW * TABS.length + 20 * u * (TABS.length - 1)) / 2;
                 for (int i = 0; i < TABS.length; i++) {
                     float l = tabL + i * (tabW + 20 * u);
                     ui.add(B_TAB + i, l, tabT, l + tabW, tabT + 90 * u, TABS[i], null, i == shopTab ? 0xffffc928 : 0xff4a5090);
@@ -84,12 +85,20 @@ final class MetaScreens {
                         float cl = l + (i % cols) * (cw + gap), ct = top + 10 * u + (i / cols) * (ch + gap);
                         ui.addScroll(B_SKIN + i, cl, ct, cl + cw, ct + ch, null, null, 0);
                     }
-                } else {
+                } else if (shopTab == 2) {
                     ui.setScrollArea(l, top, r, bottom, 0);
                     float gap = 26 * u, cw = (r - l - gap * 3) / 4f;
                     for (int i = 0; i < 4; i++) {
                         float cl = l + i * (cw + gap);
                         ui.add(B_SHOP_BRAWLER + 4 + i, cl, top + 10 * u, cl + cw, bottom - 10 * u, null, null, 0);
+                    }
+                } else {
+                    ui.setScrollArea(l, top, r, bottom, 0);
+                    int n = CoinStore.PRODUCT_IDS.length;
+                    float gap = 22 * u, cw = (r - l - gap * (n - 1)) / n;
+                    for (int i = 0; i < n; i++) {
+                        float cl = l + i * (cw + gap);
+                        ui.add(B_PACK + i, cl, top + 10 * u, cl + cw, bottom - 10 * u, null, null, 0);
                     }
                 }
                 break;
@@ -163,6 +172,10 @@ final class MetaScreens {
             shopTab = id - B_TAB;
             ui.resetScroll();
             game.layout();
+            return;
+        }
+        if (id >= B_PACK && id < B_PACK + CoinStore.PRODUCT_IDS.length) {
+            game.startPurchase(id - B_PACK);
             return;
         }
         if (id >= B_SHOP_BRAWLER && id < B_SHOP_BRAWLER + Brawler.ALL.length) {
@@ -573,7 +586,12 @@ final class MetaScreens {
         } else if (shopTab == 2) {
             for (int i = 0; i < ui.count; i++) {
                 Ui.Btn bt = ui.btns[i];
-                if (bt.id >= B_SHOP_BRAWLER) drawBrawlerOffer(g, bt);
+                if (bt.id >= B_SHOP_BRAWLER && bt.id < B_SHOP_BRAWLER + Brawler.ALL.length) drawBrawlerOffer(g, bt);
+            }
+        } else if (shopTab == 3) {
+            for (int i = 0; i < ui.count; i++) {
+                Ui.Btn bt = ui.btns[i];
+                if (bt.id >= B_PACK && bt.id < B_PACK + CoinStore.PRODUCT_IDS.length) drawCoinPack(g, bt);
             }
         } else {
             g.save();
@@ -682,6 +700,65 @@ final class MetaScreens {
             g.text(price, cx - tw / 2 + 10 * u, b - 41 * u, 44 * u, Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
         } else {
             g.text(price, cx, b - 41 * u, 44 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+        }
+    }
+
+    private void drawCoinPack(Gfx g, Ui.Btn bt) {
+        float u = game.u, d = press(bt);
+        float l = bt.l + d, t = bt.t + d, r = bt.r - d, b = bt.b - d;
+        int i = bt.id - B_PACK;
+        float cx = (l + r) / 2;
+        int[] tint = {0xff3fa0ff, 0xff4ad04a, 0xffb35cff, 0xffff9a2e, 0xffff4a6a};
+        int col = tint[i];
+        ui.panel(g, l, t, r, b, 0xff262a54);
+        g.save();
+        g.clip(l, t + 26 * u, r, b - 26 * u);
+        g.vertical(l, t, r, b, MathUtil.withAlpha(col, 0.35f), 0x00262a54);
+        g.restore();
+        // Pile of coins that grows with the pack size
+        float artY = t + (b - t) * 0.42f;
+        float glow = 0.5f + 0.5f * MathUtil.sin(game.clock * 3f + i);
+        g.radial(cx, artY, (r - l) * 0.5f, MathUtil.withAlpha(0xffffd23f, 0.35f + 0.15f * glow), 0x00ffd23f);
+        int coins = 3 + i * 3;
+        float cs = (r - l) * 0.26f;
+        for (int k = 0; k < coins; k++) {
+            int row = k < 5 ? 0 : (k < 9 ? 1 : (k < 12 ? 2 : 3));
+            int inRow = row == 0 ? k : (row == 1 ? k - 5 : (row == 2 ? k - 9 : k - 12));
+            int rowN = row == 0 ? Math.min(coins, 5) : (row == 1 ? Math.min(coins - 5, 4) : (row == 2 ? Math.min(coins - 9, 3) : coins - 12));
+            float x = cx + (inRow - (rowN - 1) / 2f) * cs * 0.6f;
+            float y = artY + cs * 0.55f - row * cs * 0.42f;
+            ui.coin(g, x, y, cs);
+        }
+        // Sparkle
+        float sp = (game.clock * 1.5f + i * 0.3f) % 1f;
+        float sr = cs * 0.4f * MathUtil.sin(sp * MathUtil.PI);
+        g.color(0xeeffffff);
+        g.line(cx + cs * 0.4f - sr, artY - cs * 0.2f, cx + cs * 0.4f + sr, artY - cs * 0.2f, 3 * u);
+        g.line(cx + cs * 0.4f, artY - cs * 0.2f - sr, cx + cs * 0.4f, artY - cs * 0.2f + sr, 3 * u);
+
+        g.color(0xffffe066);
+        String amount = CoinStore.format(CoinStore.COINS[i]);
+        g.text(amount, cx, t + 80 * u, Ui.fit(g, amount, 60 * u, (r - l) * 0.85f), Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
+        g.color(0xffd8dcff);
+        g.text("COINS", cx, t + 118 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        g.color(0xffffffff);
+        g.text(CoinStore.NAMES[i], cx, b - 128 * u, Ui.fit(g, CoinStore.NAMES[i], 30 * u, (r - l) * 0.9f), Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        // Price plate
+        g.color(Ui.INK);
+        g.fillRoundRect(l + 20 * u, b - 96 * u, r - 20 * u, b - 18 * u, 22 * u);
+        g.vertical(l + 26 * u, b - 90 * u, r - 26 * u, b - 24 * u, 0xff6ee86e, 0xff2ea82e);
+        g.color(0xffffffff);
+        g.text(CoinStore.PRICES[i], cx, b - 41 * u, 44 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+        String badge = CoinStore.BADGES[i];
+        if (badge != null) {
+            float bw = Math.min(r - l - 20 * u, g.measureText(badge, 26 * u) + 40 * u);
+            float by = t + 132 * u;
+            g.color(Ui.INK);
+            g.fillRoundRect(cx - bw / 2 - 4 * u, by - 4 * u, cx + bw / 2 + 4 * u, by + 46 * u, 22 * u);
+            g.color(i == 3 ? 0xffff4a6a : 0xffffc928);
+            g.fillRoundRect(cx - bw / 2, by, cx + bw / 2, by + 42 * u, 20 * u);
+            g.color(0xffffffff);
+            g.text(badge, cx, by + 31 * u, Ui.fit(g, badge, 26 * u, bw - 20 * u), Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
         }
     }
 
@@ -821,7 +898,7 @@ final class MetaScreens {
             ui.button(g, bt);
         }
         g.color(0xff9aa0d0);
-        g.text("Snake Brawl v1.7  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
+        g.text("Snake Brawl v1.8  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
                 w / 2, h - game.padB - 160 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 }

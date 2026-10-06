@@ -57,6 +57,18 @@ Bots get smarter, stronger and fancier as your trophy count goes up.
 - **Shop: Brawlers**: unlock the four new brawlers.
 - **Brawlers screen**: pick a brawler and upgrade its power level (1 to 7, +6% health and damage per level).
 
+### Coin store (real money)
+
+The shop's **COINS** tab sells five coin packs (500 to 15,000 coins, $0.99 to $14.99).
+Product ids: `coins_500`, `coins_1200`, `coins_2800`, `coins_6500`, `coins_15000`.
+
+Google Play Billing is **not integrated yet**: `MainActivity.launchPurchase` returns false, so the
+game shows a simulated test checkout (clearly marked TEST MODE, no money is charged). To go live:
+add the Play Billing library, create the products above in the Play Console, start the purchase
+flow in `launchPurchase`, and call `game.onPurchaseResult(productId, true)` after the purchase is
+verified and consumed. Remove the test checkout before publishing.
+
+
 ### Settings
 
 Sound, vibration, damage numbers, graphics quality (high/low), auto-aim on tap, left-handed controls,
@@ -88,15 +100,15 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-1.7.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-1.7.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-1.8.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-1.8.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**
 Google Play needs the same key for every update. To use your own key:
 
 ```bash
-KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=9 VERSION_NAME=1.8 ./build.sh
+KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=10 VERSION_NAME=1.9 ./build.sh
 ```
 
 The app targets API 36 and runs on Android 7.0 (API 24) and newer. It needs no permissions.

@@ -224,6 +224,14 @@ public final class MainActivity extends Activity implements Platform {
     }
 
     @Override
+    public boolean launchPurchase(String productId) {
+        // Google Play Billing is not integrated yet: the game falls back to its test checkout.
+        // To go live, start a BillingClient purchase flow here and call
+        // game.onPurchaseResult(productId, true) once the purchase is verified and consumed.
+        return false;
+    }
+
+    @Override
     public void vibrate(int millis) {
         if (view != null) {
             view.performHapticFeedback(millis > 100 ? HapticFeedbackConstants.LONG_PRESS : HapticFeedbackConstants.VIRTUAL_KEY);

@@ -66,7 +66,7 @@ final class BotBrain {
             if (o == me || !o.alive || !w.visibleTo(o, me)) continue;
             float d = MathUtil.dist(hx, hy, o.hx(), o.hy());
             if (d > 950) continue;
-            float score = d + (o.hp / o.maxHp) * 250f - (o == lastTarget ? 120 : 0) - (o == me.lastAttacker ? 150 : 0) + (o.isPlayer ? 260 : 0);
+            float score = d + (o.hp / o.maxHp) * 250f - (o == lastTarget ? 120 : 0) - (o == me.lastAttacker ? 150 : 0) + (o.isPlayer ? 340 : 0);
             if (score < bestScore) {
                 bestScore = score;
                 target = o;

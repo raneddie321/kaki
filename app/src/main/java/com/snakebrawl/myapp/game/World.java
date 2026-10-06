@@ -14,7 +14,7 @@ final class World {
     static final float ZONE_START = 25f;
     static final float ZONE_END = 205f;
     static final float REVEAL_DIST = 230f;
-    static final float PLAYER_DAMAGE_TAKEN = 0.55f;
+    static final float PLAYER_DAMAGE_TAKEN = 0.45f;
     static final float PLAYER_DAMAGE_DEALT = 1.3f;
 
     final Platform platform;
@@ -726,7 +726,7 @@ final class World {
                     if (a.bumpCooldown <= 0) {
                         float ang = MathUtil.angleTo(b.sx[j], b.sy[j], hx, hy);
                         a.bumpCooldown = 0.6f;
-                        hurt(a, a.maxHp * 0.3f / PLAYER_DAMAGE_TAKEN, b, hx, hy, ang, 600, CAUSE_CRASH);
+                        hurt(a, a.maxHp * 0.2f / PLAYER_DAMAGE_TAKEN, b, hx, hy, ang, 600, CAUSE_CRASH);
                         a.ang = a.targetAng = ang;
                         fx.burst(hx, hy, 12, 0xffffffff, 300, 7, 0.4f);
                     }
@@ -1561,6 +1561,7 @@ final class World {
         g.translate(-camX, -camY);
 
         drawGround(g, l, t, r, b, tt);
+        if (fancy) drawLightPatches(g, l, t, r, b, tt);
         drawDecals(g, l, t, r, b);
         drawAreas(g, l, t, r, b, tt);
         drawOrbs(g, l, t, r, b, tt);
@@ -1573,6 +1574,7 @@ final class World {
         // Like Brawl Stars, you can always see yourself inside a bush (faded)
         if (hidePlayer) drawSnake(g, player, 0.6f, l, t, r, b, tt);
         fx.draw(g, l, t, r, b);
+        if (fancy) drawAmbient(g, l, t, r, b, tt);
         drawLockOn(g, tt);
         drawLabels(g, l, t, r, b);
         drawAim(g);
@@ -1582,9 +1584,68 @@ final class World {
         Snake.shadows = false;
 
         if (fancy) {
+            // Warm sunlight from the top, cooler shade at the bottom
+            g.vertical(0, 0, w, h * 0.5f, 0x1cffe2a0, 0x00ffe2a0);
+            g.vertical(0, h * 0.55f, w, h, 0x00203060, 0x18203060);
             // Soft vignette pulls the eye to the centre
             float rad = (float) Math.sqrt(w * w + h * h) * 0.62f;
             g.radial(w / 2, h / 2, rad, 0x00000000, 0x70000018);
+        }
+    }
+
+    /** Big soft sun-dapples and shadows that break up the tiled ground. */
+    private void drawLightPatches(Gfx g, float l, float t, float r, float b, float tt) {
+        float cell = T * 6;
+        int x0 = (int) Math.floor((l - cell) / cell), x1 = (int) Math.floor((r + cell) / cell);
+        int y0 = (int) Math.floor((t - cell) / cell), y1 = (int) Math.floor((b + cell) / cell);
+        for (int cy = y0; cy <= y1; cy++) {
+            for (int cx = x0; cx <= x1; cx++) {
+                int h = hash(cx * 31 + 7, cy * 17 + 3);
+                float x = (cx + 0.5f) * cell + ((h & 63) - 32) * 3f, y = (cy + 0.5f) * cell + (((h >>> 6) & 63) - 32) * 3f;
+                if (x < -100 || y < -100 || x > size + 100 || y > size + 100) continue;
+                float rad = cell * (0.45f + ((h >>> 12) & 15) / 40f);
+                if ((h & 0x10000) != 0) g.radial(x, y, rad, 0x22fff4c8, 0x00fff4c8);
+                else g.radial(x, y, rad, 0x16301a00, 0x00301a00);
+            }
+        }
+        // Sparkles on the water around the island
+        for (int k = 0; k < 26; k++) {
+            int h = hash(k * 13 + 1, (int) (tt * 0.5f) + k * 7);
+            float x = l + ((h & 1023) / 1023f) * (r - l), y = t + (((h >>> 10) & 1023) / 1023f) * (b - t);
+            if (x > -40 && y > -40 && x < size + 40 && y < size + 40) continue;
+            float tw = MathUtil.sin((tt * 0.5f % 1f) * MathUtil.PI);
+            float s = 10f * tw;
+            g.color(MathUtil.withAlpha(0xffffffff, 0.8f * tw));
+            g.line(x - s, y, x + s, y, 2.5f);
+            g.line(x, y - s, x, y + s, 2.5f);
+        }
+    }
+
+    /** Floating pollen and drifting leaves for atmosphere. */
+    private void drawAmbient(Gfx g, float l, float t, float r, float b, float tt) {
+        float wdt = r - l, hgt = b - t;
+        for (int k = 0; k < 34; k++) {
+            float sp = 14f + (k % 5) * 6f;
+            float fx0 = ((k * 0.6180339f) % 1f) * wdt * 1.4f + tt * sp;
+            float fy0 = ((k * 0.3819660f) % 1f) * hgt * 1.4f + tt * sp * 0.35f;
+            float x = l + (((fx0 + camX * 0.15f) % (wdt * 1.2f)) + wdt * 1.2f) % (wdt * 1.2f) - wdt * 0.1f;
+            float y = t + (((fy0 + camY * 0.15f) % (hgt * 1.2f)) + hgt * 1.2f) % (hgt * 1.2f) - hgt * 0.1f
+                    + MathUtil.sin(tt * 1.3f + k) * 18f;
+            if (k % 6 == 0) {
+                // Leaf
+                float a = tt * (1.5f + k % 3) + k;
+                g.color(0xcc6ab84a);
+                g.save();
+                g.translate(x, y);
+                g.rotate((float) Math.toDegrees(a));
+                g.fillRoundRect(-9, -4, 9, 4, 4);
+                g.color(0xaa3f8a2e);
+                g.line(-8, 0, 8, 0, 1.5f);
+                g.restore();
+            } else {
+                float tw = 0.5f + 0.5f * MathUtil.sin(tt * 3f + k * 1.7f);
+                g.radial(x, y, 9f + 4f * tw, MathUtil.withAlpha(0xfffff0b0, 0.5f * tw + 0.2f), 0x00fff0b0);
+            }
         }
     }
 

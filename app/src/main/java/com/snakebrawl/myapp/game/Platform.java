@@ -28,4 +28,11 @@ public interface Platform {
     void saveInt(String key, int value);
 
     void vibrate(int millis);
+
+    /**
+     * Starts a real store purchase (Google Play Billing) and reports back through
+     * {@link Game#onPurchaseResult}. Returns false if real billing is not available, in which
+     * case the game shows its simulated test checkout instead.
+     */
+    boolean launchPurchase(String productId);
 }

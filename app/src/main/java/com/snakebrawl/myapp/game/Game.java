@@ -6,7 +6,8 @@ public final class Game {
     private static final float STEP = 1f / 60f;
 
     static final int B_PLAY = 1, B_MODE = 2, B_BRAWLERS = 3, B_SHOP = 4, B_SETTINGS = 5, B_BACK = 6,
-            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_YES = 90, B_NO = 91, B_OK = 92;
+            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_YES = 90, B_NO = 91, B_OK = 92,
+            B_SHEET_BUY = 93, B_SHEET_CANCEL = 94;
 
     // Popup actions confirmed with YES
     static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
@@ -84,6 +85,11 @@ public final class Game {
             public void vibrate(int millis) {
                 if (profile.vibration) host.vibrate(millis);
             }
+
+            @Override
+            public boolean launchPurchase(String productId) {
+                return host.launchPurchase(productId);
+            }
         };
         meta = new MetaScreens(this);
         newDemo();
@@ -131,11 +137,200 @@ public final class Game {
         return screen;
     }
 
+    // ------------------------------------------------------------------ coin purchases
+
+    /** Simulated checkout sheet: -1 closed, else the coin pack being bought. */
+    int sheetPack = -1;
+    private int sheetPhase; // 0 confirm, 1 processing, 2 done
+    private float sheetTime, sheetPhaseTime;
+    private boolean sheetClosing;
+
+    // Coins flying into the coin counter after a purchase
+    private static final int FLY = 24;
+    private final float[] flyX = new float[FLY], flyY = new float[FLY], flyT = new float[FLY];
+    private int flyCount;
+    private float fade;
+
+    /** Starts buying a coin pack: real Play Billing if the host supports it, else the test checkout. */
+    void startPurchase(int pack) {
+        if (host.launchPurchase(CoinStore.PRODUCT_IDS[pack])) return;
+        sheetPack = pack;
+        sheetPhase = 0;
+        sheetTime = 0;
+        sheetPhaseTime = 0;
+        sheetClosing = false;
+        ui.cancel();
+        layout();
+    }
+
+    /** Called by the host when a real purchase finishes (or by the test checkout). */
+    public void onPurchaseResult(String productId, boolean success) {
+        int pack = CoinStore.indexOf(productId);
+        if (!success || pack < 0) return;
+        profile.coins += CoinStore.COINS[pack];
+        profile.save();
+        gated.playSound(Platform.SND_VICTORY, 0.8f);
+        for (int i = 0; i < FLY; i++) {
+            flyX[i] = w / 2 + MathUtil.rand(-160, 160) * u;
+            flyY[i] = h / 2 + MathUtil.rand(-90, 90) * u;
+            flyT[i] = -i * 0.035f;
+        }
+        flyCount = FLY;
+        layout();
+    }
+
+    private void updateSheet(float dt) {
+        if (sheetPack >= 0) {
+            sheetTime += dt;
+            sheetPhaseTime += dt;
+            if (sheetPhase == 1 && sheetPhaseTime > 1.4f) {
+                sheetPhase = 2;
+                sheetPhaseTime = 0;
+                gated.playSound(Platform.SND_POWER, 1f);
+            } else if (sheetPhase == 2 && sheetPhaseTime > 1.1f && !sheetClosing) {
+                String id = CoinStore.PRODUCT_IDS[sheetPack];
+                closeSheet();
+                onPurchaseResult(id, true);
+            }
+            if (sheetClosing && sheetPhaseTime > 0.25f) {
+                sheetPack = -1;
+                layout();
+            }
+        }
+        for (int i = 0; i < flyCount; i++) flyT[i] += dt;
+        if (flyCount > 0 && flyT[flyCount - 1] > 1.2f) flyCount = 0;
+        if (fade > 0) fade = Math.max(0, fade - dt * 3.5f);
+    }
+
+    private void closeSheet() {
+        sheetClosing = true;
+        sheetPhaseTime = 0;
+        ui.cancel();
+    }
+
+    private void sheetButton(int id) {
+        if (sheetClosing || sheetPhase != 0) return;
+        if (id == B_SHEET_BUY) {
+            sheetPhase = 1;
+            sheetPhaseTime = 0;
+            layout();
+        } else if (id == B_SHEET_CANCEL) {
+            closeSheet();
+        }
+    }
+
+    private float sheetTop() {
+        float sh = Math.min(560 * u, h * 0.62f);
+        float k = sheetClosing ? 1f - Math.min(1f, sheetPhaseTime / 0.25f) : Math.min(1f, sheetTime / 0.28f);
+        k = 1f - (1f - k) * (1f - k) * (1f - k);
+        return h - sh * k;
+    }
+
+    private void renderSheet(Gfx g) {
+        float sw = Math.min(1100 * u, w - padL - padR);
+        float sl = (w - sw) / 2, sr = sl + sw;
+        float top = sheetTop();
+        float k = sheetClosing ? 1f - Math.min(1f, sheetPhaseTime / 0.25f) : Math.min(1f, sheetTime / 0.28f);
+        g.color(MathUtil.withAlpha(0x99000000, k));
+        g.fillRect(0, 0, w, h);
+        // Sheet body
+        g.color(0x55000000);
+        g.fillRoundRect(sl, top - 8 * u, sr, h + 60 * u, 36 * u);
+        g.color(0xfffbfbfe);
+        g.fillRoundRect(sl, top, sr, h + 60 * u, 32 * u);
+        g.color(0xffd0d4dc);
+        g.fillRoundRect(w / 2 - 50 * u, top + 16 * u, w / 2 + 50 * u, top + 26 * u, 5 * u);
+        float pad = 50 * u;
+        int pack = sheetPack;
+        // Header: app icon, app and item names, price
+        float iy = top + 60 * u;
+        g.color(0xff3a2fb0);
+        g.fillRoundRect(sl + pad, iy, sl + pad + 110 * u, iy + 110 * u, 26 * u);
+        g.radial(sl + pad + 55 * u, iy + 55 * u, 60 * u, 0x55ffd23f, 0x00ffd23f);
+        ui.coin(g, sl + pad + 55 * u, iy + 55 * u, 70 * u);
+        g.color(0xff202124);
+        g.text(CoinStore.format(CoinStore.COINS[pack]) + " Coins", sl + pad + 140 * u, iy + 46 * u, 46 * u, Gfx.ALIGN_LEFT, 0, 0);
+        g.color(0xff5f6368);
+        g.text("Snake Brawl  •  " + CoinStore.NAMES[pack], sl + pad + 140 * u, iy + 92 * u, 32 * u, Gfx.ALIGN_LEFT, 0, 0);
+        g.color(0xff202124);
+        g.text(CoinStore.PRICES[pack], sr - pad, iy + 46 * u, 46 * u, Gfx.ALIGN_RIGHT, 0, 0);
+        g.color(0xff5f6368);
+        g.text("+ tax if applicable", sr - pad, iy + 92 * u, 26 * u, Gfx.ALIGN_RIGHT, 0, 0);
+        float dy = iy + 140 * u;
+        g.color(0xffe3e5ea);
+        g.fillRect(sl + pad, dy, sr - pad, dy + 3 * u);
+        // Payment method row
+        float py = dy + 30 * u;
+        g.color(0xffe8f0fe);
+        g.fillRoundRect(sl + pad, py, sl + pad + 92 * u, py + 62 * u, 12 * u);
+        g.color(0xff1a73e8);
+        g.fillRoundRect(sl + pad + 14 * u, py + 14 * u, sl + pad + 78 * u, py + 48 * u, 6 * u);
+        g.color(0xfffbbc04);
+        g.fillRoundRect(sl + pad + 22 * u, py + 22 * u, sl + pad + 38 * u, py + 34 * u, 3 * u);
+        g.color(0xff202124);
+        g.text("Test card  •••• 4242", sl + pad + 115 * u, py + 30 * u, 32 * u, Gfx.ALIGN_LEFT, 0, 0);
+        g.color(0xff5f6368);
+        g.text("Simulated payment method", sl + pad + 115 * u, py + 62 * u, 26 * u, Gfx.ALIGN_LEFT, 0, 0);
+        // Test mode notice
+        float ny = py + 92 * u;
+        g.color(0xfffff4e0);
+        g.fillRoundRect(sl + pad, ny, sr - pad, ny + 56 * u, 14 * u);
+        g.color(0xffb06000);
+        g.text("TEST MODE: no real money is charged", w / 2, ny + 38 * u, 28 * u, Gfx.ALIGN_CENTER, 0, 0);
+
+        float by = ny + 80 * u;
+        float bh = 100 * u;
+        if (sheetPhase == 0) {
+            Ui.Btn b = ui.find(B_SHEET_BUY);
+            boolean pr = b != null && ui.pressed == B_SHEET_BUY;
+            g.color(pr ? 0xff1557b0 : 0xff1a73e8);
+            g.fillRoundRect(sl + pad, by, sr - pad, by + bh, bh / 2);
+            g.color(0xffffffff);
+            g.text("Buy  " + CoinStore.PRICES[pack], w / 2, by + bh * 0.64f, 44 * u, Gfx.ALIGN_CENTER, 0, 0);
+        } else if (sheetPhase == 1) {
+            float cx = w / 2, cy = by + bh / 2;
+            g.color(0xffe3e5ea);
+            g.strokeCircle(cx - 170 * u, cy, 28 * u, 8 * u);
+            g.color(0xff1a73e8);
+            g.arc(cx - 170 * u, cy, 28 * u, clock * 400f, 100, 8 * u);
+            g.color(0xff202124);
+            g.text("Processing payment...", cx - 120 * u, cy + 14 * u, 38 * u, Gfx.ALIGN_LEFT, 0, 0);
+        } else {
+            float cx = w / 2, cy = by + bh / 2;
+            float pop = Math.min(1f, sheetPhaseTime / 0.2f);
+            g.color(0xff1e8e3e);
+            g.fillCircle(cx - 190 * u, cy, 34 * u * pop);
+            g.color(0xffffffff);
+            g.line(cx - 206 * u, cy, cx - 194 * u, cy + 12 * u, 7 * u * pop);
+            g.line(cx - 194 * u, cy + 12 * u, cx - 172 * u, cy - 12 * u, 7 * u * pop);
+            g.color(0xff1e8e3e);
+            g.text("Payment successful", cx - 135 * u, cy + 14 * u, 40 * u, Gfx.ALIGN_LEFT, 0, 0);
+        }
+    }
+
+    private void renderCoinFly(Gfx g) {
+        if (flyCount == 0) return;
+        float tx = padL + 290 * u + 68 * u, ty = padT + 14 * u + 45 * u;
+        if (screen == SHOP || screen == BRAWLERS) {
+            tx = w - padR - 120 * u;
+            ty = padT + 56 * u;
+        }
+        for (int i = 0; i < flyCount; i++) {
+            float t = flyT[i];
+            if (t < 0 || t > 1f) continue;
+            float e = t * t * (3 - 2 * t);
+            float x = flyX[i] + (tx - flyX[i]) * e;
+            float y = flyY[i] + (ty - flyY[i]) * e - MathUtil.sin(t * MathUtil.PI) * 160 * u;
+            ui.coin(g, x, y, 54 * u * (1f - 0.4f * e));
+        }
+    }
+
     /** Advances the game without drawing (also used by the desktop test harness). */
     void tick(float dt) {
         clock += dt;
         screenTime += dt;
         popTime += dt;
+        updateSheet(dt);
         ui.update(dt);
         update(dt);
     }
@@ -152,6 +347,10 @@ public final class Game {
 
     /** Returns true if the back press was handled. */
     public boolean onBack() {
+        if (sheetPack >= 0) {
+            if (sheetPhase == 0) closeSheet();
+            return true;
+        }
         if (popup) {
             closePopup();
             return true;
@@ -179,6 +378,7 @@ public final class Game {
     // ------------------------------------------------------------------ flow
 
     void setScreen(int s) {
+        if (s != screen) fade = 0.55f;
         screen = s;
         screenTime = 0;
         ui.cancel();
@@ -562,6 +762,10 @@ public final class Game {
     }
 
     private void onButton(int id) {
+        if (sheetPack >= 0) {
+            sheetButton(id);
+            return;
+        }
         if (popup) {
             popupButton(id);
             return;
@@ -638,6 +842,18 @@ public final class Game {
         mapY = padT;
 
         ui.clear();
+        if (sheetPack >= 0) {
+            if (sheetPhase == 0) {
+                ui.add(B_SHEET_CANCEL, 0, 0, w, h, null, null, 0);
+                float sw = Math.min(1100 * u, w - padL - padR);
+                float sl = (w - sw) / 2;
+                float sh = Math.min(560 * u, h * 0.62f);
+                ui.add(B_SHEET_BUY - 1000, sl, h - sh, sl + sw, h, null, null, 0); // swallows taps on the sheet
+                float by = h - sh + 60 * u + 140 * u + 30 * u + 92 * u + 80 * u;
+                ui.add(B_SHEET_BUY, sl + 50 * u, by, sl + sw - 50 * u, by + 100 * u, null, null, 0);
+            }
+            return;
+        }
         if (popup) {
             float cx = w / 2, by = h / 2 - 30 * u + 300 * u - 40 * u;
             if (popConfirm) {
@@ -705,6 +921,12 @@ public final class Game {
                 break;
         }
         if (popup) renderPopup(g);
+        if (sheetPack >= 0) renderSheet(g);
+        renderCoinFly(g);
+        if (fade > 0) {
+            g.color(MathUtil.withAlpha(0xff05060f, fade));
+            g.fillRect(0, 0, w, h);
+        }
     }
 
     private void drawGear(Gfx g, float x, float y, float s) {
@@ -789,9 +1011,35 @@ public final class Game {
         g.text("LVL " + profile.levels[b.id], pr - 30 * u, pt + 64 * u, 38 * u, Gfx.ALIGN_RIGHT, 5 * u, 0xff0e1024);
         ui.snakeArt(g, b, profile.palette(), (pl + pr) / 2, pt + 165 * u, 1.45f * u, clock);
 
+        Ui.Btn playBtn = ui.find(B_PLAY);
+        if (playBtn != null && !profile.lowGraphics) {
+            float p = 0.5f + 0.5f * MathUtil.sin(clock * 3.5f);
+            g.radial((playBtn.l + playBtn.r) / 2, (playBtn.t + playBtn.b) / 2, (playBtn.r - playBtn.l) * (0.7f + 0.1f * p),
+                    MathUtil.withAlpha(0xffffd23f, 0.35f + 0.25f * p), 0x00ffd23f);
+        }
         for (int i = 0; i < ui.count; i++) {
             Ui.Btn bt = ui.btns[i];
             ui.button(g, bt);
+            if (bt.id == B_PLAY && !profile.lowGraphics) {
+                // Shine sweeping across the PLAY button
+                float sweep = (clock * 0.6f) % 1.6f;
+                if (sweep < 1f) {
+                    float sx = bt.l + (bt.r - bt.l) * sweep;
+                    g.save();
+                    g.clip(bt.l, bt.t, bt.r, bt.b - 12 * u);
+                    g.color(0x55ffffff);
+                    poly[0] = sx - 40 * u;
+                    poly[1] = bt.b;
+                    poly[2] = sx + 10 * u;
+                    poly[3] = bt.b;
+                    poly[4] = sx + 70 * u;
+                    poly[5] = bt.t;
+                    poly[6] = sx + 20 * u;
+                    poly[7] = bt.t;
+                    g.fillPoly(poly, 4);
+                    g.restore();
+                }
+            }
             if (bt.id == B_SETTINGS) drawGear(g, (bt.l + bt.r) / 2, (bt.t + bt.b) / 2 - 4 * u, 70 * u);
             if (bt.id == B_SHOP && profile.giftReady()) {
                 float bx = bt.r - 6 * u, by = bt.t + 6 * u;
@@ -974,10 +1222,14 @@ public final class Game {
         boolean ready = p.superReady();
         float pulse = ready ? 1f + 0.06f * MathUtil.sin(clock * 9f) : 1f;
         float sr = supR * pulse;
+        if (ready) g.radial(supCX, supCY, sr * 2.1f, 0xaaffd23f, 0x00ffd23f);
         g.color(0xff14142a);
         g.fillCircle(supCX, supCY, sr + 6 * u);
-        g.color(ready ? 0xffffc928 : 0xff4a4a62);
-        g.fillCircle(supCX, supCY, sr);
+        if (ready) g.radial(supCX - sr * 0.2f, supCY - sr * 0.25f, sr * 1.1f, 0xfffff2a8, 0xffffb020);
+        else {
+            g.color(0xff4a4a62);
+            g.fillCircle(supCX, supCY, sr);
+        }
         if (!ready) {
             g.color(0xffffc928);
             g.arc(supCX, supCY, sr - 6 * u, -90, 360 * p.superCharge, 10 * u);
@@ -1140,6 +1392,21 @@ public final class Game {
         g.color(0xaa0a0c22);
         g.fillRect(0, 0, w, h);
         float t = Math.min(1f, screenTime * 3f);
+        if (resWin) {
+            // Confetti shower
+            int[] cols = {0xffffd23f, 0xff4ad04a, 0xff3fa0ff, 0xffff5ab5, 0xffb35cff, 0xffff7a2a};
+            for (int k = 0; k < 70; k++) {
+                float sp = 120f + (k % 7) * 30f;
+                float x = ((k * 0.6180339f) % 1f) * w + MathUtil.sin(clock * 2f + k) * 30 * u;
+                float y = ((((k * 0.3819660f) % 1f) * h + clock * sp * u) % (h + 40 * u)) - 20 * u;
+                g.save();
+                g.translate(x, y);
+                g.rotate(clock * (90 + k * 7));
+                g.color(cols[k % cols.length]);
+                g.fillRect(-8 * u, -4 * u, 8 * u, 4 * u);
+                g.restore();
+            }
+        }
         float cx = w / 2;
         String title;
         int tc;
