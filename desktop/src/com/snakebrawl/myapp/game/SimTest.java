@@ -77,6 +77,7 @@ public final class SimTest {
 
     public static void main(String[] args) throws Exception {
         String cmd = args.length > 0 ? args[0] : "balance";
+        Game.showSplash = false;
         switch (cmd) {
             case "balance":
                 balance(args.length > 1 ? Integer.parseInt(args[1]) : 10);
@@ -365,6 +366,19 @@ public final class SimTest {
         pf.prefs.put("skin", 18);
         pf.prefs.put("lvl0", 4);
         pf.prefs.put("brawler", 2);
+        Game.showSplash = true;
+        Game sp = new Game(new DesktopPlatform());
+        sp.resize(width, height);
+        run(sp, 0.25f);
+        shot(sp, font, width, height, outDir + "/00a_splash_start.png");
+        run(sp, 1.3f);
+        shot(sp, font, width, height, outDir + "/00b_splash.png");
+        run(sp, 1.2f);
+        shot(sp, font, width, height, outDir + "/00c_splash_fade.png");
+        run(sp, 0.5f);
+        if (sp.splash > 0) throw new IllegalStateException("splash did not end");
+        Game.showSplash = false;
+
         // First launch: nickname and age
         DesktopPlatform fresh = new DesktopPlatform();
         fresh.prefs.remove("onboarded");

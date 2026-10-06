@@ -32,6 +32,10 @@ public final class Game {
     World demo;
     private float acc;
     float clock;
+    /** Studio splash shown on start-up; tests turn it off. */
+    static boolean showSplash = true;
+    static final float SPLASH_TIME = 3f;
+    float splash = showSplash ? SPLASH_TIME : 0;
 
     private boolean paused;
     private float endTimer = -1;
@@ -351,6 +355,10 @@ public final class Game {
     /** Advances the game without drawing (also used by the desktop test harness). */
     void tick(float dt) {
         clock += dt;
+        if (splash > 0) {
+            splash = Math.max(0, splash - dt);
+            if (splash > 0) return;
+        }
         screenTime += dt;
         popTime += dt;
         updateSheet(dt);
@@ -370,6 +378,7 @@ public final class Game {
 
     /** Returns true if the back press was handled. */
     public boolean onBack() {
+        if (splash > 0) return true;
         if (sheetPack >= 0) {
             if (sheetPhase == 0) closeSheet();
             return true;
@@ -707,6 +716,7 @@ public final class Game {
     }
 
     public void touchDown(int id, float x, float y) {
+        if (splash > 0) return;
         if (screen == PLAY && !paused && endTimer < 0 && !popup) {
             if (MathUtil.dist2(x, y, pauseX, pauseY) < (pauseR * 1.5f) * (pauseR * 1.5f)) {
                 pausePtr = id;
@@ -975,6 +985,82 @@ public final class Game {
 
     // ------------------------------------------------------------------ render
 
+    private void renderSplash(Gfx g) {
+        float t = SPLASH_TIME - splash;
+        float alpha = MathUtil.clamp(splash / 0.45f, 0, 1);
+        int a = (int) (alpha * 255) << 24;
+        g.vertical(0, 0, w, h, (0xff1a1450 & 0xffffff) | a, (0xff06071a & 0xffffff) | a);
+        if (alpha <= 0) return;
+        float cx = w / 2, cy = h * 0.42f;
+        float pop = MathUtil.clamp(t / 0.5f, 0, 1);
+        float sc = pop < 1 ? 0.6f + 0.5f * pop - 0.1f * pop * pop : 1f;
+        g.radial(cx, cy, 520 * u, MathUtil.withAlpha(0xffffc94a, 0.28f * alpha), 0x00ffc94a);
+        // Rotating rays
+        g.save();
+        g.translate(cx, cy);
+        g.rotate(clock * 14f);
+        g.color(MathUtil.withAlpha(0xffffffff, 0.05f * alpha));
+        float[] ray = splashRay;
+        for (int k = 0; k < 12; k++) {
+            float a0 = k * MathUtil.TAU / 12f;
+            ray[0] = 0;
+            ray[1] = 0;
+            ray[2] = MathUtil.cos(a0 - 0.1f) * 900 * u;
+            ray[3] = MathUtil.sin(a0 - 0.1f) * 900 * u;
+            ray[4] = MathUtil.cos(a0 + 0.1f) * 900 * u;
+            ray[5] = MathUtil.sin(a0 + 0.1f) * 900 * u;
+            g.fillPoly(ray, 3);
+        }
+        g.restore();
+        g.save();
+        g.translate(cx, cy);
+        g.scale(sc);
+        g.translate(-cx, -cy);
+        // Emblem: a coiled snake in a golden ring
+        float er = 120 * u;
+        g.color(MathUtil.withAlpha(Ui.INK, alpha));
+        g.fillCircle(cx, cy - 150 * u, er + 12 * u);
+        g.radial(cx, cy - 170 * u, er, MathUtil.withAlpha(0xffffe27a, alpha), MathUtil.withAlpha(0xffe09a12, alpha));
+        g.color(MathUtil.withAlpha(0xff2a1a5c, alpha));
+        g.fillCircle(cx, cy - 150 * u, er * 0.8f);
+        for (int k = 0; k < 14; k++) {
+            float ang = clock * 2.2f + k * 0.42f;
+            float rr = er * (0.55f - k * 0.022f);
+            float sx = cx + MathUtil.cos(ang) * rr, sy = cy - 150 * u + MathUtil.sin(ang) * rr;
+            g.color(MathUtil.withAlpha(k % 2 == 0 ? 0xff5be05b : 0xff38b838, alpha));
+            g.fillCircle(sx, sy, (16 - k * 0.6f) * u);
+            if (k == 0) {
+                g.color(MathUtil.withAlpha(0xffffffff, alpha));
+                g.fillCircle(sx, sy - 5 * u, 6 * u);
+                g.color(MathUtil.withAlpha(0xff14142a, alpha));
+                g.fillCircle(sx, sy - 5 * u, 3 * u);
+            }
+        }
+        g.color(MathUtil.withAlpha(0xffffd23f, alpha));
+        g.text("RanEddie", cx, cy + 90 * u, 150 * u, Gfx.ALIGN_CENTER, 14 * u, MathUtil.withAlpha(Ui.INK, alpha));
+        float gl = MathUtil.clamp((t - 0.45f) / 0.4f, 0, 1);
+        g.color(MathUtil.withAlpha(0xffffffff, alpha * gl));
+        g.text("G A M E S", cx, cy + 175 * u, 64 * u, Gfx.ALIGN_CENTER, 8 * u, MathUtil.withAlpha(Ui.INK, alpha * gl));
+        g.restore();
+        // Loading bar
+        float bw = 520 * u, by = h * 0.86f;
+        float prog = MathUtil.clamp(t / (SPLASH_TIME - 0.5f), 0, 1);
+        g.color(MathUtil.withAlpha(Ui.INK, alpha));
+        g.fillRoundRect(cx - bw / 2 - 6 * u, by - 6 * u, cx + bw / 2 + 6 * u, by + 30 * u, 18 * u);
+        g.color(MathUtil.withAlpha(0xff2a2e5a, alpha));
+        g.fillRoundRect(cx - bw / 2, by, cx + bw / 2, by + 24 * u, 12 * u);
+        if (prog > 0.03f) {
+            g.color(MathUtil.withAlpha(0xffffc928, alpha));
+            g.fillRoundRect(cx - bw / 2, by, cx - bw / 2 + bw * prog, by + 24 * u, 12 * u);
+            g.color(MathUtil.withAlpha(0x66ffffff, alpha));
+            g.fillRoundRect(cx - bw / 2 + 6 * u, by + 4 * u, cx - bw / 2 + bw * prog - 6 * u, by + 10 * u, 4 * u);
+        }
+        g.color(MathUtil.withAlpha(0xffb8bdf0, alpha));
+        g.text(prog < 1 ? "LOADING..." : "READY!", cx, by + 80 * u, 34 * u, Gfx.ALIGN_CENTER, 4 * u, MathUtil.withAlpha(Ui.INK, alpha));
+    }
+
+    private final float[] splashRay = new float[6];
+
     private void render(Gfx g) {
         switch (screen) {
             case PLAY:
@@ -1003,6 +1089,7 @@ public final class Game {
         if (popup) renderPopup(g);
         if (sheetPack >= 0) renderSheet(g);
         renderCoinFly(g);
+        if (splash > 0) renderSplash(g);
         if (fade > 0) {
             g.color(MathUtil.withAlpha(0xff05060f, fade));
             g.fillRect(0, 0, w, h);
