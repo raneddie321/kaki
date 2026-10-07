@@ -63,6 +63,7 @@ public final class MainActivity extends Activity implements Platform {
         root.addView(view, new android.widget.FrameLayout.LayoutParams(
                 android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
+        startBilling();
         hideSystemUi();
         registerBackCallback();
     }
@@ -202,6 +203,7 @@ public final class MainActivity extends Activity implements Platform {
     @Override
     protected void onDestroy() {
         if (netLink != null) netLink.destroy();
+        if (billing != null) billing.destroy();
         if (pool != null) {
             pool.release();
             pool = null;
@@ -322,10 +324,45 @@ public final class MainActivity extends Activity implements Platform {
 
     @Override
     public boolean launchPurchase(String productId) {
-        // Google Play Billing is not integrated yet: the game falls back to its test checkout.
-        // To go live, start a BillingClient purchase flow here and call
-        // game.onPurchaseResult(productId, true) once the purchase is verified and consumed.
-        return false;
+        return billing != null && billing.launch(productId);
+    }
+
+    private PlayBilling billing;
+
+    /** Connects Google Play Billing; the coin store appears once the coin products are found. */
+    private void startBilling() {
+        billing = new PlayBilling(getApplicationContext(), this, game.coinProductIds(), new PlayBilling.Listener() {
+            @Override
+            public void onAvailable(boolean available) {
+                game.setCoinStoreAvailable(available);
+            }
+
+            @Override
+            public void onPrice(String productId, String formattedPrice) {
+                game.setPrice(productId, formattedPrice);
+            }
+
+            @Override
+            public boolean grantOnce(String token, String productId, int quantity) {
+                // Purchase tokens already granted are remembered, so a retried consume never pays twice
+                String key = productId + ":" + token;
+                String done = prefs.getString("grantedPurchases", "");
+                if (("\n" + done + "\n").contains("\n" + key + "\n")) return true;
+                String next = done.isEmpty() ? key : done + "\n" + key;
+                // Keep the list short: only the most recent purchases can still be retried
+                String[] parts = next.split("\n");
+                if (parts.length > 50) next = next.substring(next.indexOf('\n') + 1);
+                if (!prefs.edit().putString("grantedPurchases", next).commit()) return false;
+                game.grantPurchase(productId, quantity);
+                return true;
+            }
+
+            @Override
+            public void onPurchaseFailed(String productId, boolean cancelled) {
+                game.onPurchaseFailed(productId, cancelled);
+            }
+        });
+        billing.start();
     }
 
     @Override

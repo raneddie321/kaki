@@ -678,17 +678,25 @@ public final class SimTest {
         shot(kn, font, width, height, outDir + "/0f_friends_young.png");
         Game again = new Game(fresh);
         if (again.screenId() != Game.MENU) throw new IllegalStateException("onboarding shown twice");
-        // Under 13: purchases are blocked
         again.resize(width, height);
         tapBtn(again, Game.B_SHOP);
-        if (again.ui.find(303) != null) throw new IllegalStateException("COINS tab visible without a real store");
-        // The rest of the screenshot run covers the (test-only) coin store too
-        Game.coinStoreEnabled = true;
-        again.layout();
+        if (again.ui.find(303) != null) throw new IllegalStateException("COINS tab visible without billing");
+        // Billing ready: the COINS tab appears, with Google Play's prices
+        again.setCoinStoreAvailable(true);
+        again.setPrice("coins_500", "\u20aa3.90");
         tapBtn(again, 303);
-        tapBtn(again, 351);
-        if (again.sheetPack >= 0) throw new IllegalStateException("under-13 checkout opened");
-        shot(again, font, width, height, outDir + "/0e_under13_blocked.png");
+        shot(again, font, width, height, outDir + "/0e_coins_live_prices.png");
+        // Without real billing and outside tests, tapping a pack must not fake a purchase
+        int coinsBefore = fresh.loadInt("coins", 0);
+        tapBtn(again, 350);
+        if (again.sheetPack >= 0 || fresh.loadInt("coins", 0) != coinsBefore) throw new IllegalStateException("fake checkout in release mode");
+        tapBtn(again, Game.B_OK);
+        // A real purchase result grants coins (any age)
+        again.grantPurchase("coins_1200", 2);
+        if (fresh.loadInt("coins", 0) != coinsBefore + 2400) throw new IllegalStateException("grant failed");
+        // The rest of the screenshot run covers the simulated checkout
+        Game.testCheckout = true;
+        CoinStore.PRICES[0] = "$0.99";
 
         pf.prefs.put("passSeason", SnakePass.currentSeason());
         pf.prefs.put("passXp", 1240);

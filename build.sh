@@ -11,10 +11,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION_CODE=${VERSION_CODE:-15}
-VERSION_NAME=${VERSION_NAME:-3.1}
+VERSION_CODE=${VERSION_CODE:-16}
+VERSION_NAME=${VERSION_NAME:-3.2}
 MIN_SDK=24
 TARGET_SDK=36
+# Package name on Google Play. (The Java code keeps its com.snakebrawl.myapp package.)
+APP_ID=${APP_ID:-com.snakebrawl.raneddie}
 
 SDK=${ANDROID_SDK:-/usr/lib/android-sdk}
 PLATFORM_JAR=${PLATFORM_JAR:-$(ls -d "$SDK"/platforms/android-*/android.jar 2>/dev/null | sort -V | tail -1)}
@@ -71,7 +73,33 @@ mkdir -p "$OUT/assets/net"
 cp -r app/src/main/assets/. "$OUT/assets/"
 cp web/static/vendor/peerjs.min.js web/static/sb-net.js "$OUT/assets/net/"
 
-LINK_FLAGS=(-I "$PLATFORM_JAR" --manifest app/src/main/AndroidManifest.xml -A "$OUT/assets"
+# Libraries: drop AARs or JARs into libs/ (e.g. Google Play Billing). Their classes are dexed in
+# and their manifests merged. Without the billing AAR the game simply hides the coin store.
+LIB_JARS=()
+LIB_MANIFESTS=()
+for lib in libs/*.aar libs/*.jar; do
+    [ -f "$lib" ] || continue
+    name=$(basename "$lib")
+    case "$lib" in
+        *.aar)
+            d="$OUT/aar/${name%.aar}"
+            mkdir -p "$d"
+            (cd "$d" && unzip -q -o "$OLDPWD/$lib")
+            [ -f "$d/classes.jar" ] && LIB_JARS+=("$d/classes.jar")
+            for j in "$d"/libs/*.jar; do [ -f "$j" ] && LIB_JARS+=("$j"); done
+            [ -f "$d/AndroidManifest.xml" ] && LIB_MANIFESTS+=("$d/AndroidManifest.xml")
+            if [ -d "$d/res" ] && [ -n "$(ls -A "$d/res")" ]; then
+                echo "warning: $name has resources, which this build does not merge" >&2
+            fi
+            ;;
+        *.jar) LIB_JARS+=("$lib") ;;
+    esac
+    echo "library: $name"
+done
+python3 tools/merge_manifest.py app/src/main/AndroidManifest.xml "$OUT/AndroidManifest.xml" "$APP_ID" ${LIB_MANIFESTS[@]+"${LIB_MANIFESTS[@]}"}
+
+LINK_FLAGS=(-I "$PLATFORM_JAR" --manifest "$OUT/AndroidManifest.xml" -A "$OUT/assets"
+    --rename-manifest-package "$APP_ID"
     --min-sdk-version "$MIN_SDK" --target-sdk-version "$TARGET_SDK"
     --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" -0 wav --auto-add-overlay)
 
@@ -89,11 +117,11 @@ javac -nowarn -Xlint:-options -source 8 -target 8 -encoding UTF-8 -bootclasspath
 
 echo "[4/6] Dexing"
 if command -v d8 >/dev/null 2>&1; then
-    d8 --release --min-api "$MIN_SDK" --lib "$PLATFORM_JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
+    d8 --release --min-api "$MIN_SDK" --lib "$PLATFORM_JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class') ${LIB_JARS[@]+"${LIB_JARS[@]}"}
 elif [ -x "$BT/d8" ]; then
-    "$BT/d8" --release --min-api "$MIN_SDK" --lib "$PLATFORM_JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
+    "$BT/d8" --release --min-api "$MIN_SDK" --lib "$PLATFORM_JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class') ${LIB_JARS[@]+"${LIB_JARS[@]}"}
 else
-    "$BT/dx" --dex --min-sdk-version="$MIN_SDK" --output="$OUT/dex/classes.dex" "$OUT/classes"
+    "$BT/dx" --dex --min-sdk-version="$MIN_SDK" --output="$OUT/dex/classes.dex" "$OUT/classes" ${LIB_JARS[@]+"${LIB_JARS[@]}"}
 fi
 
 echo "[5/6] Packaging APK"

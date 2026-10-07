@@ -168,10 +168,6 @@ final class Profile {
         return age >= ONLINE_AGE;
     }
 
-    boolean canPurchase() {
-        return age >= 13;
-    }
-
     String displayName() {
         return nickname == null || nickname.length() == 0 ? "You" : nickname;
     }

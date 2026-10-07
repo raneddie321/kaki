@@ -216,16 +216,39 @@ public final class Game {
      * Play Billing for digital goods, so the simulated test checkout must never ship. Tests turn it on.
      */
     static boolean coinStoreEnabled = false;
+    /** Desktop tests only: a simulated checkout when there is no real billing. Never on in the app. */
+    static boolean testCheckout = false;
+
+    /** Product ids of the coin packs, for the host's billing setup. */
+    public String[] coinProductIds() {
+        return CoinStore.PRODUCT_IDS.clone();
+    }
+
+    /** Called by the host when Google Play Billing is (or stops being) ready. */
+    public void setCoinStoreAvailable(boolean on) {
+        coinStoreEnabled = on;
+        layout();
+    }
+
+    /** Called by the host with Google Play's localized price for a coin pack. */
+    public void setPrice(String productId, String price) {
+        int i = CoinStore.indexOf(productId);
+        if (i >= 0 && price != null && price.length() > 0) CoinStore.PRICES[i] = price;
+    }
+
+    /** Called by the host when a purchase did not complete. */
+    public void onPurchaseFailed(String productId, boolean cancelled) {
+        if (!cancelled) showInfo("PURCHASE FAILED", "Google Play couldn't complete the purchase. You were not charged.", 0, 0);
+    }
 
     /** Starts buying a coin pack: real Play Billing if the host supports it, else the test checkout (tests only). */
     void startPurchase(int pack) {
         if (!coinStoreEnabled) return;
-        if (!profile.canPurchase()) {
-            showInfo("ASK A GROWN-UP", "Players under 13 can't buy coins. You can still earn lots of coins by playing, "
-                    + "getting knockouts and claiming free gifts!", 1, 0);
+        if (host.launchPurchase(CoinStore.PRODUCT_IDS[pack])) return;
+        if (!testCheckout) {
+            showInfo("STORE UNAVAILABLE", "Google Play isn't ready right now. Please try again in a moment.", 0, 0);
             return;
         }
-        if (host.launchPurchase(CoinStore.PRODUCT_IDS[pack])) return;
         sheetPack = pack;
         sheetPhase = 0;
         sheetTime = 0;
@@ -236,6 +259,11 @@ public final class Game {
     }
 
     /** Called by the host when a real purchase finishes (or by the test checkout). */
+    /** Called by the host for a verified, completed Google Play purchase. */
+    public void grantPurchase(String productId, int quantity) {
+        for (int i = 0; i < Math.max(1, quantity); i++) onPurchaseResult(productId, true);
+    }
+
     public void onPurchaseResult(String productId, boolean success) {
         int pack = CoinStore.indexOf(productId);
         if (!success || pack < 0) return;

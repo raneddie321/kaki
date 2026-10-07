@@ -3,7 +3,7 @@
 # Needs a JDK 11+ and Maven; TeaVM is fetched from Maven Central.
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION_NAME=${VERSION_NAME:-3.1}
+VERSION_NAME=${VERSION_NAME:-3.2}
 ROOT=..
 T=target
 rm -rf "$T/src" "$T/js" "$T/wasm"

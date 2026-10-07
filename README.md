@@ -112,6 +112,7 @@ The **SNAKE PASS** card on the main menu opens a 30-tier season pass. Seasons la
 ### Privacy and safety for younger players
 
 - First launch asks for the **age first**. Players under 13 pick a generated nickname (no free typing).
+- The package name is `com.snakebrawl.raneddie` (`APP_ID` in `build.sh`); the Java package stays `com.snakebrawl.myapp`.
 - **Online play is for ages 16+** (WebRTC lets the friend and the connection server see IP addresses);
   younger players can still use Wi-Fi play with a friend nearby.
 - Nothing is sent to a server we run; there are no ads, analytics or accounts. Settings has a
@@ -123,12 +124,13 @@ The **SNAKE PASS** card on the main menu opens a 30-tier season pass. Seasons la
 The shop's **COINS** tab sells five coin packs (500 to 15,000 coins, $0.99 to $14.99).
 Product ids: `coins_500`, `coins_1200`, `coins_2800`, `coins_6500`, `coins_15000`.
 
-Google Play Billing is **not integrated yet**, so the store is **switched off** in release builds
-(`Game.coinStoreEnabled = false`: no COINS tab). Play policy requires Play Billing for digital goods.
-To go live: add the Play Billing library, create the products above in the Play Console, start the
-purchase flow in `MainActivity.launchPurchase`, call `game.onPurchaseResult(productId, true)` after the
-purchase is verified and consumed, then set `coinStoreEnabled = true`. The simulated checkout is
-only used by the desktop tests.
+Purchases use **Google Play Billing** (`PlayBilling.java`, Billing Library 7/8 through reflection).
+Put the billing AAR (plus its dependencies) in `libs/` before `build.sh` (see `libs/README.md`); without
+it the coin store stays hidden. In the Play Console create the five products above as one-time,
+consumable in-app products. Coins are granted once per purchase token (saved on the device) and the
+purchase is then consumed; unfinished purchases are completed on the next start. Open to all ages:
+Google Play's parental controls handle purchase approval. There is no server-side receipt check.
+The simulated checkout exists only for the desktop tests.
 
 
 ### Settings
@@ -162,8 +164,8 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-3.1.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-3.1.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-3.2.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-3.2.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**
