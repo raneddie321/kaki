@@ -3,7 +3,7 @@
 # Needs a JDK 11+ and Maven; TeaVM is fetched from Maven Central.
 set -euo pipefail
 cd "$(dirname "$0")"
-VERSION_NAME=${VERSION_NAME:-3.0}
+VERSION_NAME=${VERSION_NAME:-3.1}
 ROOT=..
 T=target
 rm -rf "$T/src" "$T/js" "$T/wasm"
@@ -17,7 +17,7 @@ mvn -q -B package -DskipTests
 OUT="$ROOT/dist/web"
 rm -rf "$OUT"
 mkdir -p "$OUT/sounds"
-cp -r "$T/js/classes.js" "$T/wasm/classes.wasm" static/index.html static/sb.js static/sb-net.js static/wasm-runtime.js static/vendor \
+cp -r "$T/js/classes.js" "$T/wasm/classes.wasm" static/index.html static/sb.js static/sb-net.js static/wasm-runtime.js static/privacy.html static/vendor \
     static/manifest.json static/sw.js "$OUT/"
 sed -i "s/snakebrawl-v[0-9.]*/snakebrawl-v$VERSION_NAME/" "$OUT/sw.js"
 cp "$ROOT/app/src/main/assets/fonts/LilitaOne-Regular.ttf" "$ROOT/app/src/main/assets/fonts/OFL.txt" "$OUT/"

@@ -167,8 +167,8 @@ final class Brawler {
 
     static final String[] BOT_NAMES = {
             "Slinky", "NoodleKing", "Hissy", "Mamba", "Zigzag", "Coily", "Fangtastic",
-            "Sir Slither", "Wormzilla", "Boa Boss", "Kaa", "Sssam", "Rattler", "Python",
-            "Twisty", "Nagini", "Spaghetti", "Cobra Kai", "Danger Noodle", "Snek",
+            "Sir Slither", "Wormzilla", "Boa Boss", "Kazoo", "Sssam", "Rattler", "Python",
+            "Twisty", "Noodlina", "Spaghetti", "Cobra Kid", "Danger Noodle", "Snek",
             "Viperella", "Medusa", "Slippy", "Bitey", "Coilin", "Scales", "Venom",
             "Hiss Lord", "Lil Fang", "Tanglez",
     };

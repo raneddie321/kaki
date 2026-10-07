@@ -44,6 +44,22 @@ final class SocialScreens {
         return b.toString().trim();
     }
 
+    static String randomName() {
+        return NAME_A[MathUtil.randInt(NAME_A.length)] + NAME_B[MathUtil.randInt(NAME_B.length)] + MathUtil.randInt(100);
+    }
+
+    /** True for names made by {@link #randomName()}. */
+    static boolean isGeneratedName(String n) {
+        for (String a : NAME_A) {
+            if (!n.startsWith(a)) continue;
+            String rest = n.substring(a.length());
+            for (String b : NAME_B) {
+                if (rest.startsWith(b) && rest.substring(b.length()).matches("\\d{0,2}")) return true;
+            }
+        }
+        return false;
+    }
+
     private boolean nameValid() {
         return draftName.length() >= 2;
     }
@@ -55,18 +71,19 @@ final class SocialScreens {
         float cx = w / 2;
         if (game.screen == Game.ONBOARD) {
             float pt = h * 0.26f, pb = h - game.padB - 40 * u;
+            // Age comes first: younger players then pick a random name instead of typing one
             if (obStep == 0) {
-                ui.add(B_OB_NAME, cx - 420 * u, pt + 170 * u, cx + 420 * u, pt + 290 * u, null, null, 0);
-                ui.add(B_OB_RANDOM, cx - 200 * u, pt + 320 * u, cx + 200 * u, pt + 410 * u, "RANDOM NAME", null, 0xffb35cff);
-                Ui.Btn next = ui.add(B_OB_NEXT, cx - 240 * u, pb - 120 * u, cx + 240 * u, pb, "NEXT", null, 0xff4ad04a);
-                next.enabled = nameValid();
-            } else {
                 ui.add(B_OB_MINUS, cx - 400 * u, pt + 170 * u, cx - 240 * u, pt + 330 * u, "-", null, 0xffff5a5a);
                 ui.add(B_OB_AGE, cx - 200 * u, pt + 170 * u, cx + 200 * u, pt + 330 * u, null, null, 0);
                 ui.add(B_OB_PLUS, cx + 240 * u, pt + 170 * u, cx + 400 * u, pt + 330 * u, "+", null, 0xff4ad04a);
+                Ui.Btn next = ui.add(B_OB_NEXT, cx - 240 * u, pb - 120 * u, cx + 240 * u, pb, "NEXT", null, 0xff4ad04a);
+                next.enabled = draftAge >= 4 && draftAge <= 99;
+            } else {
+                ui.add(B_OB_NAME, cx - 420 * u, pt + 170 * u, cx + 420 * u, pt + 290 * u, null, null, 0);
+                ui.add(B_OB_RANDOM, cx - 200 * u, pt + 320 * u, cx + 200 * u, pt + 410 * u, "RANDOM NAME", null, 0xffb35cff);
                 ui.add(B_OB_BACK, cx - 520 * u, pb - 120 * u, cx - 40 * u, pb, "BACK", null, 0xff8a8fb8);
                 Ui.Btn done = ui.add(B_OB_DONE, cx + 40 * u, pb - 120 * u, cx + 520 * u, pb, "LET'S BRAWL!", null, 0xffffc928);
-                done.enabled = draftAge >= 4 && draftAge <= 99;
+                done.enabled = nameValid();
             }
             return;
         }
@@ -95,6 +112,11 @@ final class SocialScreens {
     void onButton(int id) {
         switch (id) {
             case B_OB_NAME:
+                if (draftAge < Profile.FREE_NAME_AGE) {
+                    // Players under 13 only pick from generated names, so no personal info can be typed in
+                    onButton(B_OB_RANDOM);
+                    return;
+                }
                 game.gated.requestText("Choose your nickname", draftName, 14, false, new Platform.TextCallback() {
                     @Override
                     public void onText(String text) {
@@ -104,11 +126,12 @@ final class SocialScreens {
                 });
                 return;
             case B_OB_RANDOM:
-                draftName = NAME_A[MathUtil.randInt(NAME_A.length)] + NAME_B[MathUtil.randInt(NAME_B.length)] + MathUtil.randInt(100);
+                draftName = randomName();
                 game.layout();
                 return;
             case B_OB_NEXT:
-                if (!nameValid()) return;
+                if (draftAge < 4) return;
+                if (draftAge < Profile.FREE_NAME_AGE && !isGeneratedName(draftName)) draftName = randomName();
                 obStep = 1;
                 game.layout();
                 return;
@@ -143,6 +166,7 @@ final class SocialScreens {
                 return;
             case B_OB_DONE:
                 if (!nameValid() || draftAge < 4) return;
+                if (draftAge < Profile.FREE_NAME_AGE && !isGeneratedName(draftName)) draftName = randomName();
                 pr.nickname = draftName;
                 pr.age = draftAge;
                 pr.onboarded = true;
@@ -236,7 +260,8 @@ final class SocialScreens {
         ui.snakeArt(g, b, pr.palette(), w * 0.16f, h * 0.55f, 1.4f * u, game.clock);
         ui.snakeArt(g, Brawler.ALL[(pr.selected + 3) % Brawler.ALL.length], new int[]{0xffb35cff, 0xff6a2bd1}, w * 0.84f,
                 h * 0.55f, 1.4f * u, game.clock + 1);
-        if (obStep == 0) {
+        if (obStep == 1) {
+            boolean young = draftAge < Profile.FREE_NAME_AGE;
             g.color(0xffffffff);
             g.text("CHOOSE YOUR NICKNAME", cx, pt + 130 * u, 56 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
             Ui.Btn box = ui.find(B_OB_NAME);
@@ -248,16 +273,17 @@ final class SocialScreens {
                 g.fillRoundRect(box.l, box.t, box.r, box.b, 30 * u);
                 boolean empty = draftName.length() == 0;
                 g.color(empty ? 0xff9aa0c0 : 0xff14142a);
-                String shown = empty ? "Tap to type..." : draftName;
+                String shown = empty ? (young ? "Tap RANDOM NAME" : "Tap to type...") : draftName;
                 g.text(shown, (box.l + box.r) / 2, (box.t + box.b) / 2 + 22 * u, 60 * u, Gfx.ALIGN_CENTER, 0, 0);
-                if (!empty && (game.clock % 1f) < 0.5f) {
+                if (!empty && !young && (game.clock % 1f) < 0.5f) {
                     float tw = g.measureText(shown, 60 * u);
                     g.color(0xff3fa0ff);
                     g.fillRect((box.l + box.r) / 2 + tw / 2 + 8 * u, box.t + 30 * u, (box.l + box.r) / 2 + tw / 2 + 13 * u, box.b - 30 * u);
                 }
             }
             g.color(0xffb8bdf0);
-            g.text("2-14 letters. This is the name other snakes will see.", cx, pt + 470 * u, 32 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+            g.text(young ? "Tap RANDOM NAME until you find a name you like!" : "2-14 letters. Don't use your real name.", cx,
+                    pt + 470 * u, 32 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
         } else {
             g.color(0xffffffff);
             g.text("HOW OLD ARE YOU?", cx, pt + 130 * u, 56 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
@@ -271,7 +297,7 @@ final class SocialScreens {
                 g.text(draftAge > 0 ? Integer.toString(draftAge) : "?", cx, (box.t + box.b) / 2 + 38 * u, 110 * u, Gfx.ALIGN_CENTER, 0, 0);
             }
             g.color(0xffb8bdf0);
-            ui.wrap(g, "We only use your age to keep the game safe: players under 13 can't buy coins with real money.",
+            ui.wrap(g, "Your age stays on this device. We only use it to keep the game safe for younger players.",
                     cx - 480 * u, cx + 480 * u, pt + 370 * u, 32 * u, 0xffb8bdf0, h);
         }
         for (int i = 0; i < ui.count; i++) {

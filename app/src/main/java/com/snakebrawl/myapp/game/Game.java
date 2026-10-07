@@ -211,8 +211,15 @@ public final class Game {
     private int flyCount;
     private float fade;
 
-    /** Starts buying a coin pack: real Play Billing if the host supports it, else the test checkout. */
+    /**
+     * The real-money coin store. Off until Google Play Billing is integrated: Play policy requires
+     * Play Billing for digital goods, so the simulated test checkout must never ship. Tests turn it on.
+     */
+    static boolean coinStoreEnabled = false;
+
+    /** Starts buying a coin pack: real Play Billing if the host supports it, else the test checkout (tests only). */
     void startPurchase(int pack) {
+        if (!coinStoreEnabled) return;
         if (!profile.canPurchase()) {
             showInfo("ASK A GROWN-UP", "Players under 13 can't buy coins. You can still earn lots of coins by playing, "
                     + "getting knockouts and claiming free gifts!", 1, 0);
@@ -1222,8 +1229,8 @@ public final class Game {
                 // Tap the brawler in the middle to change it
                 float showL = pl + 520 * u, showR = r - bw - 30 * u - 460 * u;
                 ui.add(B_SHOWCASE, showL, h * 0.5f, Math.max(showL + 200 * u, showR), b, null, null, 0);
-                boolean onl = OnlineSession.available(gated);
-                if (onl || Lan.available()) {
+                boolean onl = OnlineSession.available(gated) && profile.canPlayOnline();
+                if (OnlineSession.available(gated) || Lan.available()) {
                     ui.add(B_FRIENDS, r - bw - 30 * u - 430 * u, b - bh - 150 * u, r - bw - 30 * u, b - bh - 30 * u, "FRIENDS",
                             onl ? "Play together online" : "Play together on Wi-Fi", 0xff6a5cff);
                 }

@@ -632,26 +632,59 @@ public final class SimTest {
         ob.resize(width, height);
         if (ob.screenId() != Game.ONBOARD) throw new IllegalStateException("no onboarding");
         run(ob, 0.6f);
-        shot(ob, font, width, height, outDir + "/0a_onboard_name.png");
+        shot(ob, font, width, height, outDir + "/0a_onboard_age.png");
+        for (int i = 0; i < 3; i++) tapBtn(ob, 504); // age 12
+        tapBtn(ob, 502);
+        // Under 13: the name box only offers generated names, typing is not possible
         fresh.nextText = "Kaki!!King";
         tapBtn(ob, 500);
         run(ob, 0.3f);
-        shot(ob, font, width, height, outDir + "/0b_onboard_name_typed.png");
-        tapBtn(ob, 502);
-        for (int i = 0; i < 3; i++) tapBtn(ob, 504);
-        shot(ob, font, width, height, outDir + "/0c_onboard_age.png");
+        shot(ob, font, width, height, outDir + "/0b_onboard_name_young.png");
         tapBtn(ob, 506);
         run(ob, 0.6f);
         shot(ob, font, width, height, outDir + "/0d_welcome.png");
-        if (!"KakiKing".equals(fresh.strings.get("nickname")) || fresh.loadInt("age", 0) != 12
+        String kidName = fresh.strings.get("nickname");
+        if (kidName == null || !SocialScreens.isGeneratedName(kidName) || fresh.loadInt("age", 0) != 12
                 || fresh.loadInt("onboarded", 0) != 1) {
-            throw new IllegalStateException("onboarding not saved: " + fresh.strings + " " + fresh.prefs);
+            throw new IllegalStateException("onboarding not saved / typed name for a child: " + fresh.strings + " " + fresh.prefs);
         }
+        // 16 and over: typing a nickname works and online play is offered
+        DesktopPlatform adult = new DesktopPlatform();
+        adult.prefs.remove("onboarded");
+        adult.prefs.remove("age");
+        adult.strings.clear();
+        adult.link = new LoopLink();
+        Game ad = new Game(adult);
+        ad.resize(width, height);
+        for (int i = 0; i < 8; i++) tapBtn(ad, 504); // 10 -> 17
+        tapBtn(ad, 502);
+        adult.nextText = "Kaki!!King";
+        tapBtn(ad, 500);
+        run(ad, 0.3f);
+        shot(ad, font, width, height, outDir + "/0c_onboard_name_typed.png");
+        tapBtn(ad, 506);
+        if (!"KakiKing".equals(adult.strings.get("nickname")) || adult.loadInt("age", 0) != 17) {
+            throw new IllegalStateException("adult onboarding wrong: " + adult.strings + " " + adult.prefs);
+        }
+        // Online play is blocked under 16
+        DesktopPlatform kidNet = new DesktopPlatform();
+        kidNet.prefs.put("age", 12);
+        kidNet.link = new LoopLink();
+        Game kn = new Game(kidNet);
+        kn.resize(width, height);
+        tapBtn(kn, Game.B_FRIENDS);
+        if (kn.ui.find(606) != null) throw new IllegalStateException("online toggle offered to a 12-year-old");
+        run(kn, 0.4f);
+        shot(kn, font, width, height, outDir + "/0f_friends_young.png");
         Game again = new Game(fresh);
         if (again.screenId() != Game.MENU) throw new IllegalStateException("onboarding shown twice");
         // Under 13: purchases are blocked
         again.resize(width, height);
         tapBtn(again, Game.B_SHOP);
+        if (again.ui.find(303) != null) throw new IllegalStateException("COINS tab visible without a real store");
+        // The rest of the screenshot run covers the (test-only) coin store too
+        Game.coinStoreEnabled = true;
+        again.layout();
         tapBtn(again, 303);
         tapBtn(again, 351);
         if (again.sheetPack >= 0) throw new IllegalStateException("under-13 checkout opened");
@@ -792,6 +825,10 @@ public final class SimTest {
         tapBtn(game, Game.B_SETTINGS);
         run(game, 0.3f);
         shot(game, font, width, height, outDir + "/6_settings.png");
+        tapBtn(game, 421);
+        run(game, 0.4f);
+        shot(game, font, width, height, outDir + "/6b_privacy.png");
+        tapBtn(game, Game.B_OK);
         tapBtn(game, Game.B_BACK);
 
         int[] brawlers = {8, 9, 10, 11};

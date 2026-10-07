@@ -1,5 +1,5 @@
 // Offline cache: after the first visit the game also works without internet.
-var CACHE = 'snakebrawl-v3.0';
+var CACHE = 'snakebrawl-v3.1';
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) {
     return c.addAll(['./', 'index.html', 'sb.js', 'sb-net.js', 'vendor/peerjs.min.js', 'classes.js', 'classes.wasm', 'wasm-runtime.js', 'LilitaOne-Regular.ttf', 'manifest.json', 'icon-192.png']);

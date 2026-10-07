@@ -109,16 +109,26 @@ The **SNAKE PASS** card on the main menu opens a 30-tier season pass. Seasons la
 - Test: `java -cp /tmp/sb com.snakebrawl.myapp.game.SimTest net 0 60` runs two games over localhost
   and checks they stay identical every tick.
 
+### Privacy and safety for younger players
+
+- First launch asks for the **age first**. Players under 13 pick a generated nickname (no free typing).
+- **Online play is for ages 16+** (WebRTC lets the friend and the connection server see IP addresses);
+  younger players can still use Wi-Fi play with a friend nearby.
+- Nothing is sent to a server we run; there are no ads, analytics or accounts. Settings has a
+  **PRIVACY** button with a short notice; the full policy is `web/static/privacy.html`
+  (published with the browser build at `/privacy.html`).
+
 ### Coin store (real money)
 
 The shop's **COINS** tab sells five coin packs (500 to 15,000 coins, $0.99 to $14.99).
 Product ids: `coins_500`, `coins_1200`, `coins_2800`, `coins_6500`, `coins_15000`.
 
-Google Play Billing is **not integrated yet**: `MainActivity.launchPurchase` returns false, so the
-game shows a simulated test checkout (clearly marked TEST MODE, no money is charged). To go live:
-add the Play Billing library, create the products above in the Play Console, start the purchase
-flow in `launchPurchase`, and call `game.onPurchaseResult(productId, true)` after the purchase is
-verified and consumed. Remove the test checkout before publishing.
+Google Play Billing is **not integrated yet**, so the store is **switched off** in release builds
+(`Game.coinStoreEnabled = false`: no COINS tab). Play policy requires Play Billing for digital goods.
+To go live: add the Play Billing library, create the products above in the Play Console, start the
+purchase flow in `MainActivity.launchPurchase`, call `game.onPurchaseResult(productId, true)` after the
+purchase is verified and consumed, then set `coinStoreEnabled = true`. The simulated checkout is
+only used by the desktop tests.
 
 
 ### Settings
@@ -152,8 +162,8 @@ sudo apt install openjdk-21-jdk android-sdk-build-tools android-sdk-platform-23 
 
 This produces:
 
-- `dist/SnakeBrawl-2.2.apk`: install it directly on a phone.
-- `dist/SnakeBrawl-2.2.aab`: the Android App Bundle for Google Play.
+- `dist/SnakeBrawl-3.1.apk`: install it directly on a phone.
+- `dist/SnakeBrawl-3.1.aab`: the Android App Bundle for Google Play.
 
 Both are signed with an upload key. If `keystore/snakebrawl-upload.jks` does not exist, a new key
 is generated and its password is written next to it. **Keep that key safe and never commit it.**

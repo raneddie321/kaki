@@ -6,6 +6,10 @@ final class Profile {
     static final int BOX_PRICE = 120;
     static final int MEGA_BOX_PRICE = 450;
     static final int START_COINS = 200;
+    /** Players younger than this pick a generated nickname instead of typing one (COPPA). */
+    static final int FREE_NAME_AGE = 13;
+    /** Online play (WebRTC: the friend and the connection server see IP addresses) starts at this age (COPPA, GDPR). */
+    static final int ONLINE_AGE = 16;
 
     private final Platform p;
 
@@ -160,6 +164,10 @@ final class Profile {
     }
 
     /** Players under 13 can't make real-money purchases. */
+    boolean canPlayOnline() {
+        return age >= ONLINE_AGE;
+    }
+
     boolean canPurchase() {
         return age >= 13;
     }

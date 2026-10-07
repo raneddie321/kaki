@@ -6,7 +6,18 @@ final class MetaScreens {
     private static final int B_SKIN = 200;
     private static final int B_TAB = 300, B_GIFT = 310, B_BOX = 311, B_MEGA = 312, B_DEAL = 313, B_SHOP_BRAWLER = 330;
     private static final int B_PACK = 350;
-    private static final int B_SETTING = 400, B_RESET = 420;
+    private static final int B_SETTING = 400, B_RESET = 420, B_PRIVACY = 421;
+
+    /** The COINS tab only exists while the real-money store is enabled. */
+    private static int tabCount() {
+        return Game.coinStoreEnabled ? TABS.length : TABS.length - 1;
+    }
+
+    /** Short in-app privacy notice (the full policy is on the store page). */
+    static final String PRIVACY_TEXT = "No account, ads or tracking. Your nickname, age and progress stay on this device; "
+            + "RESET PROGRESS deletes them. Playing with a friend sends your nickname and game moves to their device. "
+            + "Online play (16+) connects through the PeerJS server, which sees your IP address. "
+            + "Questions: raneddie321@gmail.com";
 
     private static final String[] TABS = {"OFFERS", "SKINS", "BRAWLERS", "COINS"};
     private static final String[] SETTING_NAMES = {"Sound", "Vibration", "Damage numbers", "Graphics",
@@ -61,8 +72,8 @@ final class MetaScreens {
             }
             case Game.SHOP: {
                 float tabW = 270 * u, tabT = padT + 130 * u;
-                float tabL = w / 2 - (tabW * TABS.length + 20 * u * (TABS.length - 1)) / 2;
-                for (int i = 0; i < TABS.length; i++) {
+                float tabL = w / 2 - (tabW * tabCount() + 20 * u * (tabCount() - 1)) / 2;
+                for (int i = 0; i < tabCount(); i++) {
                     float l = tabL + i * (tabW + 20 * u);
                     ui.add(B_TAB + i, l, tabT, l + tabW, tabT + 90 * u, TABS[i], null, i == shopTab ? 0xffffc928 : 0xff4a5090);
                 }
@@ -121,7 +132,8 @@ final class MetaScreens {
                             on ? 0xff4ad04a : (off ? 0xff8a8a9a : 0xff3fa0ff));
                 }
                 float rb = h - padB - 30 * u;
-                ui.add(B_RESET, w / 2 - 260 * u, rb - 100 * u, w / 2 + 260 * u, rb, "RESET PROGRESS", null, 0xffff5a5a);
+                ui.add(B_RESET, w / 2 + 20 * u, rb - 100 * u, w / 2 + 500 * u, rb, "RESET PROGRESS", null, 0xffff5a5a);
+                ui.add(B_PRIVACY, w / 2 - 500 * u, rb - 100 * u, w / 2 - 20 * u, rb, "PRIVACY", null, 0xff3fa0ff);
                 break;
             }
             default:
@@ -172,7 +184,7 @@ final class MetaScreens {
             }
             return;
         }
-        if (id >= B_TAB && id < B_TAB + TABS.length) {
+        if (id >= B_TAB && id < B_TAB + tabCount()) {
             shopTab = id - B_TAB;
             ui.resetScroll();
             game.layout();
@@ -249,6 +261,9 @@ final class MetaScreens {
                 }
                 break;
             }
+            case B_PRIVACY:
+                game.showInfo("PRIVACY", PRIVACY_TEXT, 0, 0);
+                return;
             case B_RESET:
                 game.confirm("RESET PROGRESS?", "This deletes your trophies, coins, skins, unlocked brawlers and upgrades. "
                         + "It cannot be undone!", 0, 0, Game.ACT_RESET, 0);
@@ -580,7 +595,7 @@ final class MetaScreens {
         float u = game.u;
         for (int i = 0; i < ui.count; i++) {
             Ui.Btn bt = ui.btns[i];
-            if (bt.id == Game.B_BACK || (bt.id >= B_TAB && bt.id < B_TAB + TABS.length)) ui.button(g, bt);
+            if (bt.id == Game.B_BACK || (bt.id >= B_TAB && bt.id < B_TAB + tabCount())) ui.button(g, bt);
         }
         if (shopTab == 0) {
             for (int i = 0; i < ui.count; i++) {
@@ -898,7 +913,7 @@ final class MetaScreens {
             ui.button(g, bt);
         }
         g.color(0xff9aa0d0);
-        g.text("Snake Brawl v3.0  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
+        g.text("Snake Brawl v3.1  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
                 w / 2, h - game.padB - 160 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 }
