@@ -48,6 +48,21 @@ final class Icons {
         g.line(x + s * 0.35f, y - s * 0.35f, x - s * 0.35f, y + s * 0.35f, s * 0.16f);
     }
 
+    /** Five-pointed star of outer diameter s, rotated by rot radians. */
+    static void star(Gfx g, float x, float y, float s, float rot, int color) {
+        float[] p = STAR;
+        for (int i = 0; i < 10; i++) {
+            float a = rot - MathUtil.PI / 2 + i * MathUtil.PI / 5;
+            float r = (i % 2 == 0 ? 0.5f : 0.21f) * s;
+            p[i * 2] = x + MathUtil.cos(a) * r;
+            p[i * 2 + 1] = y + MathUtil.sin(a) * r;
+        }
+        g.color(color);
+        g.fillPoly(p, 10);
+    }
+
+    private static final float[] STAR = new float[20];
+
     static void bolt(Gfx g, float x, float y, float s, int color) {
         float[] p = BOLT;
         p[0] = x + s * 0.18f;

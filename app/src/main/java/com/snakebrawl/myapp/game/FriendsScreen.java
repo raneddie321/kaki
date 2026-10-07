@@ -9,7 +9,7 @@ import java.util.List;
 final class FriendsScreen {
     static final int B_FIRST = 600;
     private static final int B_HOST = 600, B_JOIN = 601, B_MODE = 602, B_CANCEL = 603, B_START = 604, B_ADDRESS = 605,
-            B_ROOM = 610;
+            B_NETWORK = 606, B_ROOM = 610;
     static final int B_LAST = 640;
 
     static final int HOME = 0, HOSTING = 1, SEARCHING = 2, GUEST_LOBBY = 3;
@@ -27,10 +27,22 @@ final class FriendsScreen {
     private List<NetSession.Room> shownRooms = new java.util.ArrayList<NetSession.Room>();
     private float roomRefresh;
     private String lastError;
+    /** Online (internet, works with browser players) or local Wi-Fi. */
+    boolean online;
 
     FriendsScreen(Game game) {
         this.game = game;
         this.ui = game.ui;
+        online = OnlineSession.available(game.gated) || !Lan.available();
+    }
+
+    /** True when the current (or chosen) connection is local Wi-Fi. */
+    private boolean lanMode() {
+        return net != null ? net.lan() : !online;
+    }
+
+    private static boolean bothNetworks(Platform p) {
+        return Lan.available() && OnlineSession.available(p);
     }
 
     static boolean handles(int id) {
@@ -67,21 +79,30 @@ final class FriendsScreen {
             }
         }
         if (net.state == NetSession.ST_CONNECTED && !helloSent) {
-            helloSent = true;
-            Profile pr = game.profile;
-            Brawler b = Brawler.ALL[pr.selected];
-            net.sendHello(pr.displayName(), b.id, pr.levels[b.id], pr.trophies, pr.palette());
-            if (net.host) net.sendMode(mode);
+            sendHello();
             game.gated.playSound(Platform.SND_POWER, 0.8f);
             game.layout();
         }
         NetSession.Msg m;
         while ((m = net.poll()) != null) {
             if (m.type == NetSession.M_HELLO) {
+                // Always introduce ourselves first, so a friend we turn away learns why
+                if (!helloSent) sendHello();
+                m.name = SocialScreens.cleanName(m.name);
+                if (m.name.length() == 0) m.name = "Friend";
                 if (m.protocol != NetSession.PROTOCOL) {
                     String why = "Your friend has a different version of Snake Brawl. Update both phones to the same version.";
                     cancel();
                     game.showInfo("VERSION MISMATCH", why, 0, 0);
+                    game.layout();
+                    return;
+                }
+                if (m.exact != net.exact()) {
+                    String why = net.exact()
+                            ? m.name + "'s browser is too old to play with you. Ask them to update Safari or Chrome."
+                            : "This browser is too old to play with " + m.name + ". Update Safari or Chrome and try again.";
+                    cancel();
+                    game.showInfo("CAN'T PLAY TOGETHER", why, 0, 0);
                     game.layout();
                     return;
                 }
@@ -102,6 +123,14 @@ final class FriendsScreen {
             game.showInfo("DISCONNECTED", why, 0, 0);
             game.layout();
         }
+    }
+
+    private void sendHello() {
+        helloSent = true;
+        Profile pr = game.profile;
+        Brawler b = Brawler.ALL[pr.selected];
+        net.sendHello(pr.displayName(), b.id, pr.levels[b.id], pr.trophies, pr.palette());
+        if (net.host) net.sendMode(mode);
     }
 
     private boolean sameRooms(List<NetSession.Room> r) {
@@ -126,14 +155,25 @@ final class FriendsScreen {
 
     void onButton(int id) {
         switch (id) {
+            case B_NETWORK:
+                online = !online;
+                break;
             case B_HOST:
-                net = NetSession.host(game.profile.displayName());
+                if (online) {
+                    net = OnlineSession.host(game.gated);
+                } else {
+                    net = Lan.host(game.profile.displayName());
+                    game.gated.setNetworkDiscovery(true);
+                }
                 state = HOSTING;
-                game.gated.setNetworkDiscovery(true);
                 break;
             case B_JOIN:
-                game.gated.setNetworkDiscovery(true);
-                net = NetSession.search(game.profile.displayName());
+                if (online) {
+                    net = OnlineSession.search(game.gated);
+                } else {
+                    game.gated.setNetworkDiscovery(true);
+                    net = Lan.search(game.profile.displayName());
+                }
                 shownRooms = new java.util.ArrayList<NetSession.Room>();
                 lastError = null;
                 state = SEARCHING;
@@ -154,23 +194,24 @@ final class FriendsScreen {
                 }
                 break;
             case B_ADDRESS:
-                String ask = NetSession.LAN ? "Friend's address (shown on their phone)" : "Room code (shown on your friend's screen)";
-                game.gated.requestText(ask, NetSession.LAN ? "192.168." : "", NetSession.LAN ? 15 : 8, false, new Platform.TextCallback() {
+                final boolean lan = lanMode();
+                String ask = lan ? "Friend's address (shown on their phone)" : "Room code (shown on your friend's screen)";
+                game.gated.requestText(ask, lan ? "192.168." : "", lan ? 15 : 8, false, new Platform.TextCallback() {
                     @Override
                     public void onText(String text) {
                         if (text == null || net == null || state != SEARCHING) return;
                         String ip = text.trim().toUpperCase();
-                        if (NetSession.LAN && !ip.matches("\\d{1,3}(\\.\\d{1,3}){3}")) {
+                        if (lan && !ip.matches("\\d{1,3}(\\.\\d{1,3}){3}")) {
                             game.showInfo("CHECK THE ADDRESS", "It looks like 192.168.1.23 and is shown on your friend's phone.", 0, 0);
                             return;
                         }
-                        if (!NetSession.LAN && !ip.matches("[A-Z0-9]{4,6}")) {
+                        if (!lan && !ip.matches("[A-Z0-9]{4,6}")) {
                             game.showInfo("CHECK THE CODE", "The room code has 5 letters and numbers, like K7QX2.", 0, 0);
                             return;
                         }
                         lastError = null;
                         net.clearError();
-                        net.join(ip, NetSession.TCP_PORT);
+                        net.join(ip, lan ? Lan.port() : 0);
                         game.layout();
                     }
                 });
@@ -201,6 +242,10 @@ final class FriendsScreen {
                 float cw = 560 * u, ch = 430 * u, top = game.padT + 190 * u;
                 ui.add(B_HOST, cx - cw - 30 * u, top, cx - 30 * u, top + ch, null, null, 0);
                 ui.add(B_JOIN, cx + 30 * u, top, cx + cw + 30 * u, top + ch, null, null, 0);
+                if (bothNetworks(game.gated)) {
+                    ui.add(B_NETWORK, w - game.padR - 430 * u, game.padT + 10 * u, w - game.padR - 10 * u, game.padT + 120 * u,
+                            online ? "ONLINE" : "WI-FI", online ? "Tap for Wi-Fi" : "Tap for online", online ? 0xff3fb6a8 : 0xff6a5cff);
+                }
                 break;
             }
             case HOSTING: {
@@ -220,7 +265,7 @@ final class FriendsScreen {
                     ui.add(B_ROOM + i, cx - 450 * u, t, cx + 450 * u, t + 100 * u, null, null, 0);
                 }
                 ui.add(B_CANCEL, cx - 500 * u, bottom - 130 * u, cx - 30 * u, bottom, "CANCEL", null, 0xffff5a5a);
-                ui.add(B_ADDRESS, cx + 30 * u, bottom - 130 * u, cx + 500 * u, bottom, NetSession.LAN ? "TYPE ADDRESS" : "ENTER CODE", null,
+                ui.add(B_ADDRESS, cx + 30 * u, bottom - 130 * u, cx + 500 * u, bottom, lanMode() ? "TYPE ADDRESS" : "ENTER CODE", null,
                         0xff3fa0ff);
                 break;
             }
@@ -264,8 +309,8 @@ final class FriendsScreen {
         drawChoice(g, ui.find(B_HOST), 0xffff7a2e, "HOST A ROOM", "Your friend joins you", true);
         drawChoice(g, ui.find(B_JOIN), 0xff3fa0ff, "JOIN A ROOM", "Find your friend's room", false);
         g.color(0xffb8bdf0);
-        g.text(NetSession.LAN ? "Both phones must be on the same Wi-Fi network (or one phone's hotspot)."
-                : "Play online with a friend anywhere: share your room code.", w / 2, h - game.padB - 90 * u, 32 * u,
+        g.text(lanMode() ? "Both phones must be on the same Wi-Fi network (or one phone's hotspot)."
+                : "Play online with a friend anywhere, in the app or the browser: share your room code.", w / 2, h - game.padB - 90 * u, 32 * u,
                 Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 
@@ -311,17 +356,17 @@ final class FriendsScreen {
     private void renderHosting(Gfx g) {
         float u = game.u, w = game.w, cx = w / 2;
         float top = game.padT + 170 * u;
-        List<String> ips = NetSession.localAddresses();
-        String addr = ips.isEmpty() ? (NetSession.LAN ? "No Wi-Fi found" : "Opening room...") : ips.get(0);
+        String label = net != null ? net.roomLabel() : null;
+        String addr = label == null ? (lanMode() ? "No Wi-Fi found" : "Opening room...") : label;
         ui.panel(g, cx - 560 * u, top, cx + 560 * u, top + 150 * u, 0xee22264a);
         g.color(0xffb8bdf0);
-        g.text(NetSession.LAN ? "YOUR ROOM ADDRESS" : "YOUR ROOM CODE", cx, top + 50 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        g.text(lanMode() ? "YOUR ROOM ADDRESS" : "YOUR ROOM CODE", cx, top + 50 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
         g.color(0xffffffff);
         g.text(addr, cx, top + 118 * u, 60 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
         drawPlayers(g, top + 190 * u, friend == null ? null : friend.name, friend == null ? -1 : friend.brawler,
                 friend == null ? null : friend.palette);
         g.color(0xffb8bdf0);
-        String note = friend == null ? (NetSession.LAN ? "Ask your friend to tap JOIN A ROOM. Your room shows up on their phone."
+        String note = friend == null ? (lanMode() ? "Ask your friend to tap JOIN A ROOM. Your room shows up on their phone."
                 : "Ask your friend to tap JOIN A ROOM and enter this code.") : "Pick a mode and tap START!";
         g.text(note, cx, top + 470 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
@@ -359,6 +404,11 @@ final class FriendsScreen {
             Brawler fb = Brawler.ALL[Math.max(0, Math.min(Brawler.ALL.length - 1, friendBrawler))];
             ui.snakeArt(g, fb, friendPal != null && friendPal.length >= 2 ? friendPal : new int[]{fb.color1, fb.color2},
                     l2 + cw / 2, top + 150 * u, 0.85f * u, game.clock + 1.3f);
+            if (friend != null) {
+                g.color(0xffb8bdf0);
+                g.text(friend.platform == NetSession.PLAT_BROWSER ? "playing in a browser" : "playing in the app", l2 + cw / 2,
+                        top + ch - 16 * u, 24 * u, Gfx.ALIGN_CENTER, 3 * u, Ui.INK);
+            }
         } else {
             int dots = (int) (game.clock * 2) % 4;
             g.color(0xffb8bdf0);
@@ -378,10 +428,10 @@ final class FriendsScreen {
             }
             g.color(0xffffffff);
             g.color(0xffffffff);
-            g.text(NetSession.LAN ? "Looking for rooms on your Wi-Fi..." : "Ask your friend for their room code", cx, top + 380 * u,
+            g.text(lanMode() ? "Looking for rooms on your Wi-Fi..." : "Ask your friend for their room code", cx, top + 380 * u,
                     44 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
             g.color(0xffb8bdf0);
-            g.text(NetSession.LAN ? "Not showing up? Tap TYPE ADDRESS and enter the address on your friend's screen."
+            g.text(lanMode() ? "Not showing up? Tap TYPE ADDRESS and enter the address on your friend's screen."
                     : "Tap ENTER CODE and type the code shown on their screen.", cx, top + 440 * u, 28 * u,
                     Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
         }

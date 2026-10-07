@@ -2,16 +2,16 @@ package com.snakebrawl.myapp.game;
 
 /** Top-level game: screens, HUD, touch controls and progression. Host-agnostic. */
 public final class Game {
-    static final int MENU = 0, BRAWLERS = 1, PLAY = 2, RESULT = 3, SHOP = 4, SETTINGS = 5, ONBOARD = 6, CLUB = 7, FRIENDS = 8;
+    static final int MENU = 0, BRAWLERS = 1, PLAY = 2, RESULT = 3, SHOP = 4, SETTINGS = 5, ONBOARD = 6, CLUB = 7, FRIENDS = 8, PASS = 9;
     private static final float STEP = 1f / 60f;
 
     static final int B_PLAY = 1, B_MODE = 2, B_BRAWLERS = 3, B_SHOP = 4, B_SETTINGS = 5, B_BACK = 6,
-            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_CLUB = 11, B_FRIENDS = 12, B_YES = 90, B_NO = 91, B_OK = 92,
+            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_CLUB = 11, B_FRIENDS = 12, B_PASS = 13, B_SHOWCASE = 14, B_YES = 90, B_NO = 91, B_OK = 92,
             B_SHEET_BUY = 93, B_SHEET_CANCEL = 94;
 
     // Popup actions confirmed with YES
     static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
-            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9;
+            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9, ACT_PASS_PLUS = 10;
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
     private static final int[] RANK_COINS = {50, 40, 32, 26, 20, 15, 11, 8, 5, 3};
@@ -23,6 +23,7 @@ public final class Game {
     private final MetaScreens meta;
     private SocialScreens social;
     private FriendsScreen friends;
+    private PassScreen pass;
 
     // Wi-Fi match (lockstep: both phones simulate the same world from the same inputs)
     private static final int NET_DELAY = 4, NET_RING = 512, NET_HASH_EVERY = 120;
@@ -30,6 +31,8 @@ public final class Game {
     private boolean netHost;
     /** The last result came from a Wi-Fi match. */
     private boolean resNet;
+    private int resPassXp;
+    private boolean resPassTierUp;
     int netTick;
     private final NetInput netIn = new NetInput();
     private final NetInput[] netLocal = new NetInput[NET_RING], netRemote = new NetInput[NET_RING];
@@ -128,10 +131,16 @@ public final class Game {
             public void setNetworkDiscovery(boolean on) {
                 host.setNetworkDiscovery(on);
             }
+
+            @Override
+            public OnlineLink online() {
+                return host.online();
+            }
         };
         meta = new MetaScreens(this);
         social = new SocialScreens(this);
         friends = new FriendsScreen(this);
+        pass = new PassScreen(this);
         for (int i = 0; i < NET_RING; i++) {
             netLocal[i] = new NetInput();
             netRemote[i] = new NetInput();
@@ -173,6 +182,11 @@ public final class Game {
         dt = Math.min(dt, 0.1f);
         tick(dt);
         render(g);
+    }
+
+    /** Title of the open popup, or null (tests). */
+    String popTitleForTest() {
+        return popup ? popTitle : null;
     }
 
     World currentWorld() {
@@ -228,6 +242,22 @@ public final class Game {
         }
         flyCount = FLY;
         layout();
+    }
+
+    /** Coins flying into the coin counter, for rewards. */
+    void coinBurst(int amount) {
+        gated.playSound(Platform.SND_VICTORY, 0.6f);
+        for (int i = 0; i < FLY; i++) {
+            flyX[i] = w / 2 + MathUtil.rand(-160, 160) * u;
+            flyY[i] = h / 2 + MathUtil.rand(-90, 90) * u;
+            flyT[i] = -i * 0.035f;
+        }
+        flyCount = FLY;
+    }
+
+    /** Opens a Brawl Box (or Mega Box) as a reward. */
+    void openRewardBox(boolean mega) {
+        meta.openBox(mega);
     }
 
     private void updateSheet(float dt) {
@@ -394,7 +424,8 @@ public final class Game {
     public void onPause() {
         releaseControls();
         profile.save();
-        if (screen == PLAY && endTimer < 0) {
+        // An online match can't pause (the friend keeps playing), so only local matches pause here
+        if (screen == PLAY && endTimer < 0 && net == null) {
             paused = true;
             layout();
         }
@@ -426,6 +457,9 @@ public final class Game {
                 return true;
             case FRIENDS:
                 friends.cancel();
+                setScreen(MENU);
+                return true;
+            case PASS:
                 setScreen(MENU);
                 return true;
             case ONBOARD:
@@ -507,8 +541,8 @@ public final class Game {
         int myLvl = profile.levels[mine.id], theirLvl = Profile.clamp(friend.level, 1, Brawler.MAX_LEVEL);
         int wm = lobbyMode == FriendsScreen.VERSUS ? World.MODE_SHOWDOWN : World.MODE_DUO;
         int trophies = netHost ? profile.trophies : friend.trophies;
-        java.util.Random prev = MathUtil.RNG;
-        MathUtil.RNG = new java.util.Random(seed);
+        Rng prev = MathUtil.RNG;
+        MathUtil.RNG = new Rng(seed);
         try {
             if (netHost) {
                 world = new World(gated, wm, mine, myPal, myLvl, theirs, theirPal, theirLvl, 0, 8, trophies);
@@ -604,7 +638,13 @@ public final class Game {
             world.makeBot(f);
             world.banner(title);
         }
-        if (screen == PLAY && f.alive) showInfo(title, text, 0, 0);
+        if (screen == PLAY && endTimer < 0 && f.alive) {
+            // The match is local now: pause it so the message doesn't cost the player control
+            paused = true;
+            releaseControls();
+            layout();
+            showInfo(title, text, 0, 0);
+        }
     }
 
     private void endNet() {
@@ -655,6 +695,11 @@ public final class Game {
         profile.trophies = Math.max(0, profile.trophies + resDelta);
         profile.bestTrophies = Math.max(profile.bestTrophies, profile.trophies);
         resDelta = profile.trophies - before;
+        int tierBefore = SnakePass.tier(profile);
+        SnakePass.checkSeason(profile);
+        resPassXp = SnakePass.matchXp(world.mode, resRank, p.kills, win);
+        profile.passXp += resPassXp;
+        resPassTierUp = SnakePass.tier(profile) > tierBefore;
         resNewBest = resLength > profile.bestLen;
         if (resNewBest) profile.bestLen = resLength;
         profile.coins += resCoins;
@@ -701,6 +746,7 @@ public final class Game {
         closePopup();
         if (id == B_YES) {
             if (action == ACT_JOIN_CLUB || action == ACT_LEAVE_CLUB) social.perform(action, arg);
+            else if (action == ACT_PASS_PLUS) pass.perform(action);
             else meta.perform(action, arg);
         }
     }
@@ -1068,7 +1114,17 @@ public final class Game {
             case B_FRIENDS:
                 setScreen(FRIENDS);
                 break;
+            case B_PASS:
+                setScreen(PASS);
+                pass.scrollToCurrent();
+                layout();
+                break;
+            case B_SHOWCASE:
+                meta.viewBrawler = profile.selected;
+                setScreen(BRAWLERS);
+                break;
             case B_BACK:
+                if (screen == FRIENDS) friends.cancel();
                 setScreen(MENU);
                 break;
             case B_MENU:
@@ -1082,6 +1138,7 @@ public final class Game {
             default:
                 if (SocialScreens.handles(id)) social.onButton(id);
                 else if (FriendsScreen.handles(id)) friends.onButton(id);
+                else if (PassScreen.handles(id)) pass.onButton(id);
                 else meta.onButton(id);
                 break;
         }
@@ -1155,12 +1212,21 @@ public final class Game {
                 ui.add(B_MODE, r - bw - 30 * u - 430 * u, b - bh, r - bw - 30 * u, b,
                         modeNames[profile.mode], modeSubs[profile.mode], modeCols[profile.mode]);
                 float pl = padL + 30 * u;
-                ui.add(B_BRAWLERS, pl, b - 110 * u, pl + 470 * u, b, "BRAWLERS", null, 0xff4ad04a);
-                ui.add(B_SHOP, pl, padT + 200 * u, pl + 300 * u, padT + 330 * u, "SHOP", "Skins & boxes", 0xffff5ab5);
+                // Left column: shop, club and brawlers; the Snake Pass card sits below them
+                ui.add(B_SHOP, pl, padT + 200 * u, pl + 300 * u, padT + 320 * u, "SHOP", "Skins & boxes", 0xffff5ab5);
                 String club = Clubs.name(profile);
-                ui.add(B_CLUB, pl, padT + 360 * u, pl + 300 * u, padT + 490 * u, "CLUB", club != null ? club : "Join a club!", 0xff3fb6a8);
-                if (NetSession.AVAILABLE) ui.add(B_FRIENDS, r - bw - 30 * u - 430 * u, b - bh - 150 * u, r - bw - 30 * u, b - bh - 30 * u, "FRIENDS",
-                        NetSession.LAN ? "Play together on Wi-Fi" : "Play together online", 0xff6a5cff);
+                ui.add(B_CLUB, pl, padT + 345 * u, pl + 300 * u, padT + 465 * u, "CLUB", club != null ? club : "Join a club!", 0xff3fb6a8);
+                ui.add(B_BRAWLERS, pl, padT + 490 * u, pl + 300 * u, padT + 610 * u, "BRAWLERS", Brawler.ALL.length + " snakes",
+                        0xff4ad04a);
+                ui.add(B_PASS, pl, b - 240 * u, pl + 470 * u, b, null, null, 0);
+                // Tap the brawler in the middle to change it
+                float showL = pl + 520 * u, showR = r - bw - 30 * u - 460 * u;
+                ui.add(B_SHOWCASE, showL, h * 0.5f, Math.max(showL + 200 * u, showR), b, null, null, 0);
+                boolean onl = OnlineSession.available(gated);
+                if (onl || Lan.available()) {
+                    ui.add(B_FRIENDS, r - bw - 30 * u - 430 * u, b - bh - 150 * u, r - bw - 30 * u, b - bh - 30 * u, "FRIENDS",
+                            onl ? "Play together online" : "Play together on Wi-Fi", 0xff6a5cff);
+                }
                 ui.add(B_SETTINGS, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, null, null, 0xff8a8fb8);
                 break;
             }
@@ -1184,6 +1250,9 @@ public final class Game {
                 break;
             case FRIENDS:
                 if (friends != null) friends.layout();
+                break;
+            case PASS:
+                if (pass != null) pass.layout();
                 break;
             default:
                 meta.layout();
@@ -1293,6 +1362,10 @@ public final class Game {
                 demo.render(g);
                 friends.render(g);
                 break;
+            case PASS:
+                demo.render(g);
+                pass.render(g);
+                break;
             default:
                 demo.render(g);
                 meta.render(g);
@@ -1389,15 +1462,8 @@ public final class Game {
         g.text("Wins " + profile.wins, nx + g.measureText(profile.displayName(), 38 * u) + 24 * u, tt + 142 * u, 30 * u,
                 Gfx.ALIGN_LEFT, 4 * u, Ui.INK);
 
-        // Selected brawler showcase
-        Brawler b = Brawler.ALL[profile.selected];
-        float pl = padL + 30 * u, pb = h - padB - 150 * u, pt = pb - 250 * u, pr = pl + 470 * u;
-        ui.panel(g, pl, pt, pr, pb, 0xdd22264a);
-        g.color(b.color1);
-        g.text(b.name, pl + 30 * u, pt + 70 * u, 64 * u, Gfx.ALIGN_LEFT, 7 * u, 0xff0e1024);
-        g.color(0xffd8dcff);
-        g.text("LVL " + profile.levels[b.id], pr - 30 * u, pt + 64 * u, 38 * u, Gfx.ALIGN_RIGHT, 5 * u, 0xff0e1024);
-        ui.snakeArt(g, b, profile.palette(), (pl + pr) / 2, pt + 165 * u, 1.45f * u, clock);
+        drawShowcase(g);
+        drawPassCard(g);
 
         Ui.Btn playBtn = ui.find(B_PLAY);
         if (playBtn != null && !profile.lowGraphics) {
@@ -1407,6 +1473,7 @@ public final class Game {
         }
         for (int i = 0; i < ui.count; i++) {
             Ui.Btn bt = ui.btns[i];
+            if (bt.id == B_PASS || bt.id == B_SHOWCASE) continue;
             ui.button(g, bt);
             if (bt.id == B_PLAY && !profile.lowGraphics) {
                 // Shine sweeping across the PLAY button
@@ -1439,6 +1506,94 @@ public final class Game {
                 g.color(0xffffffff);
                 g.text("!", bx, by + 12 * u, 34 * u, Gfx.ALIGN_CENTER, 0, 0);
             }
+        }
+    }
+
+    /** The selected brawler, big in the middle of the menu, standing on a glowing pad. */
+    private void drawShowcase(Gfx g) {
+        Ui.Btn sb = ui.find(B_SHOWCASE);
+        if (sb == null) return;
+        Brawler b = Brawler.ALL[profile.selected];
+        float cx = (sb.l + sb.r) / 2, cy = sb.t + (sb.b - sb.t) * 0.55f;
+        float press = ui.pressed == B_SHOWCASE ? 0.95f : 1f;
+        if (!profile.lowGraphics) {
+            float p = 0.5f + 0.5f * MathUtil.sin(clock * 2f);
+            g.radial(cx, cy + 40 * u, 330 * u, MathUtil.withAlpha(b.color1, 0.28f + 0.1f * p), b.color1 & 0x00ffffff);
+        }
+        // Pad
+        g.color(0x66000000);
+        g.fillRoundRect(cx - 250 * u, cy + 70 * u, cx + 250 * u, cy + 120 * u, 25 * u);
+        g.color(MathUtil.withAlpha(b.color1, 0.55f));
+        g.strokeRoundRect(cx - 250 * u, cy + 70 * u, cx + 250 * u, cy + 120 * u, 25 * u, 4 * u);
+        ui.snakeArt(g, b, profile.palette(), cx, cy, 1.55f * u * press, clock);
+        // Name plate
+        float ny = sb.t + 10 * u;
+        g.color(b.color1);
+        g.text(b.name, cx, ny + 40 * u, 60 * u, Gfx.ALIGN_CENTER, 7 * u, 0xff0e1024);
+        int rc = Brawler.RARITY_COLORS[b.rarity];
+        String sub = "LVL " + profile.levels[b.id] + "  •  " + b.role.toUpperCase();
+        g.color(rc);
+        g.text(sub, cx, ny + 80 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, 0xff0e1024);
+    }
+
+    /** Snake Pass card in the bottom-left corner of the menu. */
+    private void drawPassCard(Gfx g) {
+        Ui.Btn pb = ui.find(B_PASS);
+        if (pb == null) return;
+        float d = ui.pressed == B_PASS ? 5 * u : 0;
+        float l = pb.l + d, t = pb.t + d, r = pb.r - d, b = pb.b - d;
+        ui.panel(g, l, t, r, b, 0xee2a2050);
+        g.save();
+        g.clip(l + 8 * u, t + 8 * u, r - 8 * u, b - 8 * u);
+        g.vertical(l, t, r, b, profile.passPlus ? 0x88ffc928 : 0x669a7aff, 0x00000000);
+        if (!profile.lowGraphics) {
+            float sw = (clock * 0.35f) % 1.4f;
+            if (sw < 1f) {
+                float sx = l + (r - l) * sw;
+                poly[0] = sx - 30 * u;
+                poly[1] = b;
+                poly[2] = sx + 10 * u;
+                poly[3] = b;
+                poly[4] = sx + 90 * u;
+                poly[5] = t;
+                poly[6] = sx + 50 * u;
+                poly[7] = t;
+                g.color(0x22ffffff);
+                g.fillPoly(poly, 4);
+            }
+        }
+        g.restore();
+        int tier = SnakePass.tier(profile);
+        g.color(0xffffd23f);
+        g.text(profile.passPlus ? "SNAKE PASS+" : "SNAKE PASS", l + 30 * u, t + 62 * u, 50 * u, Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
+        g.color(0xffd8dcff);
+        g.text("Season " + profile.passSeason + "  •  " + SnakePass.daysLeft() + " days left", l + 30 * u, t + 100 * u, 26 * u,
+                Gfx.ALIGN_LEFT, 3 * u, Ui.INK);
+        // Tier badge and bar
+        float bx = l + 70 * u, by = b - 70 * u;
+        g.color(Ui.INK);
+        g.fillCircle(bx, by, 45 * u);
+        g.color(0xff3ac04a);
+        g.fillCircle(bx, by, 39 * u);
+        g.color(0xffffffff);
+        g.text(Integer.toString(tier), bx, by + 15 * u, 42 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        float bl = bx + 60 * u, br = r - 30 * u;
+        g.color(Ui.INK);
+        g.fillRoundRect(bl, by - 20 * u, br, by + 20 * u, 20 * u);
+        g.color(0xff2a2e5a);
+        g.fillRoundRect(bl + 5 * u, by - 15 * u, br - 5 * u, by + 15 * u, 15 * u);
+        float f = tier >= SnakePass.TIERS ? 1f : SnakePass.tierXp(profile) / (float) SnakePass.XP_PER_TIER;
+        if (f > 0.03f) g.vertical(bl + 5 * u, by - 15 * u, bl + 5 * u + (br - bl - 10 * u) * f, by + 15 * u, 0xff9cff8a, 0xff3ac04a);
+        int ready = SnakePass.readyCount(profile);
+        if (ready > 0) {
+            float p = 1f + 0.1f * MathUtil.sin(clock * 6f);
+            float cx = r - 10 * u, cy = t + 10 * u;
+            g.color(Ui.INK);
+            g.fillCircle(cx, cy, 30 * u * p);
+            g.color(0xffff3a3a);
+            g.fillCircle(cx, cy, 25 * u * p);
+            g.color(0xffffffff);
+            g.text(Integer.toString(ready), cx, cy + 11 * u, 32 * u, Gfx.ALIGN_CENTER, 0, 0);
         }
     }
 
@@ -1618,7 +1773,7 @@ public final class Game {
                 poly[5] = ay + sa * 20 * u - ca * 16 * u;
                 g.fillPoly(poly, 3);
                 g.color(0xffffffff);
-                g.text(mate.name.substring(0, 1), ax, ay + 10 * u, 28 * u, Gfx.ALIGN_CENTER, 0, 0);
+                g.text(mate.name.isEmpty() ? "?" : mate.name.substring(0, 1), ax, ay + 10 * u, 28 * u, Gfx.ALIGN_CENTER, 0, 0);
             }
         }
     }
@@ -1906,7 +2061,10 @@ public final class Game {
         g.color(resDelta > 0 ? 0xff9cff8a : (resDelta < 0 ? 0xffff7a6a : 0xffffffff));
         g.text((resDelta > 0 ? "+" : "") + resDelta, sx + 292 * u, sy, 46 * u, Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
         g.color(0xffd8dcff);
-        g.text("Trophies: " + profile.trophies, vx, sy + 56 * u, 32 * u, Gfx.ALIGN_RIGHT, 4 * u, Ui.INK);
+        g.text("Trophies: " + profile.trophies, sx, sy + 56 * u, 30 * u, Gfx.ALIGN_LEFT, 4 * u, Ui.INK);
+        g.color(resPassTierUp ? 0xffffd23f : 0xff9cff8a);
+        String px = resPassTierUp ? "PASS TIER " + SnakePass.tier(profile) + "!" : "+" + resPassXp + " PASS XP";
+        g.text(px, vx, sy + 56 * u, 32 * u, Gfx.ALIGN_RIGHT, 4 * u, Ui.INK);
 
         for (int i = 0; i < ui.count; i++) ui.button(g, ui.btns[i]);
     }

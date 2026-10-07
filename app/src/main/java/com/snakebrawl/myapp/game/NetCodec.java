@@ -10,7 +10,7 @@ import java.io.IOException;
 final class NetCodec {
     private NetCodec() {}
 
-    static byte[] hello(String name, int brawler, int level, int trophies, int[] palette) {
+    static byte[] hello(String name, int brawler, int level, int trophies, int[] palette, boolean exact, int platform) {
         ByteArrayOutputStream bo = new ByteArrayOutputStream();
         DataOutputStream o = new DataOutputStream(bo);
         try {
@@ -23,6 +23,8 @@ final class NetCodec {
             int n = Math.min(palette.length, 16);
             o.writeByte(n);
             for (int i = 0; i < n; i++) o.writeInt(palette[i]);
+            o.writeByte(exact ? 1 : 0);
+            o.writeByte(platform);
         } catch (IOException ignored) {
             // cannot happen with a byte array
         }
@@ -99,6 +101,10 @@ final class NetCodec {
                 int n = in.readUnsignedByte();
                 m.palette = new int[n];
                 for (int i = 0; i < n; i++) m.palette[i] = in.readInt();
+                if (m.protocol >= 2) {
+                    m.exact = in.readUnsignedByte() != 0;
+                    m.platform = in.readUnsignedByte();
+                }
                 break;
             }
             case NetSession.M_START:

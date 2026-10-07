@@ -27,6 +27,10 @@ final class Profile {
     String customClubName;
     int customClubBadge;
 
+    // Snake Pass (see SnakePass): season it belongs to, XP, claimed tiers (bit masks) and Pass+
+    int passSeason, passXp, passFree, passPremium;
+    boolean passPlus;
+
     // Settings
     boolean sound, vibration, damageNumbers, lowGraphics, leftHanded, autoAim;
     int stickSize;  // 0 small, 1 medium, 2 large
@@ -46,6 +50,12 @@ final class Profile {
         bestLen = p.loadInt("bestLen", 0);
         totalKills = p.loadInt("totalKills", 0);
         hints = p.loadInt("hints", 0);
+        passSeason = p.loadInt("passSeason", -1);
+        passXp = Math.max(0, p.loadInt("passXp", 0));
+        passFree = p.loadInt("passFree", 0);
+        passPremium = p.loadInt("passPrem", 0);
+        passPlus = p.loadInt("passPlus", 0) == 1;
+        SnakePass.checkSeason(this);
         mode = clamp(p.loadInt("mode", 0), 0, 2);
         skin = clamp(p.loadInt("skin", 0), 0, Skin.ALL.length - 1);
         ownedSkins = p.loadInt("ownedSkins", 1) | 1;
@@ -60,8 +70,9 @@ final class Profile {
         age = p.loadInt("age", 0);
         onboarded = p.loadInt("onboarded", 0) == 1 && nickname.length() > 0 && age > 0;
         club = p.loadInt("club", -1);
+        if (club != Clubs.CUSTOM && (club < -1 || club >= Clubs.NAMES.length)) club = -1;
         customClubName = p.loadString("clubName", "");
-        customClubBadge = p.loadInt("clubBadge", 0);
+        customClubBadge = clamp(p.loadInt("clubBadge", 0), 0, Clubs.BADGE_COLORS.length - 1);
 
         sound = p.loadInt("sound", 1) == 1;
         vibration = p.loadInt("vibration", 1) == 1;
@@ -82,6 +93,11 @@ final class Profile {
         p.saveInt("bestLen", bestLen);
         p.saveInt("totalKills", totalKills);
         p.saveInt("hints", hints);
+        p.saveInt("passSeason", passSeason);
+        p.saveInt("passXp", passXp);
+        p.saveInt("passFree", passFree);
+        p.saveInt("passPrem", passPremium);
+        p.saveInt("passPlus", passPlus ? 1 : 0);
         p.saveInt("mode", mode);
         p.saveInt("skin", skin);
         p.saveInt("ownedSkins", ownedSkins);
@@ -115,6 +131,10 @@ final class Profile {
         selected = 0;
         for (int i = 0; i < levels.length; i++) levels[i] = 1;
         nextGiftMinute = 0;
+        passXp = passFree = passPremium = 0;
+        passPlus = false;
+        club = -1;
+        hints = 0;
         save();
     }
 

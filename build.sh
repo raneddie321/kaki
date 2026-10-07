@@ -11,8 +11,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION_CODE=${VERSION_CODE:-13}
-VERSION_NAME=${VERSION_NAME:-2.2}
+VERSION_CODE=${VERSION_CODE:-14}
+VERSION_NAME=${VERSION_NAME:-3.0}
 MIN_SDK=24
 TARGET_SDK=36
 
@@ -66,7 +66,12 @@ echo "build-tools: $BT"
 rm -rf "$OUT"
 mkdir -p "$OUT"/res "$OUT"/gen "$OUT"/classes "$OUT"/dex "$OUT"/apk "$OUT"/aab/base "$DIST"
 
-LINK_FLAGS=(-I "$PLATFORM_JAR" --manifest app/src/main/AndroidManifest.xml -A app/src/main/assets
+# Assets: the app's own plus the browser version's WebRTC code, which the app runs for online play
+mkdir -p "$OUT/assets/net"
+cp -r app/src/main/assets/. "$OUT/assets/"
+cp web/static/vendor/peerjs.min.js web/static/sb-net.js "$OUT/assets/net/"
+
+LINK_FLAGS=(-I "$PLATFORM_JAR" --manifest app/src/main/AndroidManifest.xml -A "$OUT/assets"
     --min-sdk-version "$MIN_SDK" --target-sdk-version "$TARGET_SDK"
     --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" -0 wav --auto-add-overlay)
 

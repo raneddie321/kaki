@@ -12,6 +12,13 @@ final class Projectile {
     static final int SHURIKEN = 8;
     static final int GLOB = 9;
     static final int MEGAGLOB = 10;
+    static final int BULLET = 11;
+    static final int SPIKE = 12;
+    static final int NEEDLE = 13;
+    static final int SEED = 14;
+    static final int WAVE = 15;
+    static final int ORB = 16;
+    static final int METEOR = 17;
 
     boolean active;
     int kind;
@@ -22,6 +29,8 @@ final class Projectile {
     boolean throughWalls;
     int bounces;
     float slowFactor, slowDur;
+    /** Thorn's spikes split into this many needles when they stop. */
+    int split;
     // Recent positions for the glowing trail
     static final int TRAIL = 7;
     final float[] trailX = new float[TRAIL], trailY = new float[TRAIL];
@@ -39,6 +48,6 @@ final class Projectile {
     float startX, startY, targetX, targetY, flight, t, aoe;
 
     boolean isBomb() {
-        return kind == BOMB || kind == MEGABOMB || kind == GLOB || kind == MEGAGLOB;
+        return kind == BOMB || kind == MEGABOMB || kind == GLOB || kind == MEGAGLOB || kind == SEED || kind == METEOR;
     }
 }

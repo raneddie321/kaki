@@ -6,8 +6,8 @@ final class MathUtil {
     static final float PI = (float) Math.PI;
     static final float TAU = (float) (Math.PI * 2);
     /** Default random source. A World swaps in its own seeded generator while it simulates. */
-    static final Random GLOBAL = new Random();
-    static Random RNG = GLOBAL;
+    static final Rng GLOBAL = new Rng(System.nanoTime());
+    static Rng RNG = GLOBAL;
     /** Cosmetic randomness (particles) that must never affect the simulation. */
     static final Random FX = new Random();
 

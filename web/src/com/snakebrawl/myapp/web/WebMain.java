@@ -45,8 +45,19 @@ public final class WebMain implements Platform {
     private Game game;
     private final WebGfx gfx = new WebGfx();
 
+    @JSBody(script = "var m = /[?&]replay=(\\d+)/.exec(location.search); return m ? +m[1] : -1;")
+    private static native int replaySeed();
+
+    @JSBody(params = "s", script = "window.__replay = s;")
+    private static native void replayResult(String s);
+
     public static void main(String[] args) {
         final WebMain m = new WebMain();
+        int seed = replaySeed();
+        if (seed >= 0) {
+            // Determinism self-test used by the build checks (see SimTest replay)
+            replayResult(com.snakebrawl.myapp.game.NetReplay.run(m, seed, 3600));
+        }
         m.game = new Game(m);
         start(new Handler() {
             @Override
@@ -132,4 +143,114 @@ public final class WebMain implements Platform {
 
     @Override
     public void setNetworkDiscovery(boolean on) {}
+
+    // ------------------------------------------------------------------ online play (sb-net.js)
+
+    @JSBody(script = "return !!(window.SBNet && SBNet.available());")
+    private static native boolean netAvailable();
+
+    @JSBody(script = "SBNet.host();")
+    private static native void netHost();
+
+    @JSBody(script = "SBNet.search();")
+    private static native void netSearch();
+
+    @JSBody(params = "c", script = "SBNet.join(c);")
+    private static native void netJoin(String c);
+
+    @JSBody(script = "return SBNet.state();")
+    private static native int netState();
+
+    @JSBody(script = "return SBNet.reason();")
+    private static native String netReason();
+
+    @JSBody(script = "SBNet.clearReason();")
+    private static native void netClearReason();
+
+    @JSBody(script = "return SBNet.code();")
+    private static native String netCode();
+
+    @JSBody(params = "s", script = "SBNet.send(s);")
+    private static native void netSend(String s);
+
+    @JSBody(script = "return SBNet.poll();")
+    private static native String netPoll();
+
+    @JSBody(script = "SBNet.close();")
+    private static native void netClose();
+
+    @JSBody(script = "return window.SB_ENGINE === 'wasm';")
+    private static native boolean wasmEngine();
+
+    private final OnlineLink link = new OnlineLink() {
+        @Override
+        public boolean available() {
+            return netAvailable();
+        }
+
+        @Override
+        public void host() {
+            netHost();
+        }
+
+        @Override
+        public void search() {
+            netSearch();
+        }
+
+        @Override
+        public void join(String code) {
+            netJoin(code);
+        }
+
+        @Override
+        public int state() {
+            return netState();
+        }
+
+        @Override
+        public String reason() {
+            return netReason();
+        }
+
+        @Override
+        public void clearReason() {
+            netClearReason();
+        }
+
+        @Override
+        public String code() {
+            return netCode();
+        }
+
+        @Override
+        public void send(String data) {
+            netSend(data);
+        }
+
+        @Override
+        public String poll() {
+            return netPoll();
+        }
+
+        @Override
+        public void close() {
+            netClose();
+        }
+
+        @Override
+        public boolean exactFloats() {
+            return wasmEngine();
+        }
+
+        @Override
+        public boolean isBrowser() {
+            return true;
+        }
+    };
+
+    @Override
+    public OnlineLink online() {
+        return link;
+    }
 }

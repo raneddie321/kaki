@@ -35,7 +35,8 @@ final class MetaScreens {
                 float top = padT + 140 * u, bottom = h - padB - 30 * u;
                 float gridR = padL + 20 * u + (w - padL - padR - 40 * u) * 0.6f;
                 float gap = 22 * u;
-                float tw = (gridR - padL - 20 * u - gap * 3) / 4f, th = (bottom - top - gap) / 2f;
+                int rows = (Brawler.ALL.length + 3) / 4;
+                float tw = (gridR - padL - 20 * u - gap * 3) / 4f, th = (bottom - top - gap * (rows - 1)) / rows;
                 for (int i = 0; i < Brawler.ALL.length; i++) {
                     float l = padL + 20 * u + (i % 4) * (tw + gap), t = top + (i / 4) * (th + gap);
                     ui.add(B_TILE + i, l, t, l + tw, t + th, null, null, 0);
@@ -86,11 +87,14 @@ final class MetaScreens {
                         ui.addScroll(B_SKIN + i, cl, ct, cl + cw, ct + ch, null, null, 0);
                     }
                 } else if (shopTab == 2) {
-                    ui.setScrollArea(l, top, r, bottom, 0);
-                    float gap = 26 * u, cw = (r - l - gap * 3) / 4f;
-                    for (int i = 0; i < 4; i++) {
-                        float cl = l + i * (cw + gap);
-                        ui.add(B_SHOP_BRAWLER + 4 + i, cl, top + 10 * u, cl + cw, bottom - 10 * u, null, null, 0);
+                    // Every brawler that is not free, four per row; scrolls when there are more
+                    int first = 4, n = Brawler.ALL.length - first;
+                    float gap = 26 * u, cw = (r - l - gap * 3) / 4f, ch = Math.min(bottom - top - 20 * u, 560 * u);
+                    int rows = (n + 3) / 4;
+                    ui.setScrollArea(l - 10 * u, top, r + 10 * u, bottom, rows * (ch + gap) + 20 * u);
+                    for (int i = 0; i < n; i++) {
+                        float cl = l + (i % 4) * (cw + gap), ct = top + 10 * u + (i / 4) * (ch + gap);
+                        ui.addScroll(B_SHOP_BRAWLER + first + i, cl, ct, cl + cw, ct + ch, null, null, 0);
                     }
                 } else {
                     ui.setScrollArea(l, top, r, bottom, 0);
@@ -352,7 +356,7 @@ final class MetaScreens {
         game.layout();
     }
 
-    private void openBox(boolean mega) {
+    void openBox(boolean mega) {
         game.gated.playSound(Platform.SND_BOX, 1f);
         if (mega) {
             int s = randomUnownedSkin(Integer.MAX_VALUE);
@@ -583,11 +587,6 @@ final class MetaScreens {
                 Ui.Btn bt = ui.btns[i];
                 if (bt.id >= B_GIFT && bt.id <= B_DEAL) drawOffer(g, bt);
             }
-        } else if (shopTab == 2) {
-            for (int i = 0; i < ui.count; i++) {
-                Ui.Btn bt = ui.btns[i];
-                if (bt.id >= B_SHOP_BRAWLER && bt.id < B_SHOP_BRAWLER + Brawler.ALL.length) drawBrawlerOffer(g, bt);
-            }
         } else if (shopTab == 3) {
             for (int i = 0; i < ui.count; i++) {
                 Ui.Btn bt = ui.btns[i];
@@ -601,7 +600,8 @@ final class MetaScreens {
                 Ui.Btn bt = ui.btns[i];
                 if (!bt.scrolls) continue;
                 if (bt.b - ui.scrollY < ui.viewT - 20 * u || bt.t - ui.scrollY > ui.viewB + 20 * u) continue;
-                drawSkinTile(g, bt);
+                if (shopTab == 2) drawBrawlerOffer(g, bt);
+                else drawSkinTile(g, bt);
             }
             g.restore();
             if (ui.scrollMax > 0) {
@@ -898,7 +898,7 @@ final class MetaScreens {
             ui.button(g, bt);
         }
         g.color(0xff9aa0d0);
-        g.text("Snake Brawl v2.2  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
+        g.text("Snake Brawl v3.0  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
                 w / 2, h - game.padB - 160 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 }

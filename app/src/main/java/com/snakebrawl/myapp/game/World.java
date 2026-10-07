@@ -107,7 +107,7 @@ final class World {
     }
 
     /** Random source for this match. Seeded identically on both phones in a Wi-Fi game. */
-    final java.util.Random rng;
+    final Rng rng;
     /** Number of human-controlled snakes (snakes[0] and, in a Wi-Fi game, snakes[1]). */
     final int humans;
 
@@ -241,7 +241,7 @@ final class World {
         if (s.brain != null) s.brain.reset();
         fx.ring(x, y, 120, 0xff9ae6ff, 0.5f);
         fx.flash(x, y, 140, 0xff9ae6ff, 0.3f);
-        if (s.isPlayer) banner("BACK IN THE FIGHT!");
+        if (s == player) banner("BACK IN THE FIGHT!");
     }
 
     private static String[] shuffledNames() {
@@ -506,7 +506,7 @@ final class World {
     private float streakTimer;
 
     void update(float dt) {
-        java.util.Random prev = MathUtil.RNG;
+        Rng prev = MathUtil.RNG;
         MathUtil.RNG = rng;
         try {
             simulate(dt);
@@ -517,7 +517,7 @@ final class World {
 
     /** One lockstep tick of a Wi-Fi game: applies both players' inputs, then simulates. */
     void netStep(float dt, NetInput host, NetInput guest) {
-        java.util.Random prev = MathUtil.RNG;
+        Rng prev = MathUtil.RNG;
         MathUtil.RNG = rng;
         try {
             applyInput(snakes[0], host);
@@ -539,6 +539,8 @@ final class World {
     /** Turns a human snake into a bot, e.g. when the friend's phone disconnects. */
     void makeBot(Snake s) {
         if (s.brain == null) s.brain = new BotBrain(this, s, botTrophies);
+        // Lockstep has ended when this runs, so dropping the player perks is safe
+        s.isPlayer = false;
         s.boostInput = false;
     }
 
@@ -736,7 +738,7 @@ final class World {
         if (s.hp > s.maxHp) s.hp = s.maxHp;
 
         boolean ready = s.superReady();
-        if (ready && !s.superWasReady && s.isPlayer) sound(Platform.SND_SUPER_READY, s.hx(), s.hy(), 0.9f);
+        if (ready && !s.superWasReady && s == player) sound(Platform.SND_SUPER_READY, s.hx(), s.hy(), 0.9f);
         s.superWasReady = ready;
     }
 
@@ -866,6 +868,11 @@ final class World {
                 }
                 if (j == 0) {
                     if (b.dashTime > 0) continue;
+                    if (b.isPlayer) {
+                        // Players bounce off in their own pass; only a smaller attacker can lose here
+                        if (a.mass < b.mass * 0.92f) kill(a, b, CAUSE_CRASH);
+                        continue;
+                    }
                     if (a.mass < b.mass * 0.92f) {
                         kill(a, b, CAUSE_CRASH);
                     } else if (b.mass < a.mass * 0.92f) {
@@ -906,7 +913,7 @@ final class World {
                 float d = (float) Math.sqrt(d2);
                 if (d < eat + orad[i] * 0.5f) {
                     s.mass += ov[i];
-                    if (s.isPlayer) ate = true;
+                    if (s == player) ate = true;
                     removeOrb(i);
                     i--;
                     continue;
@@ -928,7 +935,7 @@ final class World {
                     s.hp = Math.min(s.computeMaxHp(), s.hp + s.type.hp * 0.15f);
                     fx.text(hx, hy - s.radius - 60, "+POWER", 0xff6dff6d, 34);
                     fx.ring(cubeX[c], cubeY[c], 70, 0xff6dff6d, 0.4f);
-                    if (s.isPlayer) sound(Platform.SND_POWER, hx, hy, 1f);
+                    if (s == player) sound(Platform.SND_POWER, hx, hy, 1f);
                     cubeCount--;
                     cubeX[c] = cubeX[cubeCount];
                     cubeY[c] = cubeY[cubeCount];
@@ -955,6 +962,12 @@ final class World {
                 return 0xffff5a8a;
             case Brawler.BLAZE:
                 return 0xffff7a2a;
+            case Brawler.THORN:
+                return 0xffb8ff8a;
+            case Brawler.RUMBLE:
+                return 0xffffb07a;
+            case Brawler.NOVA:
+                return 0xffc8aaff;
             default:
                 return 0xffffd060;
         }
@@ -966,7 +979,7 @@ final class World {
         float mx = s.hx() + MathUtil.cos(ang) * hr, my = s.hy() + MathUtil.sin(ang) * hr;
         // Muzzle flash
         if (isNearCamera(mx, my)) fx.flash(mx, my, sup ? 95 : 60, muzzleColor(s.type.id), sup ? 0.2f : 0.13f);
-        if (s.isPlayer) shake = Math.max(shake, sup ? 4f : 1.5f);
+        if (s == player) shake = Math.max(shake, sup ? 4f : 1.5f);
         switch (s.type.id) {
             case Brawler.VIPER: {
                 int count = sup ? 11 : 5;
@@ -1071,6 +1084,58 @@ final class World {
                     sound(Platform.SND_SHOOT, mx, my, 0.7f);
                 }
                 break;
+            case Brawler.COBRA:
+                s.burstLeft = sup ? 2 : 4;
+                s.burstInterval = sup ? 0.22f : 0.075f;
+                s.burstTimer = 0;
+                s.burstAng = ang;
+                s.burstSuper = sup;
+                sound(sup ? Platform.SND_SUPER : Platform.SND_SHOOT, mx, my, 0.8f);
+                break;
+            case Brawler.THORN:
+                if (sup) {
+                    float range = s.type.superRange;
+                    float d = MathUtil.clamp(dist, 110, range);
+                    Projectile p = spawnProj(Projectile.SEED, s, mx, my, ang, 0, range, 900 * mult, 16, 200, true);
+                    if (p != null) {
+                        p.startX = mx;
+                        p.startY = my;
+                        p.targetX = MathUtil.clamp(s.hx() + MathUtil.cos(ang) * d, 0, size);
+                        p.targetY = MathUtil.clamp(s.hy() + MathUtil.sin(ang) * d, 0, size);
+                        p.flight = 0.7f;
+                        p.t = 0;
+                        p.aoe = 140;
+                    }
+                    sound(Platform.SND_SUPER, mx, my, 0.8f);
+                } else {
+                    Projectile p = spawnProj(Projectile.SPIKE, s, mx, my, ang, 1150, s.type.range, s.type.damage * mult, 11, 120, false);
+                    if (p != null) p.split = 6;
+                    sound(Platform.SND_THROW, mx, my, 0.7f);
+                }
+                break;
+            case Brawler.RUMBLE:
+                if (sup) {
+                    quake(s, s.type.superRange, 1500 * mult);
+                    sound(Platform.SND_EXPLODE, mx, my, 1f);
+                } else {
+                    spawnProj(Projectile.WAVE, s, mx, my, ang, 950, s.type.range, s.type.damage * mult, 30, 460, false);
+                    sound(Platform.SND_HIT, mx, my, 0.9f);
+                }
+                break;
+            case Brawler.NOVA:
+                if (sup) {
+                    s.burstLeft = 5;
+                    s.burstInterval = 0.16f;
+                    s.burstTimer = 0;
+                    s.burstAng = ang;
+                    s.burstDist = MathUtil.clamp(dist, 150, s.type.superRange);
+                    s.burstSuper = true;
+                    sound(Platform.SND_SUPER, mx, my, 0.9f);
+                } else {
+                    spawnProj(Projectile.ORB, s, mx, my, ang, 1050, s.type.range, s.type.damage * mult, 13, 140, false);
+                    sound(Platform.SND_BOLT, mx, my, 0.6f);
+                }
+                break;
             case Brawler.BLAZE:
             default:
                 if (sup) {
@@ -1099,6 +1164,38 @@ final class World {
             float mx = s.hx() + MathUtil.cos(a) * hr, my = s.hy() + MathUtil.sin(a) * hr;
             spawnProj(Projectile.SUPERBOLT, s, mx, my, a, 2100, s.type.superRange, 520 * mult, 11, 200, true);
             sound(Platform.SND_BOLT, mx, my, 0.5f);
+        } else if (s.type.id == Brawler.COBRA) {
+            if (s.burstSuper) {
+                float off = s.burstLeft % 2 == 0 ? 0 : MathUtil.TAU / 32f;
+                for (int i = 0; i < 16; i++) {
+                    float a = s.burstAng + off + MathUtil.TAU * i / 16f;
+                    spawnProj(Projectile.BULLET, s, s.hx() + MathUtil.cos(a) * hr, s.hy() + MathUtil.sin(a) * hr, a, 1600,
+                            s.type.superRange, 420 * mult, 8, 140, false);
+                }
+                fx.ring(s.hx(), s.hy(), 90, 0xffffd060, 0.25f);
+                sound(Platform.SND_SHOTGUN, s.hx(), s.hy(), 0.7f);
+            } else {
+                float a = s.burstAng + MathUtil.rand(-0.035f, 0.035f);
+                float mx = s.hx() + MathUtil.cos(a) * hr, my = s.hy() + MathUtil.sin(a) * hr;
+                spawnProj(Projectile.BULLET, s, mx, my, a, 1700, s.type.range, s.type.damage * mult, 8, 90, false);
+                if (isNearCamera(mx, my)) fx.flash(mx, my, 40, 0xffffd060, 0.08f);
+                sound(Platform.SND_SHOOT, mx, my, 0.5f);
+            }
+        } else if (s.type.id == Brawler.NOVA) {
+            float a = s.burstAng + MathUtil.rand(-0.22f, 0.22f);
+            float d = s.burstDist + MathUtil.rand(-110, 110);
+            float tx = MathUtil.clamp(s.hx() + MathUtil.cos(a) * d, 0, size), ty = MathUtil.clamp(s.hy() + MathUtil.sin(a) * d, 0, size);
+            Projectile p = spawnProj(Projectile.METEOR, s, s.hx(), s.hy(), a, 0, s.type.superRange, 760 * mult, 15, 260, true);
+            if (p != null) {
+                // Meteors fall from the sky onto the target area
+                p.startX = tx - 160;
+                p.startY = ty - 420;
+                p.targetX = tx;
+                p.targetY = ty;
+                p.flight = 0.55f;
+                p.t = 0;
+                p.aoe = 120;
+            }
         } else if (s.type.id == Brawler.ZIGGY) {
             float a = s.burstAng + MathUtil.rand(-0.05f, 0.05f);
             float mx = s.hx() + MathUtil.cos(a) * hr, my = s.hy() + MathUtil.sin(a) * hr;
@@ -1133,6 +1230,7 @@ final class World {
             p.bounces = 0;
             p.slowFactor = 1f;
             p.slowDur = 0;
+            p.split = 0;
             p.trailCount = 0;
             return p;
         }
@@ -1150,6 +1248,7 @@ final class World {
                 if (f >= 1f) explode(p);
                 continue;
             }
+            if (p.kind == Projectile.ORB) homeIn(p, dt);
             p.pushTrail();
             p.px = p.x;
             p.py = p.y;
@@ -1172,7 +1271,8 @@ final class World {
             }
             if (p.traveled >= p.range || p.x < 0 || p.y < 0 || p.x >= size || p.y >= size) {
                 p.active = false;
-                if (p.kind != Projectile.FLAME) fx.sparks(p.x, p.y, 3, 0xffffffff, 120, 0.2f);
+                if (p.split > 0) splitSpike(p, p.px, p.py);
+                else if (p.kind != Projectile.FLAME) fx.sparks(p.x, p.y, 3, 0xffffffff, 120, 0.2f);
                 continue;
             }
             int tx = (int) (p.x / T), ty = (int) (p.y / T);
@@ -1185,7 +1285,8 @@ final class World {
             }
             if (tile == WALL && !p.throughWalls) {
                 p.active = false;
-                fx.sparks(p.px, p.py, 5, 0xffdddddd, 200, 0.25f);
+                if (p.split > 0) splitSpike(p, p.px, p.py);
+                else fx.sparks(p.px, p.py, 5, 0xffdddddd, 200, 0.25f);
                 continue;
             }
             hitSnakes(p, step);
@@ -1214,10 +1315,12 @@ final class World {
                 // Head shots crit
                 boolean crit = j <= 1;
                 float dmg = crit ? p.damage * 1.25f : p.damage;
-                if (crit && p.owner != null && p.owner.isPlayer && showDamage) fx.text(cx, cy - 78, "CRIT!", 0xffffd23f, 30);
+                if (crit && p.owner != null && p.owner == player && showDamage) fx.text(cx, cy - 78, "CRIT!", 0xffffd23f, 30);
                 hurt(s, dmg, p.owner, cx, cy, ang, p.knock, CAUSE_SHOT);
                 if (p.slowDur > 0) slow(s, p.slowFactor, p.slowDur);
                 p.active = false;
+                // Thorn's spike also bursts on a direct hit
+                if (p.split > 0) splitSpike(p, cx, cy);
                 return;
             }
         }
@@ -1226,6 +1329,35 @@ final class World {
     private void explode(Projectile p) {
         p.active = false;
         float x = p.x, y = p.y, r = p.aoe;
+        if (p.kind == Projectile.SEED) {
+            fx.ring(x, y, r, 0xff9aff6a, 0.4f);
+            fx.burst(x, y, 24, 0xff7ad85a, r * 3f, 9, 0.5f);
+            fx.flash(x, y, r * 1.4f, 0xffd8ff9a, 0.18f);
+            addDecal(x, y, r * 0.6f);
+            sound(Platform.SND_EXPLODE, x, y, 0.6f);
+            splash(p, x, y, r);
+            Snake o = p.owner;
+            float mult = o != null ? o.damageMult() : 1f;
+            for (int i = 0; i < 12; i++) {
+                float a = MathUtil.TAU * i / 12f;
+                Projectile nd = spawnProj(Projectile.NEEDLE, o, x + MathUtil.cos(a) * 20, y + MathUtil.sin(a) * 20, a, 1100, 330,
+                        260 * mult, 7, 70, false);
+                if (nd != null) nd.throughWalls = false;
+            }
+            return;
+        }
+        if (p.kind == Projectile.METEOR) {
+            fx.ring(x, y, r * 1.1f, 0xffc8aaff, 0.4f);
+            fx.fireball(x, y, r, 0.45f);
+            fx.flash(x, y, r * 1.5f, 0xffd8c8ff, 0.18f);
+            fx.burst(x, y, 18, 0xff9a7aff, r * 3f, 9, 0.5f);
+            fx.burst(x, y, 8, 0xffffe066, r * 2f, 7, 0.4f);
+            addDecal(x, y, r * 0.8f);
+            sound(Platform.SND_EXPLODE, x, y, 0.6f);
+            shakeAt(x, y, 7);
+            splash(p, x, y, r);
+            return;
+        }
         if (p.kind == Projectile.GLOB || p.kind == Projectile.MEGAGLOB) {
             boolean big = p.kind == Projectile.MEGAGLOB;
             addArea(x, y, r, big ? 5f : 3f, (big ? 850 : 650) * (p.owner != null ? p.owner.damageMult() : 1f), p.owner);
@@ -1292,13 +1424,72 @@ final class World {
         shakeAt(x, y, 8);
         for (int i = 0; i < snakeCount; i++) {
             Snake o = snakes[i];
-            if (o == s || !o.alive) continue;
+            if (o == s || !o.alive || sameTeam(o, s)) continue;
             if (x < o.minX - radius || x > o.maxX + radius || y < o.minY - radius || y > o.maxY + radius) continue;
             for (int j = 0; j < o.segs; j += 2) {
                 float rr = radius + o.radius;
                 if (MathUtil.dist2(x, y, o.sx[j], o.sy[j]) < rr * rr) {
                     hurt(o, dmg, s, o.sx[j], o.sy[j], MathUtil.angleTo(x, y, o.sx[j], o.sy[j]), 200, CAUSE_SHOT);
                     slow(o, 0.3f, 2.5f);
+                    break;
+                }
+            }
+        }
+    }
+
+    /** Thorn's spike bursts into needles where it stops. */
+    private void splitSpike(Projectile p, float x, float y) {
+        float base = (float) MathUtil.atan2(p.vy, p.vx);
+        fx.burst(x, y, 10, 0xff9aff6a, 260, 6, 0.3f);
+        for (int i = 0; i < p.split; i++) {
+            float a = base + MathUtil.TAU * i / p.split;
+            spawnProj(Projectile.NEEDLE, p.owner, x, y, a, 1100, 240, p.damage * 0.42f, 7, 60, false);
+        }
+    }
+
+    /** Nova's orbs curve toward the nearest enemy head in front of them. */
+    private void homeIn(Projectile p, float dt) {
+        Snake best = null;
+        float bestD = 480 * 480;
+        for (int i = 0; i < snakeCount; i++) {
+            Snake s = snakes[i];
+            if (!s.alive || s == p.owner || sameTeam(s, p.owner) || s.spawnShield > 0) continue;
+            if (isHiddenFromViewer(s, p.owner, s.hx(), s.hy())) continue;
+            float d = MathUtil.dist2(p.x, p.y, s.hx(), s.hy());
+            if (d < bestD) {
+                bestD = d;
+                best = s;
+            }
+        }
+        if (best == null) return;
+        float speed = (float) Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+        float cur = (float) MathUtil.atan2(p.vy, p.vx);
+        float want = MathUtil.angleTo(p.x, p.y, best.hx(), best.hy());
+        float diff = MathUtil.wrap(want - cur);
+        float turn = 3.2f * dt;
+        cur += MathUtil.clamp(diff, -turn, turn);
+        p.vx = MathUtil.cos(cur) * speed;
+        p.vy = MathUtil.sin(cur) * speed;
+    }
+
+    /** Rumble's Earthquake: heavy damage, knockback and a long slow around him. */
+    private void quake(Snake s, float radius, float dmg) {
+        float x = s.hx(), y = s.hy();
+        fx.ring(x, y, radius, 0xffffb07a, 0.5f);
+        fx.ring(x, y, radius * 0.65f, 0xffc8763e, 0.4f);
+        fx.burst(x, y, 36, 0xff8a5a3a, radius * 3f, 11, 0.6f);
+        fx.smoke(x, y, 5, 0xffb89a78, radius * 0.25f, 0.6f);
+        addDecal(x, y, radius * 0.3f);
+        shakeAt(x, y, 18);
+        for (int i = 0; i < snakeCount; i++) {
+            Snake o = snakes[i];
+            if (o == s || !o.alive || sameTeam(o, s)) continue;
+            if (x < o.minX - radius || x > o.maxX + radius || y < o.minY - radius || y > o.maxY + radius) continue;
+            for (int j = 0; j < o.segs; j += 2) {
+                float rr = radius + o.radius;
+                if (MathUtil.dist2(x, y, o.sx[j], o.sy[j]) < rr * rr) {
+                    hurt(o, dmg, s, o.sx[j], o.sy[j], MathUtil.angleTo(x, y, o.sx[j], o.sy[j]), 520, CAUSE_SHOT);
+                    slow(o, 0.5f, 2f);
                     break;
                 }
             }
@@ -1422,7 +1613,7 @@ final class World {
             v.kby += MathUtil.sin(kAng) * knock;
         }
         if (cause != CAUSE_POISON) {
-            boolean mine = by != null && by.isPlayer, me = v.isPlayer;
+            boolean mine = by != null && by == player, me = v == player;
             if (showDamage && (mine || me || isNearCamera(x, y))) {
                 int col = me ? 0xffff5a5a : (mine ? 0xffffffff : 0xffd8d8d8);
                 // Pellets and flames land in clusters: sum them into one number
@@ -1483,7 +1674,7 @@ final class World {
                 x = v.sx[j];
                 y = v.sy[j];
             }
-            addOrb(x, y, value, v.palette[k % v.palette.length], -1);
+            addOrb(x, y, value, v.palette[k % Skin.colorCount(v.palette)], -1);
         }
         for (int c = 0; c < v.cubes; c++) {
             int j = MathUtil.randInt(Math.max(1, Math.min(v.segs, 12)));
@@ -1501,15 +1692,16 @@ final class World {
         }
         addFeed(by, v, cause);
 
-        if (v.isPlayer) {
+        // The knockout freeze is part of the simulation, so it must not depend on which phone this is
+        if (!v.isPlayer && by != null && by.isPlayer) hitStop = 0.07f;
+        if (v == player) {
             playerDied = true;
             sound(Platform.SND_DEATH, v.hx(), v.hy(), 1f);
             platform.vibrate(180);
-        } else if (by != null && by.isPlayer) {
+        } else if (by != null && by == player) {
             sound(Platform.SND_KILL, v.hx(), v.hy(), 1f);
             platform.vibrate(40);
             fx.text(by.hx(), by.hy() - by.radius - 70, "KNOCKOUT!", 0xffffd23f, 44);
-            hitStop = 0.07f;
             shake = Math.max(shake, 9);
             streak = streakTimer > 0 ? streak + 1 : 1;
             streakTimer = 4.5f;
@@ -1786,6 +1978,17 @@ final class World {
         }
     }
 
+    /** Smooth 0..1 noise over tiles (value noise on a 6-tile grid) for meadow patches. */
+    private static float meadow(int tx, int ty) {
+        int gx = tx / 6, gy = ty / 6; // tile indices are never negative
+        float fx = (tx - gx * 6) / 6f, fy = (ty - gy * 6) / 6f;
+        fx = fx * fx * (3 - 2 * fx);
+        fy = fy * fy * (3 - 2 * fy);
+        float a = (hash(gx, gy) & 1023) / 1023f, b = (hash(gx + 1, gy) & 1023) / 1023f;
+        float c = (hash(gx, gy + 1) & 1023) / 1023f, d = (hash(gx + 1, gy + 1) & 1023) / 1023f;
+        return MathUtil.lerp(MathUtil.lerp(a, b, fx), MathUtil.lerp(c, d, fx), fy);
+    }
+
     private static int hash(int x, int y) {
         int h = x * 73856093 ^ y * 19349663;
         h ^= h >>> 13;
@@ -1828,6 +2031,28 @@ final class World {
             }
         }
         if (fancy) {
+            // Soft meadow patches: low-frequency noise decides where grass grows over the sand
+            for (int ty = ty0; ty <= ty1; ty++) {
+                for (int tx = tx0; tx <= tx1; tx++) {
+                    float m = meadow(tx, ty);
+                    if (m < 0.52f) continue;
+                    float a = Math.min(1f, (m - 0.52f) * 3.2f);
+                    // Tile-sized tint fading in with the noise, so patches blend into the checker
+                    g.color(MathUtil.withAlpha(0xff9cc45a, 0.38f * a));
+                    g.fillRect(tx * T, ty * T, tx * T + T, ty * T + T);
+                }
+            }
+            // Sand grain
+            for (int ty = ty0; ty <= ty1; ty++) {
+                for (int tx = tx0; tx <= tx1; tx++) {
+                    int hsh = hash(tx * 13 + 1, ty * 17 + 7);
+                    g.color(0x1e6a4a1a);
+                    for (int k = 0; k < 4; k++) {
+                        hsh = hsh * 1103515245 + 12345;
+                        g.fillCircle(tx * T + ((hsh >>> 8) & 63), ty * T + ((hsh >>> 16) & 63), 1.6f + ((hsh >>> 24) & 1));
+                    }
+                }
+            }
             // Decorations: grass tufts, pebbles and little flowers
             for (int ty = ty0; ty <= ty1; ty++) {
                 for (int tx = tx0; tx <= tx1; tx++) {
@@ -1992,6 +2217,12 @@ final class World {
                         }
                         g.color(0x55262c40);
                         g.line(x + T / 2, y + T - lift + 3, x + T / 2, y + T - 2, 2);
+                        if (fancy) {
+                            // Brick courses on the front face
+                            g.line(x + 2, y + T - lift * 0.5f, x + T - 2, y + T - lift * 0.5f, 2);
+                            g.color(0x22ffffff);
+                            g.line(x + 3, y + T - lift + 2, x + T - 3, y + T - lift + 2, 2);
+                        }
                     }
                     // Top face
                     g.color(0xff2a3048);
@@ -2005,12 +2236,33 @@ final class World {
                     g.fillRoundRect(x + 5, y - lift + 4, x + T - 5, y - lift + 10, 3);
                     if (fancy) {
                         int hsh = hash(tx, ty);
+                        // Stone slabs: mortar joints, offset every other row, with bevelled edges
+                        float top = y - lift, mid = top + T * 0.5f;
+                        float jx = (ty & 1) == 0 ? x + T * 0.5f : x + T * 0.3f;
+                        float jx2 = (ty & 1) == 0 ? x + T * 0.3f : x + T * 0.62f;
                         g.color(0x55404a66);
-                        float cx = x + 14 + (hsh & 15) * 2, cy = y - lift + 20 + ((hsh >>> 4) & 15);
-                        g.line(cx, cy, cx + 10, cy + 8, 2);
-                        g.line(cx + 10, cy + 8, cx + 6, cy + 18, 2);
-                        g.color(0x22ffffff);
-                        g.fillCircle(x + T - 16, y - lift + 22, 5);
+                        g.line(x + 3, mid, x + T - 3, mid, 2.5f);
+                        g.line(jx, top + 12, jx, mid - 1, 2.5f);
+                        g.line(jx2, mid + 1, jx2, top + T - 3, 2.5f);
+                        g.color(0x33ffffff);
+                        g.line(x + 4, mid + 3, x + T - 4, mid + 3, 1.5f);
+                        g.line(jx + 3, top + 13, jx + 3, mid - 2, 1.5f);
+                        if ((hsh & 7) == 0) {
+                            g.color(0x55404a66);
+                            float cx = x + 14 + (hsh >>> 4 & 15) * 2, cy = top + 20 + ((hsh >>> 8) & 7);
+                            g.line(cx, cy, cx + 8, cy + 6, 2);
+                            g.line(cx + 8, cy + 6, cx + 5, cy + 13, 2);
+                        }
+                        if (((hsh >>> 12) & 3) == 0) {
+                            // Moss creeping over the edge
+                            float mx = x + 8 + ((hsh >>> 16) & 31), my = top + 6;
+                            g.color(0xcc5a9a3a);
+                            g.fillCircle(mx, my, 7);
+                            g.fillCircle(mx + 8, my + 2, 5);
+                            g.fillCircle(mx - 6, my + 3, 4);
+                            g.color(0xcc8ac85a);
+                            g.fillCircle(mx - 1, my - 1, 3.5f);
+                        }
                     }
                 } else {
                     int bi = boxAt(ty * n + tx);
@@ -2153,6 +2405,17 @@ final class World {
                 return 0xffa6ff3a;
             case Projectile.FLAME:
                 return 0xffff7a2a;
+            case Projectile.BULLET:
+                return 0xffffd060;
+            case Projectile.SPIKE:
+            case Projectile.NEEDLE:
+            case Projectile.SEED:
+                return 0xff9aff6a;
+            case Projectile.WAVE:
+                return 0xffffb07a;
+            case Projectile.ORB:
+            case Projectile.METEOR:
+                return 0xffb89aff;
             default:
                 return 0xffffa62e;
         }
@@ -2305,6 +2568,109 @@ final class World {
                     g.fillCircle(p.x - p.radius * 0.3f, by - p.radius * 0.3f, p.radius * 0.35f);
                     break;
                 }
+                case Projectile.BULLET: {
+                    g.color(0x88ffb030);
+                    g.line(p.x, p.y, p.x - p.vx * 0.03f, p.y - p.vy * 0.03f, p.radius * 1.3f);
+                    g.color(0xffffe9a0);
+                    g.line(p.x, p.y, p.x - p.vx * 0.018f, p.y - p.vy * 0.018f, p.radius * 0.7f);
+                    g.color(0xff8a5a24);
+                    g.fillCircle(p.x, p.y, p.radius * 0.75f);
+                    g.color(0xffffd060);
+                    g.fillCircle(p.x, p.y, p.radius * 0.55f);
+                    break;
+                }
+                case Projectile.SPIKE:
+                case Projectile.NEEDLE: {
+                    boolean big = p.kind == Projectile.SPIKE;
+                    float a = (float) MathUtil.atan2(p.vy, p.vx);
+                    float ca = MathUtil.cos(a), sa = MathUtil.sin(a);
+                    float len = p.radius * (big ? 2.4f : 2.2f), wd = p.radius * (big ? 0.75f : 0.45f);
+                    poly4[0] = p.x + ca * len;
+                    poly4[1] = p.y + sa * len;
+                    poly4[2] = p.x - ca * len * 0.6f - sa * wd;
+                    poly4[3] = p.y - sa * len * 0.6f + ca * wd;
+                    poly4[4] = p.x - ca * len * 0.6f + sa * wd;
+                    poly4[5] = p.y - sa * len * 0.6f - ca * wd;
+                    g.color(0xff1e5a24);
+                    g.fillPoly(poly4, 3);
+                    g.color(big ? 0xff7ad85a : 0xffc8ff9a);
+                    g.fillCircle(p.x - ca * len * 0.15f, p.y - sa * len * 0.15f, wd * 0.7f);
+                    if (big) {
+                        g.color(0xffff7ab0);
+                        g.fillCircle(p.x - ca * len * 0.45f, p.y - sa * len * 0.45f, wd * 0.5f);
+                    }
+                    break;
+                }
+                case Projectile.SEED: {
+                    float f = Math.min(1f, p.t / p.flight);
+                    float hgt = MathUtil.sin(f * MathUtil.PI) * 150;
+                    g.color(0x40000000);
+                    g.fillCircle(p.x, p.y, p.radius * 0.8f);
+                    g.color(0x889aff6a);
+                    g.strokeCircle(p.targetX, p.targetY, p.aoe * (0.6f + 0.4f * f), 4);
+                    float by = p.y - hgt;
+                    if (fancy) g.radial(p.x, by, p.radius * 2.4f, 0x889aff6a, 0x009aff6a);
+                    g.color(0xff1e5a24);
+                    g.fillCircle(p.x, by, p.radius + 3);
+                    g.color(0xff6ac24a);
+                    g.fillCircle(p.x, by, p.radius);
+                    float spin = tt * 9f;
+                    g.color(0xffe8ffd0);
+                    for (int k = 0; k < 6; k++) {
+                        float a = spin + k * MathUtil.TAU / 6f;
+                        g.fillCircle(p.x + MathUtil.cos(a) * p.radius * 0.62f, by + MathUtil.sin(a) * p.radius * 0.62f, p.radius * 0.14f);
+                    }
+                    g.color(0xffff7ab0);
+                    g.fillCircle(p.x, by, p.radius * 0.32f);
+                    break;
+                }
+                case Projectile.WAVE: {
+                    float a = (float) MathUtil.atan2(p.vy, p.vx);
+                    float f = p.traveled / p.range;
+                    float deg = (float) Math.toDegrees(a);
+                    float rr = p.radius * (1.1f + f * 0.6f);
+                    g.color(MathUtil.withAlpha(0xffffd8a8, 0.85f * (1f - f * 0.6f)));
+                    g.arc(p.x - MathUtil.cos(a) * rr * 0.5f, p.y - MathUtil.sin(a) * rr * 0.5f, rr, deg - 70, 140, p.radius * 0.5f);
+                    g.color(MathUtil.withAlpha(0xffc8763e, 0.9f * (1f - f * 0.5f)));
+                    g.arc(p.x - MathUtil.cos(a) * rr * 0.5f, p.y - MathUtil.sin(a) * rr * 0.5f, rr * 0.75f, deg - 60, 120, p.radius * 0.35f);
+                    g.color(0xffff3a3a);
+                    g.fillCircle(p.x, p.y, p.radius * 0.35f);
+                    g.color(0xffffd8a8);
+                    g.fillCircle(p.x - p.radius * 0.1f, p.y - p.radius * 0.12f, p.radius * 0.15f);
+                    break;
+                }
+                case Projectile.ORB: {
+                    float pulse = 0.85f + 0.15f * MathUtil.sin(tt * 18f);
+                    if (fancy) g.radial(p.x, p.y, p.radius * 2.6f * pulse, 0xccb89aff, 0x00b89aff);
+                    g.color(0xff35208a);
+                    g.fillCircle(p.x, p.y, p.radius + 2.5f);
+                    g.color(0xff9a7aff);
+                    g.fillCircle(p.x, p.y, p.radius);
+                    Icons.star(g, p.x, p.y, p.radius * 1.3f, tt * 4f, 0xffffe066);
+                    break;
+                }
+                case Projectile.METEOR: {
+                    float f = Math.min(1f, p.t / p.flight);
+                    g.color(MathUtil.withAlpha(0xffb89aff, 0.25f + 0.35f * f));
+                    g.fillCircle(p.targetX, p.targetY, p.aoe * f);
+                    g.color(0xaab89aff);
+                    g.strokeCircle(p.targetX, p.targetY, p.aoe, 4);
+                    float ang = MathUtil.angleTo(p.startX, p.startY, p.targetX, p.targetY);
+                    float ca = MathUtil.cos(ang), sa = MathUtil.sin(ang);
+                    if (fancy) {
+                        g.radial(p.x - ca * 40, p.y - sa * 40, p.radius * 3.2f, 0x99ff9a4a, 0x00ff6a2a);
+                        g.radial(p.x, p.y, p.radius * 2.4f, 0xccd8c8ff, 0x009a7aff);
+                    }
+                    g.color(0x99ffb04a);
+                    g.line(p.x, p.y, p.x - ca * 120, p.y - sa * 120, p.radius * 1.2f);
+                    g.color(0xff2a1a4a);
+                    g.fillCircle(p.x, p.y, p.radius + 3);
+                    g.color(0xff6a5aa0);
+                    g.fillCircle(p.x, p.y, p.radius);
+                    g.color(0xffffd060);
+                    g.fillCircle(p.x - ca * p.radius * 0.3f, p.y - sa * p.radius * 0.3f, p.radius * 0.45f);
+                    break;
+                }
                 case Projectile.FLAME:
                 default: {
                     float f = p.traveled / p.range;
@@ -2403,7 +2769,7 @@ final class World {
             float f = MathUtil.clamp(s.hp / s.maxHp, 0, 1);
             s.hpShown += (f - s.hpShown) * 0.08f;
             if (s.hpShown < f) s.hpShown = f;
-            boolean mine = s.isPlayer;
+            boolean mine = s == player;
             g.color(0xee0c0c1a);
             g.fillRoundRect(x - barW / 2 - 4, by - 4, x + barW / 2 + 4, by + barH + 4, 9);
             g.color(0xff3a2030);
@@ -2592,11 +2958,35 @@ final class World {
             case Brawler.VOLT:
                 drawAimLane(g, hx, hy, ca, sa, range, aimSuper ? 30 : 18, col, edge);
                 break;
+            case Brawler.COBRA:
+            case Brawler.RUMBLE:
+                if (aimSuper) {
+                    g.color(col);
+                    g.fillCircle(hx, hy, range);
+                    g.color(edge);
+                    g.strokeCircle(hx, hy, range, 4);
+                } else {
+                    drawAimLane(g, hx, hy, ca, sa, range, s.type.id == Brawler.RUMBLE ? 40 : 12, col, edge);
+                }
+                break;
+            case Brawler.THORN:
+            case Brawler.NOVA:
+                if (!aimSuper) {
+                    drawAimLane(g, hx, hy, ca, sa, range, 16, col, edge);
+                    if (s.type.id == Brawler.THORN) {
+                        g.color(edge);
+                        g.strokeCircle(hx + ca * range, hy + sa * range, 60, 3);
+                    }
+                    break;
+                }
+                // fall through: both supers are aimed at an area
             case Brawler.BOOMER:
             default: {
                 float d = MathUtil.clamp(aimDist, 110, range);
                 float tx = hx + ca * d, ty = hy + sa * d;
-                float aoe = s.type.id == Brawler.TOXIN ? (aimSuper ? 210 : 95) : (aimSuper ? 230 : 105);
+                int bid = s.type.id;
+                float aoe = bid == Brawler.TOXIN ? (aimSuper ? 210 : 95) : bid == Brawler.THORN ? 200
+                        : bid == Brawler.NOVA ? 220 : (aimSuper ? 230 : 105);
                 g.color(edge);
                 for (int i = 1; i < 12; i++) {
                     float f = i / 12f;

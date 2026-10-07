@@ -45,6 +45,10 @@ poison closes in.
 | **Ziggy** | Ricochet | 800 | Bouncy Balls: 3 balls that bounce off walls | Pinball Party: 12 balls in every direction |
 | **Toxin** | Poisoner | 1200 | Venom Glob: leaves a poison puddle | Toxic Cloud: huge toxic swamp |
 | **Shade** | Assassin | 2000 | Shuriken Fan: 3 fast shurikens | Shadow Step: teleport and turn invisible |
+| **Cobra** | Gunslinger | 900 | Twin Revolvers: 4 quick bullets | Bullet Storm: two rings of bullets in every direction |
+| **Thorn** | Spiker | 1300 | Cactus Spike: splits into 6 needles where it stops | Spike Seed: lobbed seed that bursts into 12 needles |
+| **Rumble** | Bruiser | 1600 | Shock Punch: wide shockwave with big knockback | Earthquake: heavy damage and a long slow around him |
+| **Nova** | Star Mage | 2500 | Star Orb: homes in on the nearest enemy | Meteor Rain: 5 meteors around the target |
 
 Bots get smarter, stronger and fancier as your trophy count goes up.
 
@@ -53,10 +57,21 @@ Bots get smarter, stronger and fancier as your trophy count goes up.
 - Every match pays coins based on your rank, knockouts and length.
 - **Shop: Offers** has a free gift every 4 hours, a Brawl Box (coins, a skin or a free upgrade),
   a Mega Box (a guaranteed new skin plus coins), and a daily skin deal at 40% off.
-- **Shop: Skins** has 20 snake skins, from Lime and Tiger up to Rainbow, Gold and Diamond.
-  An equipped skin applies to every brawler.
-- **Shop: Brawlers**: unlock the four new brawlers.
+- **Shop: Skins** has 22 snake skins, from Lime and Tiger up to Rainbow, Gold, Diamond and the
+  patterned Speedster (swept-back quills) and Sea Sponge (sponge holes). An equipped skin applies to
+  every brawler.
+- **Shop: Brawlers**: unlock the eight non-starter brawlers.
 - **Brawlers screen**: pick a brawler and upgrade its power level (1 to 7, +6% health and damage per level).
+
+### Snake Pass
+
+The **SNAKE PASS** card on the main menu opens a 30-tier season pass. Seasons last 30 days.
+
+- Every match earns pass XP (by rank and knockouts); 150 XP per tier.
+- Each tier has a free reward and a **Snake Pass+** reward. Pass+ costs 1,200 coins (no real money).
+- Rewards: coins, Brawl Boxes, Mega Boxes, the Sea Sponge skin (free tier 20), the Cobra brawler
+  (Pass+ tier 15) and the Speedster skin (Pass+ tier 30). Owned items turn into coins.
+- **CLAIM ALL** collects everything reached; a red badge on the menu card counts ready rewards.
 
 ### First launch, clubs and duo
 
@@ -70,17 +85,27 @@ Bots get smarter, stronger and fancier as your trophy count goes up.
 - There is no online server yet, so club members and your duo partner are computer players.
   Playing with real friends needs an online backend or local Wi-Fi play.
 
-### Play with friends on Wi-Fi
+### Play with friends (online and Wi-Fi, app and browser together)
 
-**FRIENDS** on the main menu lets two phones on the same Wi-Fi (or one phone's hotspot) play together:
+**FRIENDS** on the main menu has two connection types (switch with the button at the top right in the app):
 
-- One phone taps **HOST A ROOM**, the other **JOIN A ROOM**. Rooms are found automatically; if not,
-  type the address shown on the host's screen.
+- **ONLINE** (default): the host gets a 5-character room code and the friend types it in, from
+  anywhere. Works between the app and the browser version. The app runs the browser version's own
+  WebRTC code (`web/static/sb-net.js` + PeerJS) in a hidden WebView (`WebNetLink`), so both use the
+  same connection. PeerJS's free public server only introduces the two players.
+- **WI-FI** (app only): rooms on the same Wi-Fi are found automatically; if not, type the address
+  shown on the host's screen.
+- One player taps **HOST A ROOM**, the other **JOIN A ROOM**.
 - The host picks **TOGETHER** (team up against 4 bot pairs) or **VERSUS** (fight each other plus 8 bots).
 - Both phones run the same match in lockstep: they share a random seed, exchange only their controls
   (60 small packets a second) and compare a checksum every 2 seconds. If a phone disconnects or the
   games get out of sync, the friend's snake is taken over by a bot.
-- Ports: TCP 47321 (game), UDP 47322 (room announcements).
+- Wi-Fi ports: TCP 47321 (game), UDP 47322 (room announcements).
+- Cross-play needs bit-identical simulation: the game uses its own random generator (`Rng`) and
+  math (`MathUtil`), and the browser runs a WebAssembly build whose 32-bit float math matches Java's.
+  Browsers without WebAssembly GC (older than Safari 18.2 / Chrome 119) fall back to a JavaScript
+  build, which can only play with other such browsers; the lobby explains this when it happens.
+- `SimTest replay <seed> <ticks>` and `?replay=<seed>` in the browser print state hashes that must match.
 - Test: `java -cp /tmp/sb com.snakebrawl.myapp.game.SimTest net 0 60` runs two games over localhost
   and checks they stay identical every tick.
 
@@ -138,24 +163,18 @@ Google Play needs the same key for every update. To use your own key:
 KEYSTORE=/path/to/upload.jks KEY_ALIAS=myalias KEYSTORE_PASS=secret VERSION_CODE=14 VERSION_NAME=2.3 ./build.sh
 ```
 
-The app targets API 36 and runs on Android 7.0 (API 24) and newer. It asks only for network permissions (granted automatically), used by Wi-Fi play.
+The app targets API 36 and runs on Android 7.0 (API 24) and newer. It asks only for network permissions (granted automatically), used for playing with friends.
 
 ## Browser version (iPhone, iPad and any phone)
 
-`web/build.sh` compiles the same game code to JavaScript with [TeaVM](https://teavm.org) and writes a
+`web/build.sh` compiles the same game code to WebAssembly and JavaScript with [TeaVM](https://teavm.org) and writes a
 static site to `dist/web` (plus `dist/SnakeBrawl-web-<version>.zip`). Host the folder on any static
 web host (GitHub Pages, Netlify, ...), open it in Safari and choose **Share > Add to Home Screen** to
 get a full-screen app icon. After the first visit it also works offline.
 
-Everything works, including playing with friends: in the browser **FRIENDS** is online instead of
-Wi-Fi. The host gets a 5-character room code and the friend types it in, from anywhere. The two
-browsers connect directly over WebRTC ([PeerJS](https://peerjs.com), bundled in `web/static/vendor`);
-PeerJS's free public server only introduces them. Some mobile networks block direct connections, in
-which case joining fails with an error; Wi-Fi usually works. Browser players can't join Android Wi-Fi
-rooms (different connection type).
-
-For lockstep across browser engines the simulation uses its own sin/cos/atan2/exp/pow
-(`MathUtil`), built only from exactly rounded operations, so Safari and Chrome compute identical results.
+Everything works, including online play with friends in the app or another browser (WebRTC through
+[PeerJS](https://peerjs.com), bundled in `web/static/vendor`). Some mobile networks block direct
+connections, in which case joining fails with an error; Wi-Fi usually works.
 Progress is saved in the browser's local storage. Needs JDK 11+ and Maven.
 
 ## Desktop test harness

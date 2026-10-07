@@ -5,8 +5,30 @@ final class Skin {
     final String name;
     final int price;
     final int rarity;
-    /** Body colors, cycled every three segments. Null means "use the brawler colors". */
+    /**
+     * Body colors, cycled every three segments. Null means "use the brawler colors". A special
+     * pattern is stored as a last entry whose alpha byte is {@link #STYLE_MARK}, so it travels
+     * with the palette everywhere (saves, bots, multiplayer).
+     */
     final int[] palette;
+
+    static final int STYLE_NONE = 0, STYLE_SPIKES = 1, STYLE_SPONGE = 2;
+    private static final int STYLE_MARK = 0x01;
+
+    private static int style(int s) {
+        return (STYLE_MARK << 24) | s;
+    }
+
+    /** Pattern of a palette (see {@link #palette}). */
+    static int styleOf(int[] pal) {
+        int last = pal[pal.length - 1];
+        return pal.length > 1 && (last >>> 24) == STYLE_MARK ? last & 0xff : STYLE_NONE;
+    }
+
+    /** Number of real colors in a palette. */
+    static int colorCount(int[] pal) {
+        return styleOf(pal) != STYLE_NONE ? pal.length - 1 : pal.length;
+    }
 
     private Skin(String name, int price, int rarity, int... palette) {
         this.name = name;
@@ -41,5 +63,7 @@ final class Skin {
             new Skin("Rainbow", 1800, 4, 0xffff4a4a, 0xffffa62e, 0xffffe14a, 0xff4ae04a, 0xff3fa0ff, 0xffb35cff),
             new Skin("Gold", 2200, 4, 0xffffe066, 0xffffc928, 0xffd99a1a),
             new Skin("Diamond", 2800, 4, 0xffe8ffff, 0xff8ae8ff, 0xffc8f4ff),
+            new Skin("Speedster", 2500, 4, 0xff2f72ff, 0xff2f72ff, 0xff1d48c8, style(STYLE_SPIKES)),
+            new Skin("Sea Sponge", 2500, 4, 0xfffff05a, 0xffffe640, 0xfff0d238, style(STYLE_SPONGE)),
     };
 }

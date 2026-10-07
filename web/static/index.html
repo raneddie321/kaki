@@ -36,8 +36,27 @@
 <script src="vendor/peerjs.min.js"></script>
 <script src="sb-net.js"></script>
 <script src="sb.js"></script>
-<script src="classes.js"></script>
-<script>main();</script>
+<script src="wasm-runtime.js"></script>
+<script>
+  // Prefer the WebAssembly build: its float math matches the Android app exactly, which
+  // cross-play needs. Older browsers fall back to the JavaScript build.
+  (function () {
+    function useJs() {
+      var s = document.createElement('script');
+      s.src = 'classes.js';
+      s.onload = function () { window.SB_ENGINE = 'js'; main(); };
+      document.body.appendChild(s);
+    }
+    if (/[?&]engine=js/.test(location.search) || !window.TeaVM || !window.WebAssembly) { useJs(); return; }
+    TeaVM.wasmGC.load('classes.wasm').then(function (t) {
+      window.SB_ENGINE = 'wasm';
+      t.exports.main([]);
+    }).catch(function (e) {
+      console.warn('WebAssembly build unavailable, using JavaScript', e);
+      useJs();
+    });
+  })();
+</script>
 <script>
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
 </script>

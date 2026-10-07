@@ -49,6 +49,8 @@ public final class MainActivity extends Activity implements Platform {
         } catch (RuntimeException e) {
             font = Typeface.DEFAULT_BOLD;
         }
+        root = new android.widget.FrameLayout(this);
+        netLink = new WebNetLink(this, root);
         game = new Game(this);
         view = new GameView(this, game, font);
         view.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
@@ -58,7 +60,9 @@ public final class MainActivity extends Activity implements Platform {
                 return insets;
             }
         });
-        setContentView(view);
+        root.addView(view, new android.widget.FrameLayout.LayoutParams(
+                android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT));
+        setContentView(root);
         hideSystemUi();
         registerBackCallback();
     }
@@ -197,6 +201,7 @@ public final class MainActivity extends Activity implements Platform {
 
     @Override
     protected void onDestroy() {
+        if (netLink != null) netLink.destroy();
         if (pool != null) {
             pool.release();
             pool = null;
@@ -279,6 +284,14 @@ public final class MainActivity extends Activity implements Platform {
         }
         dialog.show();
         input.requestFocus();
+    }
+
+    private android.widget.FrameLayout root;
+    private WebNetLink netLink;
+
+    @Override
+    public OnlineLink online() {
+        return netLink;
     }
 
     private android.net.wifi.WifiManager.MulticastLock multicastLock;

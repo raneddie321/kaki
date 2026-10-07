@@ -63,7 +63,7 @@ final class Snake {
 
     // Queued multi-shot attacks (flame bursts, rail storm).
     int burstLeft;
-    float burstTimer, burstInterval, burstAng;
+    float burstTimer, burstInterval, burstAng, burstDist;
     boolean burstSuper;
 
     float radius, spacing;
@@ -275,7 +275,8 @@ final class Snake {
     static void drawBody(Gfx g, float[] xs, float[] ys, int n, float r, int[] pal,
                          boolean[] hidden, float alpha, boolean glow, float flash, float time,
                          float viewL, float viewT, float viewR, float viewB) {
-        int np = pal.length;
+        int np = Skin.colorCount(pal);
+        int style = Skin.styleOf(pal);
         float m = r * 2.2f;
         if (shadows) {
             // Soft drop shadow under the whole body
@@ -332,8 +333,46 @@ final class Snake {
                 g.color(MathUtil.withAlpha(0xffffffff, 0.55f * alpha));
                 g.fillCircle(x - rr * 0.33f, y - rr * 0.43f, rr * 0.14f);
             }
+            if (style == Skin.STYLE_SPIKES && i % 2 == 0 && i < n - 3) {
+                // Swept-back quills on both sides
+                float bx = xs[i + 1] - xs[i], by = ys[i + 1] - ys[i];
+                float bl = (float) Math.sqrt(bx * bx + by * by);
+                if (bl > 0.01f) {
+                    bx /= bl;
+                    by /= bl;
+                    float qx = -by, qy = bx;
+                    int qc = MathUtil.withAlpha(MathUtil.darker(base, 0.35f), alpha);
+                    for (int sgn = -1; sgn <= 1; sgn += 2) {
+                        QUILL[0] = x + qx * rr * 0.55f * sgn - bx * rr * 0.2f;
+                        QUILL[1] = y + qy * rr * 0.55f * sgn - by * rr * 0.2f;
+                        QUILL[2] = x + qx * rr * 0.15f * sgn + bx * rr * 0.4f;
+                        QUILL[3] = y + qy * rr * 0.15f * sgn + by * rr * 0.4f;
+                        QUILL[4] = x + qx * rr * 1.25f * sgn + bx * rr * 1.2f;
+                        QUILL[5] = y + qy * rr * 1.25f * sgn + by * rr * 1.2f;
+                        g.color(qc);
+                        g.fillPoly(QUILL, 3);
+                    }
+                    g.color(MathUtil.withAlpha(0xfff2d0a0, alpha));
+                    g.fillCircle(x + bx * rr * 0.1f, y + by * rr * 0.1f, rr * 0.22f);
+                }
+            } else if (style == Skin.STYLE_SPONGE) {
+                // Sponge holes at fixed spots per segment
+                int hsh = i * 73 + 19;
+                for (int k = 0; k < 3; k++) {
+                    hsh = hsh * 1103515245 + 12345;
+                    float ox = ((hsh >>> 8) & 255) / 255f - 0.5f, oy = ((hsh >>> 16) & 255) / 255f - 0.5f;
+                    float hr2 = rr * (0.17f + 0.1f * (((hsh >>> 24) & 3) / 3f));
+                    float hx2 = x + ox * rr * 1.1f, hy2 = y + oy * rr * 1.1f;
+                    g.color(MathUtil.withAlpha(0xffa88a12, alpha));
+                    g.fillCircle(hx2, hy2, hr2);
+                    g.color(MathUtil.withAlpha(0xff7a6208, alpha));
+                    g.fillCircle(hx2 + hr2 * 0.2f, hy2 + hr2 * 0.25f, hr2 * 0.6f);
+                }
+            }
         }
     }
+
+    private static final float[] QUILL = new float[6];
 
     static void drawHead(Gfx g, float x, float y, float r, float ang, float lookAng, int c1, int c2,
                          int brawler, int accent, float alpha, float flash, float time, float tongue) {
@@ -394,6 +433,16 @@ final class Snake {
                     float ex = bx + (-ca + px * (wob + (k == 0 ? 0.3f : -0.3f))) * hr * 1.2f;
                     float ey = by + (-sa + py * (wob + (k == 0 ? 0.3f : -0.3f))) * hr * 1.2f;
                     g.line(bx, by, ex, ey, r * 0.22f);
+                }
+                break;
+            }
+            case Brawler.NOVA: {
+                // Twinkling stardust trailing behind
+                for (int k = 0; k < 4; k++) {
+                    float ph = (time * 0.7f + k / 4f) % 1f;
+                    float bx = x - ca * hr * (0.6f + ph * 1.6f) + px * hr * MathUtil.sin(time * 2.3f + k * 1.9f) * 0.7f;
+                    float by = y - sa * hr * (0.6f + ph * 1.6f) + py * hr * MathUtil.sin(time * 2.3f + k * 1.9f) * 0.7f;
+                    Icons.star(g, bx, by, r * (0.5f - 0.3f * ph), time * 3f + k, MathUtil.withAlpha(0xffffe066, alpha * (1f - ph)));
                 }
                 break;
             }
@@ -516,6 +565,70 @@ final class Snake {
                         x + ca * hr * 0.15f - px * hr * 0.95f, y + sa * hr * 0.15f - py * hr * 0.95f, hr * 0.3f);
                 break;
             }
+            case Brawler.COBRA: {
+                // Cowboy hat seen from above: wide brim, crown and band
+                float hx = x - ca * hr * 0.32f, hy = y - sa * hr * 0.32f;
+                g.color(MathUtil.withAlpha(0x55000000, alpha));
+                g.fillCircle(hx + hr * 0.08f, hy + hr * 0.12f, hr * 0.95f);
+                g.color(MathUtil.withAlpha(0xff5a3a1a, alpha));
+                g.fillCircle(hx, hy, hr * 0.92f);
+                g.color(MathUtil.withAlpha(0xff8a5a2a, alpha));
+                g.fillCircle(hx, hy, hr * 0.84f);
+                g.color(MathUtil.withAlpha(accent, alpha));
+                g.fillCircle(hx, hy, hr * 0.56f);
+                g.color(MathUtil.withAlpha(0xffa8743a, alpha));
+                g.fillCircle(hx - ca * hr * 0.04f, hy - sa * hr * 0.04f, hr * 0.48f);
+                g.color(MathUtil.withAlpha(0xffc89a5a, alpha));
+                g.line(hx - px * hr * 0.3f, hy - py * hr * 0.3f, hx + px * hr * 0.3f, hy + py * hr * 0.3f, hr * 0.1f);
+                break;
+            }
+            case Brawler.THORN: {
+                // Cactus spines around the head and a pink flower on top
+                g.color(MathUtil.withAlpha(0xfff2ffd8, alpha));
+                for (int k = 0; k < 8; k++) {
+                    float a = ang + MathUtil.PI * 0.35f + k * MathUtil.PI * 1.3f / 7f;
+                    float cxa = MathUtil.cos(a), sxa = MathUtil.sin(a);
+                    g.line(x + cxa * hr * 0.8f, y + sxa * hr * 0.8f, x + cxa * hr * 1.18f, y + sxa * hr * 1.18f, hr * 0.07f);
+                }
+                float fx = x - ca * hr * 0.45f, fy = y - sa * hr * 0.45f;
+                g.color(MathUtil.withAlpha(accent, alpha));
+                for (int k = 0; k < 5; k++) {
+                    float a = time * 0.8f + k * MathUtil.TAU / 5f;
+                    g.fillCircle(fx + MathUtil.cos(a) * hr * 0.2f, fy + MathUtil.sin(a) * hr * 0.2f, hr * 0.17f);
+                }
+                g.color(MathUtil.withAlpha(0xffffe066, alpha));
+                g.fillCircle(fx, fy, hr * 0.12f);
+                break;
+            }
+            case Brawler.RUMBLE: {
+                // Red sweatband with tails
+                g.color(MathUtil.withAlpha(accent, alpha));
+                g.line(x - ca * hr * 0.05f + px * hr * 0.98f, y - sa * hr * 0.05f + py * hr * 0.98f,
+                        x - ca * hr * 0.05f - px * hr * 0.98f, y - sa * hr * 0.05f - py * hr * 0.98f, hr * 0.26f);
+                g.color(MathUtil.withAlpha(0xffffffff, alpha * 0.8f));
+                g.line(x - ca * hr * 0.05f + px * hr * 0.5f, y - sa * hr * 0.05f + py * hr * 0.5f,
+                        x - ca * hr * 0.05f - px * hr * 0.5f, y - sa * hr * 0.05f - py * hr * 0.5f, hr * 0.06f);
+                break;
+            }
+            case Brawler.NOVA: {
+                // Pointy wizard hat with a star
+                float bx = x - ca * hr * 0.2f, by = y - sa * hr * 0.2f;
+                float tipX = bx - ca * hr * 1.45f + px * hr * 0.25f * MathUtil.sin(time * 2f);
+                float tipY = by - sa * hr * 1.45f + py * hr * 0.25f * MathUtil.sin(time * 2f);
+                TRI[0] = bx + px * hr * 0.7f;
+                TRI[1] = by + py * hr * 0.7f;
+                TRI[2] = tipX;
+                TRI[3] = tipY;
+                TRI[4] = bx - px * hr * 0.7f;
+                TRI[5] = by - py * hr * 0.7f;
+                g.color(MathUtil.withAlpha(0xff1e1250, alpha));
+                g.fillPoly(TRI, 3);
+                g.color(MathUtil.withAlpha(0xff4a32b0, alpha));
+                g.line(bx + px * hr * 0.72f, by + py * hr * 0.72f, bx - px * hr * 0.72f, by - py * hr * 0.72f, hr * 0.22f);
+                Icons.star(g, bx - ca * hr * 0.55f, by - sa * hr * 0.55f, hr * 0.42f, time, MathUtil.withAlpha(accent, alpha));
+                Icons.star(g, tipX, tipY, hr * 0.3f, -time * 2f, MathUtil.withAlpha(0xffffffff, alpha));
+                break;
+            }
             default:
                 break;
         }
@@ -547,7 +660,7 @@ final class Snake {
             g.fillCircle(ix - hr * 0.07f, iy - hr * 0.08f, hr * 0.07f);
             g.fillCircle(ix + hr * 0.05f, iy + hr * 0.06f, hr * 0.03f);
         }
-        if (brawler == Brawler.BLAZE) {
+        if (brawler == Brawler.BLAZE || brawler == Brawler.RUMBLE) {
             // Angry brows
             g.color(MathUtil.withAlpha(0xff1a1a24, alpha));
             for (int sgn = -1; sgn <= 1; sgn += 2) {

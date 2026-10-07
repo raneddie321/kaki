@@ -10,6 +10,10 @@ final class Brawler {
     static final int ZIGGY = 5;
     static final int TOXIN = 6;
     static final int SHADE = 7;
+    static final int COBRA = 8;
+    static final int THORN = 9;
+    static final int RUMBLE = 10;
+    static final int NOVA = 11;
 
     static final int MAX_LEVEL = 7;
     /** Coins to go from level i+1 to i+2. */
@@ -107,13 +111,13 @@ final class Brawler {
                     "Ice Shards", "3 icy shards that slow snakes down.",
                     "Blizzard", "Freezing blast around you that nearly stops enemies.",
                     0xffbff0ff, 0xff4aa8e0, 0xffffffff,
-                    3300, 520, 560, 1.4f, 1.0f, 3000, 320,
+                    3300, 580, 560, 1.35f, 1.0f, 3000, 320,
                     3, 3, 3, 3, 1, 500, 1300),
             new Brawler(ZIGGY, "ZIGGY", "Ricochet",
                     "Bouncy Balls", "Three balls that bounce off walls.",
                     "Pinball Party", "12 balls in every direction, bouncing 3 times.",
                     0xffff6fb5, 0xfffff04a, 0xff7a3cff,
-                    3000, 520, 700, 1.3f, 1.04f, 3000, 750,
+                    3000, 580, 700, 1.15f, 1.04f, 3000, 750,
                     2, 4, 4, 3, 2, 800, 1400),
             new Brawler(TOXIN, "TOXIN", "Poisoner",
                     "Venom Glob", "Lobs a glob that leaves a poison puddle.",
@@ -127,6 +131,30 @@ final class Brawler {
                     0xff4a4a66, 0xff1c1c2a, 0xffff3a6a,
                     3300, 560, 540, 1.15f, 1.12f, 2800, 420,
                     2, 4, 3, 5, 4, 2000, 1600),
+            new Brawler(COBRA, "COBRA", "Gunslinger",
+                    "Twin Revolvers", "Fires 4 quick bullets in a row.",
+                    "Bullet Storm", "Two rings of bullets blast out in every direction.",
+                    0xffe0b04a, 0xff8a5a24, 0xff3a2418,
+                    3400, 360, 620, 1.35f, 1.05f, 3000, 520,
+                    3, 3, 4, 4, 1, 900, 1700),
+            new Brawler(THORN, "THORN", "Spiker",
+                    "Cactus Spike", "A spike that bursts into 6 needles where it lands.",
+                    "Spike Seed", "Lobs a seed that explodes into 12 needles.",
+                    0xff7ad85a, 0xff2e7a34, 0xffff7ab0,
+                    3300, 760, 640, 1.4f, 1.0f, 3000, 640,
+                    3, 4, 4, 3, 2, 1300, 1150),
+            new Brawler(RUMBLE, "RUMBLE", "Bruiser",
+                    "Shock Punch", "A wide shockwave punch that knocks snakes back.",
+                    "Earthquake", "Slams the ground: big damage and slows everyone close.",
+                    0xffc8763e, 0xff5e3018, 0xffff3a3a,
+                    6200, 860, 320, 1.25f, 1.06f, 2900, 380,
+                    5, 4, 1, 4, 3, 1600, 950),
+            new Brawler(NOVA, "NOVA", "Star Mage",
+                    "Star Orb", "A magic orb that curves toward enemies.",
+                    "Meteor Rain", "5 meteors crash down around the target.",
+                    0xff9a7aff, 0xff35208a, 0xffffe066,
+                    3300, 700, 720, 1.35f, 1.0f, 3000, 700,
+                    2, 4, 5, 3, 4, 2500, 950),
     };
 
     /** Colors used for bot snakes so each one is easy to tell apart. */

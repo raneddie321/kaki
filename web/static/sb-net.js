@@ -49,7 +49,9 @@
       try { peer.disconnect(); } catch (e) {}
     });
     c.on('data', function (d) {
-      if (typeof d === 'string') inbox.push(d);
+      if (typeof d !== 'string') return;
+      // The Android app's hidden WebView forwards messages straight to Java
+      if (window.SBNetSink) window.SBNetSink(d); else inbox.push(d);
     });
     c.on('close', function () {
       if (conn === c && !closing) fail('Your friend left the game');
