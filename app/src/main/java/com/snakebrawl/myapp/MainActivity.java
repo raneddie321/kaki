@@ -81,7 +81,14 @@ public final class MainActivity extends Activity implements Platform {
                 for (int i = 0; i < SND_COUNT; i++) if (soundIds[i] == sampleId) soundLoaded[i] = true;
             }
         });
-        for (int i = 0; i < SND_COUNT; i++) soundIds[i] = pool.load(this, SOUND_RES[i], 1);
+        for (int i = 0; i < SND_COUNT; i++) {
+            try {
+                soundIds[i] = pool.load(this, SOUND_RES[i], 1);
+            } catch (RuntimeException e) {
+                // A sound that can't be opened (e.g. stored compressed) stays silent instead of crashing
+                soundIds[i] = 0;
+            }
+        }
     }
 
     /** Lets the game draw under a display cutout on Android 9+ (compiled against an older SDK). */

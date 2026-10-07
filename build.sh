@@ -11,8 +11,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION_CODE=${VERSION_CODE:-17}
-VERSION_NAME=${VERSION_NAME:-3.3}
+VERSION_CODE=${VERSION_CODE:-18}
+VERSION_NAME=${VERSION_NAME:-3.4}
 MIN_SDK=24
 TARGET_SDK=36
 # Package name on Google Play. (The Java code keeps its com.snakebrawl.myapp package.)
@@ -139,7 +139,12 @@ mkdir -p "$B/manifest" "$B/dex"
 mv "$B/AndroidManifest.xml" "$B/manifest/AndroidManifest.xml"
 cp "$OUT/dex/classes.dex" "$B/dex/classes.dex"
 (cd "$B" && zip -q -r -X ../base.zip manifest dex res assets resources.pb)
-java -jar "$BUNDLETOOL" build-bundle --modules="$OUT/aab/base.zip" --output="$OUT/aab/unsigned.aab"
+# Keep sounds uncompressed in the APKs Google Play generates, like "-0 wav" does for the APK:
+# SoundPool opens res/raw files as file descriptors, which fails (and crashed v3.2/3.3) when compressed.
+cat > "$OUT/aab/BundleConfig.json" <<'JSON'
+{"compression": {"uncompressedGlob": ["res/raw/**", "**/*.wav"]}}
+JSON
+java -jar "$BUNDLETOOL" build-bundle --modules="$OUT/aab/base.zip" --config="$OUT/aab/BundleConfig.json" --output="$OUT/aab/unsigned.aab"
 jarsigner -keystore "$KEYSTORE" -storepass "$KEYSTORE_PASS" -keypass "$KEYSTORE_PASS" \
     -sigalg SHA256withRSA -digestalg SHA-256 -signedjar "$DIST/SnakeBrawl-$VERSION_NAME.aab" \
     "$OUT/aab/unsigned.aab" "$KEY_ALIAS" >/dev/null
