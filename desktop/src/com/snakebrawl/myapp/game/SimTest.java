@@ -113,6 +113,37 @@ public final class SimTest {
             case "replay":
                 System.out.println("REPLAY " + NetReplay.run(new DesktopPlatform(), Long.parseLong(args[1]), Integer.parseInt(args[2])));
                 break;
+            case "codes": {
+                // args: outDir code1 code2 ... ; redeems each through the shop button
+                Font font = Font.createFont(Font.TRUETYPE_FONT, new File("app/src/main/assets/fonts/LilitaOne-Regular.ttf"));
+                DesktopPlatform pf = new DesktopPlatform();
+                pf.prefs.put("pid", Integer.parseInt(System.getenv().getOrDefault("PID", "0")));
+                Game g = new Game(pf);
+                g.resize(W, H);
+                tapBtn(g, Game.B_SHOP);
+                run(g, 0.5f);
+                shot(g, font, (int) W, (int) H, args[1] + "/shop.png");
+                System.out.println("player id " + Codes.playerIdText(pf));
+                for (int i = 2; i < args.length; i++) {
+                    int c0 = g.profile.coins, t0 = g.profile.trophies;
+                    pf.nextText = args[i];
+                    tapBtn(g, 422);
+                    System.out.println(args[i] + " -> " + g.popTitleForTest() + " coins " + c0 + "->" + g.profile.coins + " trophies " + t0 + "->" + g.profile.trophies);
+                    if (i == 2) {
+                        run(g, 0.4f);
+                        shot(g, font, (int) W, (int) H, args[1] + "/redeemed.png");
+                    }
+                    if (g.popTitleForTest() != null) tapBtn(g, Game.B_OK);
+                }
+                // A new game instance (app restarted) still remembers used codes
+                Game g2 = new Game(pf);
+                g2.resize(W, H);
+                tapBtn(g2, Game.B_SHOP);
+                pf.nextText = args[2];
+                tapBtn(g2, 422);
+                System.out.println("after restart, first code -> " + g2.popTitleForTest());
+                return;
+            }
             case "features":
                 features(args[1]);
                 return;

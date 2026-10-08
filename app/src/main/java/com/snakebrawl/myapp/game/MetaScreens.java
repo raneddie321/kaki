@@ -6,7 +6,7 @@ final class MetaScreens {
     private static final int B_SKIN = 200;
     private static final int B_TAB = 300, B_GIFT = 310, B_BOX = 311, B_MEGA = 312, B_DEAL = 313, B_SHOP_BRAWLER = 330;
     private static final int B_PACK = 350;
-    private static final int B_SETTING = 400, B_RESET = 420, B_PRIVACY = 421;
+    private static final int B_SETTING = 400, B_RESET = 420, B_PRIVACY = 421, B_REDEEM = 422;
 
     /** The COINS tab only exists while the real-money store is enabled. */
     private static int tabCount() {
@@ -72,6 +72,7 @@ final class MetaScreens {
                 break;
             }
             case Game.SHOP: {
+                ui.add(B_REDEEM, padL + 250 * u, padT + 10 * u, padL + 560 * u, padT + 110 * u, "REDEEM CODE", null, 0xff4ad04a);
                 float tabW = 270 * u, tabT = padT + 130 * u;
                 float tabL = w / 2 - (tabW * tabCount() + 20 * u * (tabCount() - 1)) / 2;
                 for (int i = 0; i < tabCount(); i++) {
@@ -262,6 +263,19 @@ final class MetaScreens {
                 }
                 break;
             }
+            case B_REDEEM:
+                game.gated.requestText("Enter a code (your player ID: " + Codes.playerIdText(game.gated) + ")", "", 40, false,
+                        new Platform.TextCallback() {
+                            @Override
+                            public void onText(String text) {
+                                if (text == null || text.trim().length() == 0) return;
+                                Codes.Result r = Codes.redeem(game, text.trim());
+                                if (r.title != null) game.showInfo(r.title, r.text, r.art, r.artArg);
+                                if (r.ok && r.art == 1) game.coinBurst(0);
+                                game.layout();
+                            }
+                        });
+                return;
             case B_PRIVACY:
                 game.showInfo("PRIVACY", PRIVACY_TEXT, 0, 0);
                 return;
@@ -596,7 +610,7 @@ final class MetaScreens {
         float u = game.u;
         for (int i = 0; i < ui.count; i++) {
             Ui.Btn bt = ui.btns[i];
-            if (bt.id == Game.B_BACK || (bt.id >= B_TAB && bt.id < B_TAB + tabCount())) ui.button(g, bt);
+            if (bt.id == Game.B_BACK || bt.id == B_REDEEM || (bt.id >= B_TAB && bt.id < B_TAB + tabCount())) ui.button(g, bt);
         }
         if (shopTab == 0) {
             for (int i = 0; i < ui.count; i++) {
@@ -914,7 +928,7 @@ final class MetaScreens {
             ui.button(g, bt);
         }
         g.color(0xff9aa0d0);
-        g.text("Snake Brawl v3.5  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
+        g.text("Snake Brawl v3.6  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
                 w / 2, h - game.padB - 160 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 }
