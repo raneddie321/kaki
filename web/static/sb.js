@@ -277,6 +277,19 @@
     prompt: function (title, initial) {
       var r = window.prompt(title, initial);
       return r === null ? null : r;
+    },
+    share: function (text) {
+      try {
+        if (navigator.share) { navigator.share({ text: text }).catch(function () {}); return; }
+      } catch (e) {}
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { window.alert('Copied! Paste it to your friends.'); },
+            function () { window.prompt('Copy this and send it to your friends:', text); });
+          return;
+        }
+      } catch (e) {}
+      window.prompt('Copy this and send it to your friends:', text);
     }
   };
 })();

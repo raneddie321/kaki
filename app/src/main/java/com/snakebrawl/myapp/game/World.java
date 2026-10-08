@@ -106,21 +106,41 @@ final class World {
         this(platform, mode, playerType, playerPalette, playerLevel, null, null, 1, 0, botCount, trophies);
     }
 
-    /** Random source for this match. Seeded identically on both phones in a Wi-Fi game. */
+    /** Random source for this match. Seeded identically on every phone in a Wi-Fi game. */
     final Rng rng;
-    /** Number of human-controlled snakes (snakes[0] and, in a Wi-Fi game, snakes[1]). */
+    /** Number of human-controlled snakes (snakes[0 .. humans-1]). */
     final int humans;
+    /** Team size in team modes (2 for Duo, 3 for a Trio of friends). */
+    final int teamSize;
+    /** Map id (see {@link Maps}) and its look. */
+    final int mapId;
+    final Theme theme;
 
     /**
-     * Full constructor. With a guest brawler, snakes[0] is the host and snakes[1] the guest;
+     * Two-player constructor. With a guest brawler, snakes[0] is the host and snakes[1] the guest;
      * {@code localIndex} picks which of them this phone controls.
      */
     World(Platform platform, int mode, Brawler playerType, int[] playerPalette, int playerLevel, Brawler guestType,
             int[] guestPalette, int guestLevel, int localIndex, int botCount, int trophies) {
+        this(platform, mode,
+                playerType == null ? new Brawler[0] : guestType == null ? new Brawler[]{playerType} : new Brawler[]{playerType, guestType},
+                new int[][]{playerPalette, guestPalette}, new int[]{playerLevel, guestLevel}, localIndex, botCount, trophies, 2,
+                Maps.SUNNY, null);
+    }
+
+    /**
+     * Full constructor: snakes[0 .. types.length-1] are humans in that order and {@code localIndex}
+     * is the one this phone controls. Team modes put {@code teamSize} snakes in each team.
+     */
+    World(Platform platform, int mode, Brawler[] types, int[][] palettes, int[] levels, int localIndex, int botCount,
+            int trophies, int teamSize, int mapId, Maps.Custom custom) {
         this.rng = MathUtil.RNG;
         this.platform = platform;
         this.botTrophies = trophies;
         this.mode = mode;
+        this.teamSize = Math.max(2, teamSize);
+        this.mapId = custom != null ? Maps.CUSTOM : mapId;
+        this.theme = Theme.get(custom != null ? custom.theme : mapId);
         boolean br = mode == MODE_SHOWDOWN || mode == MODE_DUO;
         this.n = br ? 66 : (mode == MODE_ENDLESS ? 80 : 56);
         this.size = n * T;
@@ -131,8 +151,8 @@ final class World {
         this.boxTarget = br ? 14 : (mode == MODE_ENDLESS ? 18 : 8);
         for (int i = 0; i < proj.length; i++) proj[i] = new Projectile();
 
-        boolean hasPlayer = playerType != null;
-        humans = hasPlayer ? (guestType != null ? 2 : 1) : 0;
+        humans = types.length;
+        boolean hasPlayer = humans > 0;
         snakeCount = botCount + humans;
         snakes = new Snake[snakeCount];
         drawOrder = new Snake[snakeCount];
@@ -145,17 +165,22 @@ final class World {
         float[] spX = new float[snakeCount], spY = new float[snakeCount], spA = new float[snakeCount];
         float a0 = MathUtil.rand(0, MathUtil.TAU);
         boolean duo = mode == MODE_DUO;
-        int groups = duo ? (snakeCount + 1) / 2 : snakeCount;
+        int ts = this.teamSize;
+        int groups = duo ? (snakeCount + ts - 1) / ts : snakeCount;
         for (int i = 0; i < snakeCount; i++) {
-            int gi = duo ? i / 2 : i;
+            int gi = duo ? i / ts : i;
             float a = a0 + MathUtil.TAU * gi / groups;
-            float side = duo ? ((i & 1) == 0 ? -90f : 90f) : 0f;
+            float side = 0f;
+            if (duo) side = ts == 2 ? ((i & 1) == 0 ? -90f : 90f) : (i % ts - (ts - 1) / 2) * 120f;
             spX[i] = size / 2 + MathUtil.cos(a) * size * 0.36f - MathUtil.sin(a) * side;
             spY[i] = size / 2 + MathUtil.sin(a) * size * 0.36f + MathUtil.cos(a) * side;
             spA[i] = a + MathUtil.PI;
             snakes[i].team = duo ? gi : -1;
         }
-        generateMap(spX, spY);
+        if (custom != null) applyCustom(custom, spX, spY);
+        else if (mapId == Maps.FROST) generateFrost(spX, spY);
+        else if (mapId == Maps.LAVA) generateLava(spX, spY);
+        else generateMap(spX, spY);
 
         zoneL = 0;
         zoneT = 0;
@@ -167,12 +192,13 @@ final class World {
         for (int i = 0; i < snakeCount; i++) {
             Snake s = snakes[i];
             if (i < humans) {
-                Brawler ht = i == 0 ? playerType : guestType;
-                int[] pal = i == 0 ? playerPalette : guestPalette;
+                Brawler ht = types[i];
+                int[] pal = palettes != null && i < palettes.length ? palettes[i] : null;
+                int lvl = levels != null && i < levels.length ? levels[i] : 1;
                 s.isPlayer = true;
                 s.name = "You";
                 s.setColors(pal != null ? pal : new int[]{ht.color1, ht.color2});
-                s.level = Math.max(1, Math.min(Brawler.MAX_LEVEL, i == 0 ? playerLevel : guestLevel));
+                s.level = Math.max(1, Math.min(Brawler.MAX_LEVEL, lvl));
                 s.spawn(ht, spX[i], spY[i], spA[i], startMass);
             } else {
                 s.name = names[i % names.length];
@@ -183,7 +209,7 @@ final class World {
                 s.brain = new BotBrain(this, s, trophies);
             }
         }
-        player = hasPlayer ? snakes[Math.min(localIndex, humans - 1)] : null;
+        player = hasPlayer ? snakes[Math.max(0, Math.min(localIndex, humans - 1))] : null;
         focus = hasPlayer ? player : snakes[0];
         camX = focus.hx();
         camY = focus.hy();
@@ -192,7 +218,7 @@ final class World {
         for (int i = 0; i < boxTarget; i++) spawnBox();
         countAlive();
         if (mode == MODE_SHOWDOWN) banner("SHOWDOWN!");
-        else if (mode == MODE_DUO) banner("DUO SHOWDOWN!");
+        else if (mode == MODE_DUO) banner(ts == 3 ? "TRIO SHOWDOWN!" : "DUO SHOWDOWN!");
         else if (mode == MODE_ENDLESS) banner("ENDLESS BRAWL!");
     }
 
@@ -211,10 +237,24 @@ final class World {
         return a != null && b != null && a != b && a.team >= 0 && a.team == b.team;
     }
 
+    /** A teammate of {@code s}: a living one when there is one (Trio teams have two). */
     Snake mateOf(Snake s) {
         if (s.team < 0) return null;
-        for (int i = 0; i < snakeCount; i++) if (sameTeam(s, snakes[i])) return snakes[i];
-        return null;
+        Snake any = null;
+        for (int i = 0; i < snakeCount; i++) {
+            if (!sameTeam(s, snakes[i])) continue;
+            if (snakes[i].alive) return snakes[i];
+            if (any == null) any = snakes[i];
+        }
+        return any;
+    }
+
+    /** All teammates of {@code s} (up to two), in snake order; returns how many were written. */
+    int matesOf(Snake s, Snake[] out) {
+        int n = 0;
+        if (s.team < 0) return 0;
+        for (int i = 0; i < snakeCount && n < out.length; i++) if (sameTeam(s, snakes[i])) out[n++] = snakes[i];
+        return n;
     }
 
     /** Teams with at least one living member (duo), or living snakes otherwise. */
@@ -302,6 +342,171 @@ final class World {
                 else y--;
                 x = Math.max(2, Math.min(n - 3, x));
                 y = Math.max(2, Math.min(n - 3, y));
+            }
+        }
+    }
+
+    /** Sets a wall tile unless it is near a spawn point or the arena edge. */
+    private void wallAt(int x, int y, float[] spX, float[] spY, float clear) {
+        if (x < 2 || y < 2 || x >= n - 2 || y >= n - 2) return;
+        if (nearSpawn(x, y, spX, spY, clear)) return;
+        tiles[y * n + x] = WALL;
+        bush[y * n + x] = false;
+    }
+
+    private void plantBush(int x, int y) {
+        if (x < 1 || y < 1 || x >= n - 1 || y >= n - 1) return;
+        if (tiles[y * n + x] == EMPTY) bush[y * n + x] = true;
+    }
+
+    /**
+     * Frost Peak: an icy fortress, the same in all four corners (mirror symmetric), with long
+     * walls, corner forts, pillars and snowy pine groves.
+     */
+    private void generateFrost(float[] spX, float[] spY) {
+        int h = n / 2;
+        int[] wx = new int[4096], wy = new int[4096];
+        int wc = 0;
+        // Long ice walls in the quarter, then mirrored
+        int lines = 7;
+        for (int k = 0; k < lines; k++) {
+            int x = 4 + MathUtil.randInt(h - 6), y = 4 + MathUtil.randInt(h - 6);
+            boolean horiz = MathUtil.rand() < 0.5f;
+            int len = 4 + MathUtil.randInt(5);
+            for (int i = 0; i < len && wc < wx.length; i++) {
+                wx[wc] = horiz ? x + i : x;
+                wy[wc] = horiz ? y : y + i;
+                wc++;
+            }
+            if (MathUtil.rand() < 0.45f) {
+                // Turn it into an L-shaped fort corner
+                int len2 = 2 + MathUtil.randInt(3);
+                for (int i = 1; i <= len2 && wc < wx.length; i++) {
+                    wx[wc] = horiz ? x : x + i;
+                    wy[wc] = horiz ? y + i : y;
+                    wc++;
+                }
+            }
+        }
+        // Ice pillars
+        for (int k = 0; k < 5; k++) {
+            int x = 3 + MathUtil.randInt(h - 4), y = 3 + MathUtil.randInt(h - 4);
+            for (int dy = 0; dy < 2; dy++)
+                for (int dx = 0; dx < 2; dx++) {
+                    wx[wc] = x + dx;
+                    wy[wc] = y + dy;
+                    wc++;
+                }
+        }
+        // Central keep: four short walls around the middle
+        for (int i = -3; i <= -1; i++) {
+            wx[wc] = h + i;
+            wy[wc] = h - 4;
+            wc++;
+            wx[wc] = h - 4;
+            wy[wc] = h + i;
+            wc++;
+        }
+        for (int k = 0; k < wc; k++) {
+            int x = wx[k], y = wy[k];
+            if (x >= h || y >= h) continue;
+            wallAt(x, y, spX, spY, 4f);
+            wallAt(n - 1 - x, y, spX, spY, 4f);
+            wallAt(x, n - 1 - y, spX, spY, 4f);
+            wallAt(n - 1 - x, n - 1 - y, spX, spY, 4f);
+        }
+        // Pine groves: compact clumps, mirrored too
+        for (int k = 0; k < 7; k++) {
+            int cx = 3 + MathUtil.randInt(h - 4), cy = 3 + MathUtil.randInt(h - 4);
+            int r = 1 + MathUtil.randInt(2);
+            for (int dy = -r; dy <= r; dy++)
+                for (int dx = -r; dx <= r; dx++) {
+                    if (dx * dx + dy * dy > r * r + 1) continue;
+                    int x = cx + dx, y = cy + dy;
+                    if (x >= h || y >= h || x < 0 || y < 0) continue;
+                    plantBush(x, y);
+                    plantBush(n - 1 - x, y);
+                    plantBush(x, n - 1 - y);
+                    plantBush(n - 1 - x, n - 1 - y);
+                }
+        }
+    }
+
+    /**
+     * Lava Canyon: big rock masses that are the same when the arena is turned upside down, a ring of
+     * dry scrub around an open plaza in the middle, and cracked ridges.
+     */
+    private void generateLava(float[] spX, float[] spY) {
+        int c = n / 2;
+        // Rock masses: random-walk blobs, each placed twice (point symmetry)
+        for (int k = 0; k < 9; k++) {
+            int x = 4 + MathUtil.randInt(n - 8), y = 4 + MathUtil.randInt(c - 4);
+            int steps = 10 + MathUtil.randInt(14);
+            for (int st = 0; st < steps; st++) {
+                for (int dy = 0; dy <= 1; dy++)
+                    for (int dx = 0; dx <= 1; dx++) {
+                        int px = x + dx, py = y + dy;
+                        if (Math.abs(px - c) < 7 && Math.abs(py - c) < 7) continue; // keep the plaza open
+                        wallAt(px, py, spX, spY, 4.5f);
+                        wallAt(n - 1 - px, n - 1 - py, spX, spY, 4.5f);
+                    }
+                int d = MathUtil.randInt(4);
+                if (d == 0) x++;
+                else if (d == 1) x--;
+                else if (d == 2) y++;
+                else y--;
+                x = Math.max(3, Math.min(n - 5, x));
+                y = Math.max(3, Math.min(c - 2, y));
+            }
+        }
+        // Ridges: thin diagonal-ish lines
+        for (int k = 0; k < 4; k++) {
+            int x = 5 + MathUtil.randInt(n - 10), y = 5 + MathUtil.randInt(c - 8);
+            int dx = MathUtil.rand() < 0.5f ? 1 : -1;
+            int len = 4 + MathUtil.randInt(4);
+            for (int i = 0; i < len; i++) {
+                int px = x + i * dx, py = y + i / 2;
+                wallAt(px, py, spX, spY, 4.5f);
+                wallAt(n - 1 - px, n - 1 - py, spX, spY, 4.5f);
+            }
+        }
+        // Scrub ring around the plaza, with gaps
+        for (int a = 0; a < 48; a++) {
+            if (a % 8 < 2) continue;
+            float ang = a * MathUtil.TAU / 48f;
+            int x = c + Math.round(MathUtil.cos(ang) * 8.5f), y = c + Math.round(MathUtil.sin(ang) * 8.5f);
+            plantBush(x, y);
+            plantBush(x + 1, y);
+        }
+        // Scattered scrub patches
+        for (int k = 0; k < 8; k++) {
+            int x = 3 + MathUtil.randInt(n - 6), y = 3 + MathUtil.randInt(c - 3);
+            int steps = 5 + MathUtil.randInt(7);
+            for (int st = 0; st < steps; st++) {
+                plantBush(x, y);
+                plantBush(n - 1 - x, n - 1 - y);
+                int d = MathUtil.randInt(4);
+                if (d == 0) x++;
+                else if (d == 1) x--;
+                else if (d == 2) y++;
+                else y--;
+                x = Math.max(2, Math.min(n - 3, x));
+                y = Math.max(2, Math.min(c - 1, y));
+            }
+        }
+    }
+
+    /** A player-made map: its grid is stretched over the arena; spawn areas are always kept clear. */
+    private void applyCustom(Maps.Custom m, float[] spX, float[] spY) {
+        for (int ty = 1; ty < n - 1; ty++) {
+            for (int tx = 1; tx < n - 1; tx++) {
+                int gx = Math.min(Maps.G - 1, tx * Maps.G / n), gy = Math.min(Maps.G - 1, ty * Maps.G / n);
+                byte c = m.cells[gy * Maps.G + gx];
+                if (c == Maps.WALL) {
+                    if (!nearSpawn(tx, ty, spX, spY, 2.5f)) tiles[ty * n + tx] = WALL;
+                } else if (c == Maps.BUSH) {
+                    bush[ty * n + tx] = true;
+                }
             }
         }
     }
@@ -515,14 +720,29 @@ final class World {
         }
     }
 
-    /** One lockstep tick of a Wi-Fi game: applies both players' inputs, then simulates. */
+    /** One lockstep tick of a two-player game (kept for the determinism replay). */
     void netStep(float dt, NetInput host, NetInput guest) {
+        netStep(dt, new NetInput[]{host, guest});
+    }
+
+    /** One lockstep tick of a Wi-Fi game: applies every human's input (by snake index), then simulates. */
+    void netStep(float dt, NetInput[] inputs) {
         Rng prev = MathUtil.RNG;
         MathUtil.RNG = rng;
         try {
-            applyInput(snakes[0], host);
-            if (humans > 1) applyInput(snakes[1], guest);
+            for (int i = 0; i < humans && i < inputs.length; i++) applyInput(snakes[i], inputs[i]);
             simulate(dt);
+        } finally {
+            MathUtil.RNG = prev;
+        }
+    }
+
+    /** Lockstep-safe {@link #makeBot}: every phone calls it at the same tick. */
+    void netMakeBot(Snake s) {
+        Rng prev = MathUtil.RNG;
+        MathUtil.RNG = rng;
+        try {
+            makeBot(s);
         } finally {
             MathUtil.RNG = prev;
         }
@@ -1879,9 +2099,9 @@ final class World {
         Snake.shadows = true;
 
         // Deep sea around the island
-        if (fancy) g.vertical(0, 0, w, h, 0xff2f8fd0, 0xff174a85);
+        if (fancy) g.vertical(0, 0, w, h, theme.seaTop, theme.seaBottom);
         else {
-            g.color(0xff1d5e8c);
+            g.color(theme.seaFlat);
             g.fillRect(0, 0, w, h);
         }
         g.save();
@@ -1914,8 +2134,8 @@ final class World {
 
         if (fancy) {
             // Warm sunlight from the top, cooler shade at the bottom
-            g.vertical(0, 0, w, h * 0.5f, 0x1cffe2a0, 0x00ffe2a0);
-            g.vertical(0, h * 0.55f, w, h, 0x00203060, 0x18203060);
+            g.vertical(0, 0, w, h * 0.5f, theme.tintTop, theme.tintTop & 0x00ffffff);
+            g.vertical(0, h * 0.55f, w, h, theme.tintBottom & 0x00ffffff, theme.tintBottom);
             // Soft vignette pulls the eye to the centre
             float rad = (float) Math.sqrt(w * w + h * h) * 0.62f;
             g.radial(w / 2, h / 2, rad, 0x00000000, 0x70000018);
@@ -1933,8 +2153,8 @@ final class World {
                 float x = (cx + 0.5f) * cell + ((h & 63) - 32) * 3f, y = (cy + 0.5f) * cell + (((h >>> 6) & 63) - 32) * 3f;
                 if (x < -100 || y < -100 || x > size + 100 || y > size + 100) continue;
                 float rad = cell * (0.45f + ((h >>> 12) & 15) / 40f);
-                if ((h & 0x10000) != 0) g.radial(x, y, rad, 0x22fff4c8, 0x00fff4c8);
-                else g.radial(x, y, rad, 0x16301a00, 0x00301a00);
+                if ((h & 0x10000) != 0) g.radial(x, y, rad, theme.sunPatch, theme.sunPatch & 0x00ffffff);
+                else g.radial(x, y, rad, theme.shadePatch, theme.shadePatch & 0x00ffffff);
             }
         }
         // Sparkles on the water around the island
@@ -1960,20 +2180,37 @@ final class World {
             float x = l + (((fx0 + camX * 0.15f) % (wdt * 1.2f)) + wdt * 1.2f) % (wdt * 1.2f) - wdt * 0.1f;
             float y = t + (((fy0 + camY * 0.15f) % (hgt * 1.2f)) + hgt * 1.2f) % (hgt * 1.2f) - hgt * 0.1f
                     + MathUtil.sin(tt * 1.3f + k) * 18f;
-            if (k % 6 == 0) {
+            if (theme.ambientStyle == 1) {
+                // Snowflake drifting down
+                float sy = t + (((fy0 * 2.2f + camY * 0.15f) % (hgt * 1.2f)) + hgt * 1.2f) % (hgt * 1.2f) - hgt * 0.1f;
+                float sz = 4f + (k % 4) * 1.6f;
+                g.color(MathUtil.withAlpha(theme.ambient, 0.75f));
+                g.fillCircle(x, sy, sz);
+                if (k % 3 == 0) {
+                    g.line(x - sz * 1.8f, sy, x + sz * 1.8f, sy, 1.5f);
+                    g.line(x, sy - sz * 1.8f, x, sy + sz * 1.8f, 1.5f);
+                }
+            } else if (theme.ambientStyle == 2) {
+                // Embers rising from the lava
+                float ey = b - ((((fy0 * 1.8f - camY * 0.15f) % (hgt * 1.2f)) + hgt * 1.2f) % (hgt * 1.2f)) + hgt * 0.1f;
+                float tw = 0.5f + 0.5f * MathUtil.sin(tt * 5f + k * 2.1f);
+                g.radial(x, ey, 7f + 5f * tw, MathUtil.withAlpha(theme.ambient, 0.55f + 0.35f * tw), theme.ambient & 0x00ffffff);
+                g.color(MathUtil.withAlpha(0xffffe08a, 0.8f * tw));
+                g.fillCircle(x, ey, 2.2f);
+            } else if (k % 6 == 0) {
                 // Leaf
                 float a = tt * (1.5f + k % 3) + k;
-                g.color(0xcc6ab84a);
+                g.color(theme.leaf);
                 g.save();
                 g.translate(x, y);
                 g.rotate((float) Math.toDegrees(a));
                 g.fillRoundRect(-9, -4, 9, 4, 4);
-                g.color(0xaa3f8a2e);
+                g.color(theme.leafVein);
                 g.line(-8, 0, 8, 0, 1.5f);
                 g.restore();
             } else {
                 float tw = 0.5f + 0.5f * MathUtil.sin(tt * 3f + k * 1.7f);
-                g.radial(x, y, 9f + 4f * tw, MathUtil.withAlpha(0xfffff0b0, 0.5f * tw + 0.2f), 0x00fff0b0);
+                g.radial(x, y, 9f + 4f * tw, MathUtil.withAlpha(theme.ambient, 0.5f * tw + 0.2f), theme.ambient & 0x00ffffff);
             }
         }
     }
@@ -2002,20 +2239,20 @@ final class World {
         float wl = Math.max(l, -2000), wr = Math.min(r, size + 2000);
         for (float y = (float) Math.floor(t / 90) * 90; y < b; y += 90) {
             float off = MathUtil.sin(tt * 1.5f + y * 0.02f) * 20;
-            g.color(0x2affffff);
+            g.color(theme.wave);
             g.line(wl, y + off, wr, y + off + 6, 5);
         }
         if (fancy) {
             // Foam and wet sand along the shore
             float foam = 26f + 6f * MathUtil.sin(tt * 2f);
-            g.color(0x55ffffff);
+            g.color(theme.foam);
             g.fillRoundRect(-foam - 18, -foam - 18, size + foam + 18, size + foam + 18, 60);
-            g.color(0xffb08c58);
+            g.color(theme.rimWet);
             g.fillRoundRect(-30, -30, size + 30, size + 30, 40);
         }
-        g.color(0xffc9a46a);
+        g.color(theme.rimDry);
         g.fillRect(-18, -18, size + 18, size + 18);
-        g.color(0xffeed49e);
+        g.color(theme.ground);
         g.fillRect(0, 0, size, size);
         int tx0 = Math.max(0, (int) (l / T)), tx1 = Math.min(n - 1, (int) (r / T));
         int ty0 = Math.max(0, (int) (t / T)), ty1 = Math.min(n - 1, (int) (b / T));
@@ -2025,7 +2262,7 @@ final class World {
                 int hsh = hash(tx, ty);
                 boolean dark = ((tx + ty) & 1) == 0;
                 if (!dark && (!fancy || (hsh & 7) != 0)) continue;
-                int c = dark ? ((hsh & 3) == 0 ? 0xffe0c085 : 0xffe5c78d) : 0xfff2dba8;
+                int c = dark ? ((hsh & 3) == 0 ? theme.checkA : theme.checkB) : theme.checkLight;
                 g.color(c);
                 g.fillRect(tx * T, ty * T, tx * T + T, ty * T + T);
             }
@@ -2038,7 +2275,7 @@ final class World {
                     if (m < 0.52f) continue;
                     float a = Math.min(1f, (m - 0.52f) * 3.2f);
                     // Tile-sized tint fading in with the noise, so patches blend into the checker
-                    g.color(MathUtil.withAlpha(0xff9cc45a, 0.38f * a));
+                    g.color(MathUtil.withAlpha(theme.meadow, 0.38f * a));
                     g.fillRect(tx * T, ty * T, tx * T + T, ty * T + T);
                 }
             }
@@ -2046,7 +2283,7 @@ final class World {
             for (int ty = ty0; ty <= ty1; ty++) {
                 for (int tx = tx0; tx <= tx1; tx++) {
                     int hsh = hash(tx * 13 + 1, ty * 17 + 7);
-                    g.color(0x1e6a4a1a);
+                    g.color(theme.grain);
                     for (int k = 0; k < 4; k++) {
                         hsh = hsh * 1103515245 + 12345;
                         g.fillCircle(tx * T + ((hsh >>> 8) & 63), ty * T + ((hsh >>> 16) & 63), 1.6f + ((hsh >>> 24) & 1));
@@ -2064,20 +2301,20 @@ final class World {
                     float x = tx * T + 12 + ((hsh >>> 8) & 31) * 1.3f, y = ty * T + 12 + ((hsh >>> 13) & 31) * 1.3f;
                     if (kind <= 2) {
                         float sway = MathUtil.sin(tt * 2f + x * 0.05f) * 2f;
-                        g.color(0xff8fb04a);
+                        g.color(theme.tuft);
                         g.line(x, y, x - 6 + sway, y - 12, 3);
                         g.line(x, y, x + sway, y - 15, 3);
                         g.line(x, y, x + 6 + sway, y - 11, 3);
                     } else if (kind <= 4) {
                         g.color(0x33000000);
                         g.fillCircle(x + 2, y + 3, 6);
-                        g.color(0xffb8a88c);
+                        g.color(theme.pebble);
                         g.fillCircle(x, y, 6);
-                        g.color(0xffd8ccb4);
+                        g.color(theme.pebbleHi);
                         g.fillCircle(x - 2, y - 2, 2.5f);
                     } else {
-                        int fc = (hsh & 1) == 0 ? 0xffff7ab0 : 0xffffffff;
-                        g.color(0xff8fb04a);
+                        int fc = (hsh & 1) == 0 ? theme.flowerA : theme.flowerB;
+                        g.color(theme.tuft);
                         g.line(x, y + 4, x, y + 12, 2.5f);
                         g.color(fc);
                         for (int k = 0; k < 5; k++) {
@@ -2091,12 +2328,12 @@ final class World {
             }
         }
         // Wooden edge fence
-        g.color(0xff5a3a1a);
+        g.color(theme.fenceDark);
         g.strokeRoundRect(-9, -7, size + 9, size + 11, 12, 16);
-        g.color(0xff8b5a2b);
+        g.color(theme.fence);
         g.strokeRoundRect(-9, -9, size + 9, size + 9, 12, 12);
         if (fancy) {
-            g.color(0xffb07a3c);
+            g.color(theme.fenceHi);
             g.strokeRoundRect(-9, -11, size + 9, size + 7, 12, 4);
         }
     }
@@ -2210,9 +2447,9 @@ final class World {
                     boolean below = ty + 1 < n && tiles[(ty + 1) * n + tx] == WALL;
                     // Front face
                     if (!below) {
-                        if (fancy) g.vertical(x, y + T - lift, x + T, y + T, 0xff5a6688, 0xff3a4260);
+                        if (fancy) g.vertical(x, y + T - lift, x + T, y + T, theme.wallFrontA, theme.wallFrontB);
                         else {
-                            g.color(0xff4e5873);
+                            g.color(theme.wallFrontFlat);
                             g.fillRect(x, y + T - lift, x + T, y + T);
                         }
                         g.color(0x55262c40);
@@ -2225,14 +2462,14 @@ final class World {
                         }
                     }
                     // Top face
-                    g.color(0xff2a3048);
+                    g.color(theme.wallTopEdge);
                     g.fillRoundRect(x - 1, y - lift - 1, x + T + 1, y + T - lift + 1, 7);
-                    if (fancy) g.vertical(x, y - lift, x + T, y + T - lift, 0xffa6b2d0, 0xff7a87a6);
+                    if (fancy) g.vertical(x, y - lift, x + T, y + T - lift, theme.wallTopA, theme.wallTopB);
                     else {
-                        g.color(0xff7d8aa8);
+                        g.color(theme.wallTopFlat);
                         g.fillRect(x, y - lift, x + T, y + T - lift);
                     }
-                    g.color(0xffb8c4e0);
+                    g.color(theme.wallHi);
                     g.fillRoundRect(x + 5, y - lift + 4, x + T - 5, y - lift + 10, 3);
                     if (fancy) {
                         int hsh = hash(tx, ty);
@@ -2240,7 +2477,7 @@ final class World {
                         float top = y - lift, mid = top + T * 0.5f;
                         float jx = (ty & 1) == 0 ? x + T * 0.5f : x + T * 0.3f;
                         float jx2 = (ty & 1) == 0 ? x + T * 0.3f : x + T * 0.62f;
-                        g.color(0x55404a66);
+                        g.color(theme.mortar);
                         g.line(x + 3, mid, x + T - 3, mid, 2.5f);
                         g.line(jx, top + 12, jx, mid - 1, 2.5f);
                         g.line(jx2, mid + 1, jx2, top + T - 3, 2.5f);
@@ -2248,7 +2485,7 @@ final class World {
                         g.line(x + 4, mid + 3, x + T - 4, mid + 3, 1.5f);
                         g.line(jx + 3, top + 13, jx + 3, mid - 2, 1.5f);
                         if ((hsh & 7) == 0) {
-                            g.color(0x55404a66);
+                            g.color(theme.mortar);
                             float cx = x + 14 + (hsh >>> 4 & 15) * 2, cy = top + 20 + ((hsh >>> 8) & 7);
                             g.line(cx, cy, cx + 8, cy + 6, 2);
                             g.line(cx + 8, cy + 6, cx + 5, cy + 13, 2);
@@ -2256,11 +2493,11 @@ final class World {
                         if (((hsh >>> 12) & 3) == 0) {
                             // Moss creeping over the edge
                             float mx = x + 8 + ((hsh >>> 16) & 31), my = top + 6;
-                            g.color(0xcc5a9a3a);
+                            g.color(theme.moss);
                             g.fillCircle(mx, my, 7);
                             g.fillCircle(mx + 8, my + 2, 5);
                             g.fillCircle(mx - 6, my + 3, 4);
-                            g.color(0xcc8ac85a);
+                            g.color(theme.mossHi);
                             g.fillCircle(mx - 1, my - 1, 3.5f);
                         }
                     }
@@ -2697,8 +2934,8 @@ final class World {
         int passes = fancy ? 5 : 2;
         for (int pass = 0; pass < passes; pass++) {
             int c;
-            if (fancy) c = pass == 0 ? 0x33000000 : pass == 1 ? 0xff1e5426 : pass == 2 ? 0xff3a9a3a : pass == 3 ? 0xff5cc04c : 0xff8ae070;
-            else c = pass == 0 ? 0xff23602a : 0xff3f9b3c;
+            if (fancy) c = pass == 0 ? theme.bush0 : pass == 1 ? theme.bush1 : pass == 2 ? theme.bush2 : pass == 3 ? theme.bush3 : theme.bush4;
+            else c = pass == 0 ? theme.bushLowA : theme.bushLowB;
             g.color(MathUtil.withAlpha(c, a));
             for (int ty = ty0; ty <= ty1; ty++) {
                 for (int tx = tx0; tx <= tx1; tx++) {
@@ -2741,7 +2978,7 @@ final class World {
                             g.fillCircle(x + 8 + sway, y - 23, 4);
                             if ((hsh & 31) == 0) {
                                 // Rare little flower
-                                g.color(MathUtil.withAlpha(0xffff7ab0, a));
+                                g.color(MathUtil.withAlpha(theme.bushFlower, a));
                                 g.fillCircle(x + 4 + sway, y + 2, 6);
                                 g.color(MathUtil.withAlpha(0xffffe14a, a));
                                 g.fillCircle(x + 4 + sway, y + 2, 2.5f);

@@ -2,16 +2,19 @@ package com.snakebrawl.myapp.game;
 
 /** Top-level game: screens, HUD, touch controls and progression. Host-agnostic. */
 public final class Game {
-    static final int MENU = 0, BRAWLERS = 1, PLAY = 2, RESULT = 3, SHOP = 4, SETTINGS = 5, ONBOARD = 6, CLUB = 7, FRIENDS = 8, PASS = 9;
+    static final int MENU = 0, BRAWLERS = 1, PLAY = 2, RESULT = 3, SHOP = 4, SETTINGS = 5, ONBOARD = 6, CLUB = 7, FRIENDS = 8, PASS = 9,
+            MAPS = 10, QUESTS = 11, EDITOR = 12;
     private static final float STEP = 1f / 60f;
 
     static final int B_PLAY = 1, B_MODE = 2, B_BRAWLERS = 3, B_SHOP = 4, B_SETTINGS = 5, B_BACK = 6,
-            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_CLUB = 11, B_FRIENDS = 12, B_PASS = 13, B_SHOWCASE = 14, B_YES = 90, B_NO = 91, B_OK = 92,
+            B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_CLUB = 11, B_FRIENDS = 12, B_PASS = 13, B_SHOWCASE = 14, B_MAP = 15,
+            B_QUESTS = 16, B_PHOTO = 17, B_YES = 90, B_NO = 91, B_OK = 92,
             B_SHEET_BUY = 93, B_SHEET_CANCEL = 94;
 
     // Popup actions confirmed with YES
     static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
-            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9, ACT_PASS_PLUS = 10;
+            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9, ACT_PASS_PLUS = 10,
+            ACT_DELETE_MAP = 11;
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
     private static final int[] RANK_COINS = {50, 40, 32, 26, 20, 15, 11, 8, 5, 3};
@@ -24,18 +27,44 @@ public final class Game {
     private SocialScreens social;
     private FriendsScreen friends;
     private PassScreen pass;
+    private MapScreens maps;
+    private QuestScreen quests;
+    /** Hides the HUD so players can film clean videos (the controls still work). */
+    boolean photoMode;
+    /** The daily reward screen opens by itself once per session when a reward is waiting. */
+    private boolean dailyShown;
 
-    // Wi-Fi match (lockstep: both phones simulate the same world from the same inputs)
+    // First-match tutorial: step (-1 off), time in the step, and progress counters
+    int tutStep = -1;
+    private float tutTime, tutSteer, tutBoost, tutMass0;
+    private static final String[] TUT_TEXT = {
+            "DRAG ON THE LEFT SIDE TO STEER", "TAP THE RED BUTTON TO SHOOT", "HOLD BOOST TO SPEED UP",
+            "EAT GLOWING ORBS TO GROW", "HIT SNAKES TO CHARGE YOUR SUPER", "BE THE LAST SNAKE STANDING!",
+    };
+
+    // Wi-Fi / online match (lockstep: every phone simulates the same world from the same inputs)
     private static final int NET_DELAY = 4, NET_RING = 512, NET_HASH_EVERY = 120;
+    private static final int NO_DROP = Integer.MAX_VALUE;
     NetSession net;
     private boolean netHost;
+    /** Humans in the match (snakes 0..netPlayers-1), this phone's snake, and each one's room slot. */
+    private int netPlayers, netMe;
+    private final int[] netSlot = new int[NetSession.MAX_PLAYERS];
+    /** Tick from which a player who left is played by a bot (NO_DROP while they play). */
+    private final int[] netDropTick = new int[NetSession.MAX_PLAYERS];
+    /** Host: newest input tick received from each player. */
+    private final int[] netLastTick = new int[NetSession.MAX_PLAYERS];
+    private final NetInput[] netStepIn = new NetInput[NetSession.MAX_PLAYERS];
     /** The last result came from a Wi-Fi match. */
     private boolean resNet;
     private int resPassXp;
+    /** Quests finished by the last match. */
+    private int resQuests;
     private boolean resPassTierUp;
     int netTick;
     private final NetInput netIn = new NetInput();
-    private final NetInput[] netLocal = new NetInput[NET_RING], netRemote = new NetInput[NET_RING];
+    /** Inputs by snake index and tick (ring buffer); this phone's own are in [netMe]. */
+    private final NetInput[][] netInputs = new NetInput[NetSession.MAX_PLAYERS][NET_RING];
     private final int[] netHashTick = new int[64], netHashVal = new int[64];
     private float netStall;
     float w = 1920, h = 1080, u = 1;
@@ -136,15 +165,23 @@ public final class Game {
             public OnlineLink online() {
                 return host.online();
             }
+
+            @Override
+            public boolean share(String text) {
+                return host.share(text);
+            }
         };
         meta = new MetaScreens(this);
         social = new SocialScreens(this);
         friends = new FriendsScreen(this);
         pass = new PassScreen(this);
-        for (int i = 0; i < NET_RING; i++) {
-            netLocal[i] = new NetInput();
-            netRemote[i] = new NetInput();
-            netLocal[i].tick = netRemote[i].tick = -1;
+        maps = new MapScreens(this);
+        quests = new QuestScreen(this);
+        for (int p = 0; p < netInputs.length; p++) {
+            for (int i = 0; i < NET_RING; i++) {
+                netInputs[p][i] = new NetInput();
+                netInputs[p][i].tick = -1;
+            }
         }
         newDemo();
         if (!profile.onboarded) screen = ONBOARD;
@@ -187,6 +224,10 @@ public final class Game {
     /** Title of the open popup, or null (tests). */
     String popTitleForTest() {
         return popup ? popTitle : null;
+    }
+
+    FriendsScreen friendsForTest() {
+        return friends;
     }
 
     World currentWorld() {
@@ -495,7 +536,13 @@ public final class Game {
                 setScreen(MENU);
                 return true;
             case PASS:
+            case MAPS:
+            case QUESTS:
                 setScreen(MENU);
+                return true;
+            case EDITOR:
+                maps.leaveEditor();
+                setScreen(MAPS);
                 return true;
             case ONBOARD:
                 return true;
@@ -539,7 +586,10 @@ public final class Game {
     void startGame() {
         Brawler b = Brawler.ALL[profile.selected];
         int wm = worldMode(profile.mode);
-        world = new World(gated, wm, b, profile.palette(), profile.levels[b.id], wm == World.MODE_ENDLESS ? 11 : 9, profile.trophies);
+        Maps.Custom custom = Maps.isCustom(profile.map) ? Maps.load(gated, profile.map - Maps.CUSTOM) : null;
+        int mapId = custom == null && profile.map >= 0 && profile.map < Maps.BUILT_IN ? profile.map : Maps.SUNNY;
+        world = new World(gated, wm, new Brawler[]{b}, new int[][]{profile.palette()}, new int[]{profile.levels[b.id]}, 0,
+                wm == World.MODE_ENDLESS ? 11 : 9, profile.trophies, 2, mapId, custom);
         world.player.name = profile.displayName();
         if (wm == World.MODE_DUO) {
             Snake mate = world.mateOf(world.player);
@@ -549,90 +599,186 @@ public final class Game {
             }
         }
         configureWorld();
+        if (profile.tutorial == 0) {
+            tutStep = 0;
+            tutTime = tutSteer = tutBoost = 0;
+            tutMass0 = world.player.mass;
+        }
     }
 
-    /** Starts a Wi-Fi match. Both phones call this with the same seed and mode. */
-    void startNetGame(NetSession session, NetSession.Msg friend, long seed, int lobbyMode) {
+    /** TEST PLAY from the map maker: a normal solo match on the map being edited. */
+    void startTestMatch() {
+        startGame();
+    }
+
+    /** Shares an invite to the game (system share sheet). */
+    void invite() {
+        String text = "Play Snake Brawl with me! It's like snake.io with brawler powers. Get it on Google Play: "
+                + "https://play.google.com/store/apps/details?id=com.snakebrawl.raneddie";
+        if (!gated.share(text)) {
+            showInfo("INVITE FRIENDS", "Tell your friends to search for Snake Brawl on Google Play!", 0, 0);
+        }
+    }
+
+    /**
+     * Starts a multiplayer match. Every phone calls this with the same roster (players by room
+     * slot, null for empty slots), seed, mode and map; {@code mySlot} is this phone's slot.
+     */
+    void startNetGame(NetSession session, NetSession.Msg[] roster, int mySlot, long seed, int lobbyMode, int mapId, byte[] mapData) {
         net = session;
         netHost = session.host;
         netTick = 0;
         netStall = 0;
         netIn.clear();
-        for (int i = 0; i < NET_RING; i++) netLocal[i].tick = netRemote[i].tick = -1;
-        for (int i = 0; i < netHashTick.length; i++) netHashTick[i] = -1;
-        // The first few ticks have no input yet on either phone
-        for (int t = 0; t < NET_DELAY; t++) {
-            NetInput li = netLocal[t];
-            li.clear();
-            li.tick = t;
-            NetInput ri = netRemote[t];
-            ri.clear();
-            ri.tick = t;
+        int np = 0;
+        netMe = 0;
+        for (int s = 0; s < roster.length && np < NetSession.MAX_PLAYERS; s++) {
+            if (roster[s] == null) continue;
+            if (s == mySlot) netMe = np;
+            netSlot[np++] = s;
         }
-        Brawler mine = Brawler.ALL[profile.selected];
-        Brawler theirs = Brawler.ALL[Profile.clamp(friend.brawler, 0, Brawler.ALL.length - 1)];
-        int[] myPal = profile.palette();
-        int[] theirPal = friend.palette != null && friend.palette.length >= 2 ? friend.palette : new int[]{theirs.color1, theirs.color2};
-        int myLvl = profile.levels[mine.id], theirLvl = Profile.clamp(friend.level, 1, Brawler.MAX_LEVEL);
-        int wm = lobbyMode == FriendsScreen.VERSUS ? World.MODE_SHOWDOWN : World.MODE_DUO;
-        int trophies = netHost ? profile.trophies : friend.trophies;
+        netPlayers = np;
+        for (int p = 0; p < NetSession.MAX_PLAYERS; p++) {
+            netDropTick[p] = NO_DROP;
+            netLastTick[p] = NET_DELAY - 1;
+            for (int i = 0; i < NET_RING; i++) netInputs[p][i].tick = -1;
+            // The first few ticks have no input yet on any phone
+            for (int t = 0; t < NET_DELAY; t++) {
+                netInputs[p][t].clear();
+                netInputs[p][t].tick = t;
+            }
+        }
+        for (int i = 0; i < netHashTick.length; i++) netHashTick[i] = -1;
+        Brawler[] types = new Brawler[np];
+        int[][] pals = new int[np][];
+        int[] lvls = new int[np];
+        String[] names = new String[np];
+        for (int i = 0; i < np; i++) {
+            NetSession.Msg pl = roster[netSlot[i]];
+            if (i == netMe) {
+                types[i] = Brawler.ALL[profile.selected];
+                pals[i] = profile.palette();
+                lvls[i] = profile.levels[profile.selected];
+                names[i] = profile.displayName();
+            } else {
+                types[i] = Brawler.ALL[Profile.clamp(pl.brawler, 0, Brawler.ALL.length - 1)];
+                pals[i] = pl.palette != null && pl.palette.length >= 2 ? pl.palette : new int[]{types[i].color1, types[i].color2};
+                lvls[i] = Profile.clamp(pl.level, 1, Brawler.MAX_LEVEL);
+                names[i] = pl.name;
+            }
+        }
+        boolean versus = lobbyMode == FriendsScreen.VERSUS;
+        int wm = versus ? World.MODE_SHOWDOWN : World.MODE_DUO;
+        int bots = versus ? 10 - np : (np >= 3 ? 9 : 8);
+        // The host's trophies set the bots' strength, the same on every phone
+        int trophies = netMe == 0 ? profile.trophies : roster[netSlot[0]].trophies;
+        Maps.Custom custom = mapData != null && mapData.length > 0 ? Maps.decode(mapData) : null;
+        int map = mapId >= 0 && mapId < Maps.BUILT_IN ? mapId : Maps.SUNNY;
         Rng prev = MathUtil.RNG;
         MathUtil.RNG = new Rng(seed);
         try {
-            if (netHost) {
-                world = new World(gated, wm, mine, myPal, myLvl, theirs, theirPal, theirLvl, 0, 8, trophies);
-            } else {
-                world = new World(gated, wm, theirs, theirPal, theirLvl, mine, myPal, myLvl, 1, 8, trophies);
-            }
+            world = new World(gated, wm, types, pals, lvls, netMe, bots, trophies, np, map, custom);
         } finally {
             MathUtil.RNG = prev;
         }
-        world.snakes[netHost ? 0 : 1].name = profile.displayName();
-        world.snakes[netHost ? 1 : 0].name = friend.name;
-        world.banner(wm == World.MODE_DUO ? "TEAM UP WITH " + friend.name.toUpperCase() + "!" : "BEAT " + friend.name.toUpperCase() + "!");
+        StringBuilder others = new StringBuilder();
+        for (int i = 0; i < np; i++) {
+            world.snakes[i].name = names[i];
+            if (i == netMe) continue;
+            if (others.length() > 0) others.append(" & ");
+            others.append(names[i].toUpperCase());
+        }
+        world.banner(versus ? "BEAT " + others + "!" : "TEAM UP WITH " + others + "!");
         configureWorld();
     }
 
-    /** Snake controlled by the friend's phone. */
-    private Snake netFriend() {
-        return world.snakes[netHost ? 1 : 0];
+    private int netIndexOfSlot(int slot) {
+        for (int i = 0; i < netPlayers; i++) if (netSlot[i] == slot) return i;
+        return -1;
+    }
+
+    /** True while player {@code i} still sends inputs (not this phone, not dropped). */
+    private boolean netRemoteActive(int i) {
+        return i != netMe && netDropTick[i] == NO_DROP;
     }
 
     private void netUpdate(float dt) {
         NetSession.Msg m;
         while (net != null && (m = net.poll()) != null) {
-            if (m.type == NetSession.M_INPUT) {
-                NetInput ri = netRemote[m.input.tick % NET_RING];
-                ri.copyFrom(m.input);
-            } else if (m.type == NetSession.M_HASH) {
-                int k = (m.tick / NET_HASH_EVERY) % netHashTick.length;
-                if (netHashTick[k] == m.tick && netHashVal[k] != m.hash) {
-                    dropNet("OUT OF SYNC", "The two phones got out of sync, so " + netFriend().name + " is now played by a bot.");
-                    return;
+            switch (m.type) {
+                case NetSession.M_INPUT: {
+                    int idx = netIndexOfSlot(netHost ? m.from : m.slot);
+                    if (idx < 0 || idx == netMe || m.input.tick >= netDropTick[idx]) break;
+                    netInputs[idx][m.input.tick % NET_RING].copyFrom(m.input);
+                    if (netHost) {
+                        netLastTick[idx] = Math.max(netLastTick[idx], m.input.tick);
+                        // Pass it on to the other guests
+                        byte[] fwd = NetCodec.input(m.input, netSlot[idx]);
+                        for (int i = 1; i < netPlayers; i++) if (i != idx && netRemoteActive(i)) net.sendTo(netSlot[i], fwd);
+                    }
+                    break;
                 }
+                case NetSession.M_HASH: {
+                    int k = (m.tick / NET_HASH_EVERY) % netHashTick.length;
+                    if (netHashTick[k] != m.tick || netHashVal[k] == m.hash) break;
+                    if (netHost) {
+                        // That guest's game went its own way: let it go, it carries on with bots
+                        net.kick(m.from);
+                    } else {
+                        dropNet("OUT OF SYNC", "The phones got out of sync, so your friends are now played by bots.");
+                        return;
+                    }
+                    break;
+                }
+                case NetSession.M_DROP: {
+                    int idx = netIndexOfSlot(m.slot);
+                    if (!netHost && idx > 0 && idx != netMe) netDropTick[idx] = Math.min(netDropTick[idx], Math.max(m.tick, netTick));
+                    break;
+                }
+                case NetSession.M_LEFT: {
+                    int idx = netIndexOfSlot(m.from);
+                    if (!netHost || idx <= 0 || netDropTick[idx] != NO_DROP) break;
+                    // Nobody can have simulated past the last input we got from them
+                    int at = Math.max(netTick, netLastTick[idx] + 1);
+                    netDropTick[idx] = at;
+                    net.sendBytes(NetCodec.drop(m.from, at));
+                    break;
+                }
+                default:
+                    break;
             }
         }
-        if (net != null && net.state == NetSession.ST_CLOSED) {
-            dropNet("FRIEND LEFT", (net.closeReason != null ? net.closeReason : "Connection lost")
-                    + ". Their snake is now played by a bot.");
+        if (net == null) return;
+        if (net.state == NetSession.ST_CLOSED) {
+            dropNet(netHost ? "FRIEND LEFT" : "HOST LEFT", (net.closeReason != null ? net.closeReason : "Connection lost")
+                    + ". " + (netPlayers > 2 ? "Your friends are" : "Your friend is") + " now played by a bot.");
             return;
         }
         acc += dt;
         int steps = 0;
         while (acc >= STEP && steps < 6) {
-            NetInput host, guest;
-            NetInput remote = netRemote[netTick % NET_RING];
-            if (remote.tick != netTick) {
-                // Waiting for the friend's controls for this tick
+            boolean ready = true;
+            for (int i = 0; i < netPlayers && ready; i++) {
+                if (i == netMe || netDropTick[i] <= netTick) continue;
+                if (netInputs[i][netTick % NET_RING].tick != netTick) ready = false;
+            }
+            if (!ready) {
+                // Waiting for a friend's controls for this tick
                 netStall += dt;
                 acc = Math.min(acc, STEP * 4);
                 break;
             }
             netStall = 0;
+            for (int i = 0; i < netPlayers; i++) {
+                if (netDropTick[i] != netTick) continue;
+                Snake gone = world.snakes[i];
+                world.netMakeBot(gone);
+                world.banner(gone.name.toUpperCase() + " LEFT");
+            }
             applyControls();
-            // Controls entered now take effect NET_DELAY ticks later on both phones
+            // Controls entered now take effect NET_DELAY ticks later on every phone
             int future = netTick + NET_DELAY;
-            NetInput li = netLocal[future % NET_RING];
+            NetInput li = netInputs[netMe][future % NET_RING];
             li.copyFrom(netIn);
             li.tick = future;
             Snake me = world.player;
@@ -641,13 +787,11 @@ public final class Game {
                 li.tick = future;
             }
             NetCodec.normalize(li);
-            net.sendInput(li);
+            net.sendInput(li, netSlot[netMe]);
             netIn.attack = NetInput.NONE;
             netIn.steer = false;
-            NetInput local = netLocal[netTick % NET_RING];
-            host = netHost ? local : remote;
-            guest = netHost ? remote : local;
-            world.netStep(STEP, host, guest);
+            for (int i = 0; i < netPlayers; i++) netStepIn[i] = netDropTick[i] <= netTick ? null : netInputs[i][netTick % NET_RING];
+            world.netStep(STEP, netStepIn);
             if (netTick % NET_HASH_EVERY == 0) {
                 int k = (netTick / NET_HASH_EVERY) % netHashTick.length;
                 netHashTick[k] = netTick;
@@ -659,21 +803,30 @@ public final class Game {
             steps++;
         }
         if (steps == 6) acc = 0;
+        // Everyone else has left: the rest of the match is just local play
+        boolean anyone = false;
+        for (int i = 0; i < netPlayers; i++) if (netRemoteActive(i) || i != netMe && netDropTick[i] >= netTick) anyone = true;
+        if (!anyone) endNet();
         world.updateCamera(dt, w, h);
     }
 
-    /** Continues the match without the friend's phone: their snake becomes a bot. */
+    /** Continues the match without the other phones: their snakes become bots. */
     private void dropNet(String title, String text) {
         if (net == null) return;
-        Snake f = netFriend();
         net.close();
         net = null;
         acc = 0;
+        boolean any = false;
         if (world != null) {
-            world.makeBot(f);
+            for (int i = 0; i < netPlayers; i++) {
+                Snake f = world.snakes[i];
+                if (i == netMe || f.brain != null) continue;
+                world.makeBot(f);
+                any |= f.alive;
+            }
             world.banner(title);
         }
-        if (screen == PLAY && endTimer < 0 && f.alive) {
+        if (screen == PLAY && endTimer < 0 && any) {
             // The match is local now: pause it so the message doesn't cost the player control
             paused = true;
             releaseControls();
@@ -688,6 +841,7 @@ public final class Game {
     }
 
     private void configureWorld() {
+        tutStep = -1;
         world.showDamage = profile.damageNumbers;
         world.lowGraphics = profile.lowGraphics;
         world.fx.low = profile.lowGraphics;
@@ -738,6 +892,12 @@ public final class Game {
         resNewBest = resLength > profile.bestLen;
         if (resNewBest) profile.bestLen = resLength;
         profile.coins += resCoins;
+        resQuests = Quests.onMatch(profile, world.mode, resRank, p.kills, resLength, resCubes, win, p.type.id, resNet);
+        if (tutStep >= 0) {
+            // A finished first match counts as done with the tutorial
+            tutStep = -1;
+            profile.tutorial = 1;
+        }
         profile.totalKills += p.kills;
         profile.games++;
         profile.hints++;
@@ -782,6 +942,7 @@ public final class Game {
         if (id == B_YES) {
             if (action == ACT_JOIN_CLUB || action == ACT_LEAVE_CLUB) social.perform(action, arg);
             else if (action == ACT_PASS_PLUS) pass.perform(action);
+            else if (action == ACT_DELETE_MAP) maps.deleteMap(arg);
             else meta.perform(action, arg);
         }
     }
@@ -835,6 +996,11 @@ public final class Game {
 
     private void update(float dt) {
         if (screen == FRIENDS) friends.update(dt);
+        if (screen == MENU && !dailyShown && !popup && sheetPack < 0 && profile.onboarded && screenTime > 0.6f) {
+            dailyShown = true;
+            if (Quests.dailyReady(profile)) setScreen(QUESTS);
+        }
+        if (screen == PLAY && tutStep >= 0 && !paused) updateTutorial(dt);
         if (screen != PLAY && screen != RESULT) {
             demo.update(dt);
             demo.updateCamera(dt, w, h);
@@ -843,11 +1009,55 @@ public final class Game {
         if (world == null) return;
         if (net != null) {
             netUpdate(dt);
+            if (net == null) acc = 0;
         } else {
             if (screen == PLAY && paused) return;
             localUpdate(dt);
         }
         checkMatchEnd(dt);
+    }
+
+    /** Moves the first-match tutorial on when the player has done what the current step asks. */
+    private void updateTutorial(float dt) {
+        Snake p = world.player;
+        if (p == null || !p.alive) return;
+        tutTime += dt;
+        boolean next = false;
+        switch (tutStep) {
+            case 0:
+                if (movePtr >= 0) tutSteer += dt;
+                next = tutSteer > 1.2f;
+                break;
+            case 1:
+                next = tutTime > 14f; // also moved on by shooting (releaseAttack)
+                break;
+            case 2:
+                if (boostPtr >= 0) tutBoost += dt;
+                next = tutBoost > 0.8f || tutTime > 12f;
+                break;
+            case 3:
+                next = p.mass > tutMass0 + 10 || tutTime > 15f;
+                break;
+            case 4:
+                next = tutTime > 40f; // also moved on by using the super
+                break;
+            default:
+                if (tutTime > 4f) {
+                    tutStep = -1;
+                    profile.tutorial = 1;
+                    profile.save();
+                }
+                return;
+        }
+        if (next) tutorialNext();
+    }
+
+    private void tutorialNext() {
+        if (tutStep < 0) return;
+        tutStep++;
+        tutTime = 0;
+        if (tutStep == 3 && world != null && world.player != null) tutMass0 = world.player.mass;
+        gated.playSound(Platform.SND_POWER, 0.6f);
     }
 
     private void localUpdate(float dt) {
@@ -953,6 +1163,7 @@ public final class Game {
             ang = p.ang;
             dist = range * 0.8f;
         }
+        if (tutStep == 1 && !sup || tutStep == 4 && sup) tutorialNext();
         if (net != null) {
             netIn.attack = sup ? NetInput.SUPER : NetInput.ATTACK;
             netIn.atkAng = ang;
@@ -1034,6 +1245,10 @@ public final class Game {
             }
             return;
         }
+        if (screen == EDITOR && !popup && maps.onGrid(x, y)) {
+            maps.paintDown(id, x, y);
+            return;
+        }
         ui.down(id, x, y);
     }
 
@@ -1056,6 +1271,8 @@ public final class Game {
             supX = x;
             supY = y;
             supMax = Math.max(supMax, MathUtil.dist(x, y, supOx, supOy));
+        } else if (screen == EDITOR && maps.painting(id)) {
+            maps.paintMove(id, x, y);
         } else {
             ui.move(id, x, y);
         }
@@ -1084,6 +1301,10 @@ public final class Game {
             releaseAttack(true);
             supPtr = -1;
             if (world != null) world.aimActive = false;
+            return;
+        }
+        if (screen == EDITOR && maps.paintUp(id)) {
+            layout();
             return;
         }
         if (id == pausePtr) {
@@ -1160,7 +1381,25 @@ public final class Game {
                 break;
             case B_BACK:
                 if (screen == FRIENDS) friends.cancel();
+                if (screen == EDITOR) {
+                    maps.leaveEditor();
+                    maps.reload();
+                    setScreen(MAPS);
+                    break;
+                }
                 setScreen(MENU);
+                break;
+            case B_MAP:
+                maps.reload();
+                setScreen(MAPS);
+                break;
+            case B_QUESTS:
+                setScreen(QUESTS);
+                break;
+            case B_PHOTO:
+                photoMode = !photoMode;
+                paused = false;
+                layout();
                 break;
             case B_MENU:
             case B_QUIT:
@@ -1174,6 +1413,11 @@ public final class Game {
                 if (SocialScreens.handles(id)) social.onButton(id);
                 else if (FriendsScreen.handles(id)) friends.onButton(id);
                 else if (PassScreen.handles(id)) pass.onButton(id);
+                else if (QuestScreen.handles(id)) quests.onButton(id);
+                else if (MapScreens.handles(id)) {
+                    if (screen == EDITOR) maps.onEditorButton(id);
+                    else maps.onPickerButton(id);
+                }
                 else meta.onButton(id);
                 break;
         }
@@ -1263,13 +1507,18 @@ public final class Game {
                             onl ? "Play together online" : "Play together on Wi-Fi", 0xff6a5cff);
                 }
                 ui.add(B_SETTINGS, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, null, null, 0xff8a8fb8);
+                if (!Maps.valid(gated, profile.map)) profile.map = Maps.SUNNY;
+                ui.add(B_MAP, r - bw, b - bh - 150 * u, r, b - bh - 30 * u, "MAP", Maps.name(gated, profile.map), 0xff3fb6a8);
+                ui.add(B_QUESTS, pl, padT + 635 * u, pl + 300 * u, padT + 755 * u, "QUESTS", "Daily rewards", 0xffffa42e);
                 break;
             }
             case PLAY: {
                 if (paused) {
                     float cx = w / 2, cy = h / 2;
                     ui.add(B_RESUME, cx - 220 * u, cy - 30 * u, cx + 220 * u, cy + 100 * u, "RESUME", null, 0xff4ad04a);
-                    ui.add(B_QUIT, cx - 220 * u, cy + 130 * u, cx + 220 * u, cy + 250 * u, "QUIT", null, 0xffff5a5a);
+                    ui.add(B_PHOTO, cx - 220 * u, cy + 130 * u, cx + 220 * u, cy + 250 * u, photoMode ? "SHOW HUD" : "PHOTO MODE",
+                            photoMode ? null : "Hide buttons for videos", 0xff3fa0ff);
+                    ui.add(B_QUIT, cx - 220 * u, cy + 280 * u, cx + 220 * u, cy + 400 * u, "QUIT", null, 0xffff5a5a);
                 }
                 break;
             }
@@ -1288,6 +1537,15 @@ public final class Game {
                 break;
             case PASS:
                 if (pass != null) pass.layout();
+                break;
+            case MAPS:
+                maps.layoutPicker();
+                break;
+            case QUESTS:
+                quests.layout();
+                break;
+            case EDITOR:
+                maps.layoutEditor();
                 break;
             default:
                 meta.layout();
@@ -1400,6 +1658,18 @@ public final class Game {
             case PASS:
                 demo.render(g);
                 pass.render(g);
+                break;
+            case MAPS:
+                demo.render(g);
+                maps.renderPicker(g);
+                break;
+            case QUESTS:
+                demo.render(g);
+                quests.render(g);
+                break;
+            case EDITOR:
+                demo.render(g);
+                maps.renderEditor(g);
                 break;
             default:
                 demo.render(g);
@@ -1531,6 +1801,19 @@ public final class Game {
                 }
             }
             if (bt.id == B_SETTINGS) drawGear(g, (bt.l + bt.r) / 2, (bt.t + bt.b) / 2 - 4 * u, 70 * u);
+            if (bt.id == B_QUESTS) {
+                int ready = Quests.readyCount(profile);
+                if (ready > 0) {
+                    float bx = bt.r - 6 * u, by = bt.t + 6 * u;
+                    float p = 1f + 0.12f * MathUtil.sin(clock * 6f);
+                    g.color(Ui.INK);
+                    g.fillCircle(bx, by, 26 * u * p);
+                    g.color(0xffff3a3a);
+                    g.fillCircle(bx, by, 21 * u * p);
+                    g.color(0xffffffff);
+                    g.text(Integer.toString(ready), bx, by + 12 * u, 30 * u, Gfx.ALIGN_CENTER, 0, 0);
+                }
+            }
             if (bt.id == B_SHOP && profile.giftReady()) {
                 float bx = bt.r - 6 * u, by = bt.t + 6 * u;
                 float p = 1f + 0.12f * MathUtil.sin(clock * 6f);
@@ -1635,6 +1918,15 @@ public final class Game {
     private void renderHud(Gfx g) {
         World wd = world;
         Snake p = wd.player;
+        if (photoMode) {
+            // Only a faint pause button, so the screen can be filmed cleanly
+            g.color(0x330e1024);
+            g.fillCircle(pauseX, pauseY, pauseR);
+            g.color(0x55ffffff);
+            g.fillRoundRect(pauseX - 13 * u, pauseY - 15 * u, pauseX - 4 * u, pauseY + 15 * u, 3 * u);
+            g.fillRoundRect(pauseX + 4 * u, pauseY - 15 * u, pauseX + 13 * u, pauseY + 15 * u, 3 * u);
+            return;
+        }
 
         // Low health vignette
         if (p.alive && p.hp < p.maxHp * 0.35f) {
@@ -1742,7 +2034,10 @@ public final class Game {
             g.restore();
         }
 
-        if (profile.hints < 3 && wd.matchTime < 12f && p.alive) {
+        if (tutStep >= 0 && p.alive) {
+            // Wait for the match banner to go first
+            if (wd.bannerTime <= 0.2f || wd.matchTime > 4f) drawTutorial(g, p);
+        } else if (profile.hints < 3 && wd.matchTime < 12f && p.alive) {
             float a = Math.min(1f, (12f - wd.matchTime) * 0.8f);
             g.color(MathUtil.withAlpha(0xaa0e1024, a));
             g.fillRoundRect(cx - 560 * u, h * 0.62f - 46 * u, cx + 560 * u, h * 0.62f + 64 * u, 26 * u);
@@ -1757,12 +2052,84 @@ public final class Game {
         drawControls(g, p);
     }
 
+    /** Big hint for the current tutorial step, with an arrow to the control it is about. */
+    private void drawTutorial(Gfx g, Snake p) {
+        String text = tutStep == 4 && p.superReady() ? "SUPER READY! TAP THE YELLOW BUTTON" : TUT_TEXT[Math.min(tutStep, TUT_TEXT.length - 1)];
+        if (tutStep == 0 && profile.leftHanded) text = "DRAG ON THE RIGHT SIDE TO STEER";
+        float a = Math.min(1f, tutTime * 3f);
+        float cx = w / 2, cy = h * 0.27f;
+        float pop = 1f + 0.04f * MathUtil.sin(clock * 5f);
+        g.color(MathUtil.withAlpha(0xcc0e1024, a));
+        float tw = Math.min(w - 120 * u, g.measureText(text, 54 * u) + 120 * u);
+        g.fillRoundRect(cx - tw / 2, cy - 64 * u, cx + tw / 2, cy + 40 * u, 30 * u);
+        g.color(MathUtil.withAlpha(0xffffd23f, a));
+        g.text(text, cx, cy + 6 * u, Ui.fit(g, text, 54 * u * pop, tw - 60 * u), Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
+        g.color(MathUtil.withAlpha(0xffb8bdf0, a));
+        g.text("TRAINING " + Math.min(tutStep + 1, TUT_TEXT.length) + " / " + TUT_TEXT.length, cx, cy + 80 * u, 28 * u, Gfx.ALIGN_CENTER,
+                4 * u, Ui.INK);
+        // Point at the control
+        float tx, ty;
+        switch (tutStep) {
+            case 0:
+                tx = moveCX;
+                ty = moveCY;
+                break;
+            case 1:
+                tx = atkCX;
+                ty = atkCY;
+                break;
+            case 2:
+                tx = boostCX;
+                ty = boostCY;
+                break;
+            case 4:
+                tx = supCX;
+                ty = supCY;
+                break;
+            default:
+                return;
+        }
+        float bob = MathUtil.sin(clock * 6f) * 14 * u;
+        float ang = MathUtil.angleTo(cx, cy + 100 * u, tx, ty);
+        float ex = tx - MathUtil.cos(ang) * (130 * u + bob), ey = ty - MathUtil.sin(ang) * (130 * u + bob);
+        float ca = MathUtil.cos(ang), sa = MathUtil.sin(ang);
+        g.color(Ui.INK);
+        g.line(ex - ca * 90 * u, ey - sa * 90 * u, ex, ey, 22 * u);
+        g.color(0xffffd23f);
+        g.line(ex - ca * 86 * u, ey - sa * 86 * u, ex, ey, 14 * u);
+        poly[0] = ex + ca * 36 * u;
+        poly[1] = ey + sa * 36 * u;
+        poly[2] = ex - sa * 30 * u;
+        poly[3] = ey + ca * 30 * u;
+        poly[4] = ex + sa * 30 * u;
+        poly[5] = ey - ca * 30 * u;
+        g.fillPoly(poly, 3);
+        g.color(MathUtil.withAlpha(0xffffd23f, 0.5f + 0.3f * MathUtil.sin(clock * 6f)));
+        g.strokeCircle(tx, ty, 120 * u, 6 * u);
+    }
+
     /** Partner health card, respawn countdown and an edge arrow pointing to your partner. */
     private void drawPartnerHud(Gfx g, World wd, Snake p) {
+        int nm = wd.matesOf(p, mates);
+        if (nm == 0) return;
+        // A card under the minimap for each partner
+        for (int i = 0; i < nm; i++) drawPartnerCard(g, mates[i], p, mapY + mapS + 20 * u + i * 104 * u);
         Snake mate = wd.mateOf(p);
-        if (mate == null) return;
-        // Card under the minimap
-        float cl = mapX, ct = mapY + mapS + 20 * u, cr = mapX + mapS;
+        // Respawn countdown for the player
+        if (!p.alive && mate.alive) {
+            int secs = (int) Math.ceil(World.DUO_RESPAWN - p.deadTime);
+            g.color(0xaa0e1024);
+            g.fillRoundRect(w / 2 - 330 * u, h * 0.62f - 70 * u, w / 2 + 330 * u, h * 0.62f + 40 * u, 30 * u);
+            g.color(0xffffffff);
+            g.text("RESPAWNING IN " + Math.max(0, secs), w / 2, h * 0.62f, 58 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
+            g.color(0xff8ad8ff);
+            g.text("Watching " + mate.name, w / 2, h * 0.62f + 32 * u, 26 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        }
+        for (int i = 0; i < nm; i++) drawPartnerArrow(g, wd, mates[i], p);
+    }
+
+    private void drawPartnerCard(Gfx g, Snake mate, Snake p, float ct) {
+        float cl = mapX, cr = mapX + mapS;
         g.color(0xcc0e1024);
         g.fillRoundRect(cl - 6 * u, ct, cr + 6 * u, ct + 92 * u, 16 * u);
         g.color(0xff8ad8ff);
@@ -1778,16 +2145,10 @@ public final class Game {
             g.color(0xffff7a6a);
             g.text(p.alive ? "Respawns if you survive" : "Knocked out", cl + 6 * u, ct + 80 * u, 18 * u, Gfx.ALIGN_LEFT, 3 * u, Ui.INK);
         }
-        // Respawn countdown for the player
-        if (!p.alive && mate.alive) {
-            int secs = (int) Math.ceil(World.DUO_RESPAWN - p.deadTime);
-            g.color(0xaa0e1024);
-            g.fillRoundRect(w / 2 - 330 * u, h * 0.62f - 70 * u, w / 2 + 330 * u, h * 0.62f + 40 * u, 30 * u);
-            g.color(0xffffffff);
-            g.text("RESPAWNING IN " + Math.max(0, secs), w / 2, h * 0.62f, 58 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
-            g.color(0xff8ad8ff);
-            g.text("Watching " + mate.name, w / 2, h * 0.62f + 32 * u, 26 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
-        }
+    }
+
+    /** Edge arrow towards a partner when they are off screen. */
+    private void drawPartnerArrow(Gfx g, World wd, Snake mate, Snake p) {
         // Edge arrow towards the partner when off screen
         if (mate.alive && p.alive) {
             float sx = w / 2 + (mate.hx() - wd.camX) * wd.zoom, sy = h / 2 + (mate.hy() - wd.camY) * wd.zoom;
@@ -1940,9 +2301,9 @@ public final class Game {
         float k = s / wd.size;
         g.color(0xff0e1024);
         g.fillRoundRect(x0 - 6 * u, y0 - 6 * u, x0 + s + 6 * u, y0 + s + 6 * u, 14 * u);
-        g.color(0xffcdb37e);
+        g.color(wd.theme.mapGround);
         g.fillRect(x0, y0, x0 + s, y0 + s);
-        g.color(0xff5a6582);
+        g.color(wd.theme.mapWall);
         int n = wd.n;
         float ts = World.T * k;
         for (int ty = 0; ty < n; ty++) {
@@ -1951,7 +2312,7 @@ public final class Game {
                 if (t == World.WALL) g.fillRect(x0 + tx * ts, y0 + ty * ts, x0 + (tx + 1) * ts + 0.5f, y0 + (ty + 1) * ts + 0.5f);
             }
         }
-        g.color(0xff3c8a3a);
+        g.color(wd.theme.mapBush);
         for (int ty = 0; ty < n; ty++) {
             for (int tx = 0; tx < n; tx++) {
                 if (wd.bush[ty * n + tx]) g.fillRect(x0 + tx * ts, y0 + ty * ts, x0 + (tx + 1) * ts + 0.5f, y0 + (ty + 1) * ts + 0.5f);
@@ -1972,8 +2333,10 @@ public final class Game {
             g.fillRect(zr, zt, x0 + s, zb);
         }
         Snake p = wd.player;
-        Snake mate = p != null ? wd.mateOf(p) : null;
-        if (mate != null && mate.alive) {
+        int nm = p != null ? wd.matesOf(p, mates) : 0;
+        for (int i = 0; i < nm; i++) {
+            Snake mate = mates[i];
+            if (!mate.alive) continue;
             g.color(0xff14142a);
             g.fillCircle(x0 + mate.hx() * k, y0 + mate.hy() * k, 8 * u);
             g.color(0xff3fa0ff);
@@ -1992,6 +2355,7 @@ public final class Game {
     }
 
     private final Snake[] board = new Snake[32];
+    private final Snake[] mates = new Snake[2];
 
     private void drawLeaderboard(Gfx g) {
         World wd = world;
@@ -2100,6 +2464,11 @@ public final class Game {
         g.color(resPassTierUp ? 0xffffd23f : 0xff9cff8a);
         String px = resPassTierUp ? "PASS TIER " + SnakePass.tier(profile) + "!" : "+" + resPassXp + " PASS XP";
         g.text(px, vx, sy + 56 * u, 32 * u, Gfx.ALIGN_RIGHT, 4 * u, Ui.INK);
+        if (resQuests > 0) {
+            g.color(0xffffa42e);
+            String q = resQuests == 1 ? "QUEST DONE!" : resQuests + " QUESTS DONE!";
+            g.text(q, pl + 175 * u, pt + ph - 26 * u, 32 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+        }
 
         for (int i = 0; i < ui.count; i++) ui.button(g, ui.btns[i]);
     }

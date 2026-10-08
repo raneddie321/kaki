@@ -136,6 +136,15 @@ public final class WebMain implements Platform {
         callback.onText(t);
     }
 
+    @JSBody(params = "t", script = "SB.share(t);")
+    private static native void jsShare(String t);
+
+    @Override
+    public boolean share(String text) {
+        jsShare(text);
+        return true;
+    }
+
     @Override
     public boolean launchPurchase(String productId) {
         return false;

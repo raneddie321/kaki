@@ -23,9 +23,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Local Wi-Fi connection between two phones (Android only), using plain sockets so it runs on Android and on
- * the desktop test harness. The host opens a TCP port and announces itself with UDP broadcasts;
- * the guest listens for those announcements (or types the host's address) and connects.
+ * Local Wi-Fi room for up to three phones (Android only), using plain sockets so it runs on
+ * Android and on the desktop test harness. The host opens a TCP port and announces itself with UDP
+ * broadcasts; guests listen for those announcements (or type the host's address) and connect.
+ * Every guest has its own connection to the host; the host forwards what one guest sends to the
+ * others (see Game and FriendsScreen).
  *
  * All socket work happens on background threads. The game thread only calls {@link #poll()},
  * the send methods and {@link #close()}, none of which block.
@@ -36,17 +38,45 @@ final class LanSession extends NetSession {
     private static final String MAGIC = "SNAKEBRAWL" + PROTOCOL;
 
     private volatile boolean closing;
-    private volatile long lastRecv = System.nanoTime();
+    /** The host stops taking guests once the match starts. */
+    private volatile boolean locked;
     private long lastPing;
 
     private final ConcurrentLinkedQueue<Msg> inbox = new ConcurrentLinkedQueue<Msg>();
-    private final LinkedBlockingQueue<byte[]> outbox = new LinkedBlockingQueue<byte[]>();
     private final List<Room> rooms = new ArrayList<Room>();
 
     private ServerSocket server;
-    private Socket socket;
     private DatagramSocket udp;
     private final String myName;
+
+    /** Connections by slot: the host uses 1..MAX_PLAYERS-1, a guest only uses 0 (the host). */
+    private final Peer[] peers = new Peer[MAX_PLAYERS];
+
+    /** One TCP connection with its own writer thread. */
+    private final class Peer {
+        final int slot;
+        final Socket socket;
+        final LinkedBlockingQueue<byte[]> outbox = new LinkedBlockingQueue<byte[]>();
+        volatile long lastRecv = System.nanoTime();
+        volatile boolean open = true;
+
+        Peer(int slot, Socket socket) {
+            this.slot = slot;
+            this.socket = socket;
+        }
+
+        void send(byte[] b) {
+            if (open) outbox.offer(b);
+        }
+
+        /** Closes the connection; the reader reports the player as gone. */
+        void shut(boolean sayBye) {
+            if (!open) return;
+            if (sayBye) outbox.offer(NetCodec.single(M_BYE));
+            outbox.offer(new byte[0]);
+            open = false;
+        }
+    }
 
     private LanSession(boolean host, String myName) {
         super(host);
@@ -55,7 +85,7 @@ final class LanSession extends NetSession {
 
     // ------------------------------------------------------------------ host
 
-    /** Opens a room: waits for one guest and announces the room on the network. */
+    /** Opens a room: takes guests and announces the room on the network. */
     static LanSession host(String name) {
         final LanSession n = new LanSession(true, name);
         n.state = ST_WAITING;
@@ -87,13 +117,33 @@ final class LanSession extends NetSession {
         }, "net-beacon");
         beacon.setDaemon(true);
         beacon.start();
-        try {
-            Socket s = server.accept();
-            closeQuietly(server);
-            attach(s);
-        } catch (IOException e) {
-            if (!closing) fail("Room closed");
+        while (!closing && !locked) {
+            Socket s;
+            try {
+                s = server.accept();
+            } catch (IOException e) {
+                if (!closing && !locked) fail("Room closed");
+                return;
+            }
+            int slot = freeSlot();
+            if (slot < 0 || locked) {
+                // Room full (or the match already started): turn the phone away politely
+                try {
+                    s.getOutputStream().write(M_BYE);
+                    s.getOutputStream().flush();
+                } catch (IOException ignored) {
+                    // closing anyway
+                }
+                closeQuietly(s);
+                continue;
+            }
+            startPeer(slot, s);
         }
+    }
+
+    private synchronized int freeSlot() {
+        for (int i = 1; i < peers.length; i++) if (peers[i] == null) return i;
+        return -1;
     }
 
     private void runBeacon() {
@@ -101,13 +151,15 @@ final class LanSession extends NetSession {
         try {
             ds = new DatagramSocket();
             ds.setBroadcast(true);
-            byte[] data = (MAGIC + "|" + myName + "|" + TCP_PORT).getBytes("UTF-8");
-            while (!closing && state == ST_WAITING) {
-                for (InetAddress a : broadcastAddresses()) {
-                    try {
-                        ds.send(new DatagramPacket(data, data.length, a, UDP_PORT));
-                    } catch (IOException ignored) {
-                        // Some interfaces refuse broadcasts; the others still work
+            while (!closing && !locked) {
+                if (freeSlot() > 0) {
+                    byte[] data = (MAGIC + "|" + myName + "|" + TCP_PORT).getBytes("UTF-8");
+                    for (InetAddress a : broadcastAddresses()) {
+                        try {
+                            ds.send(new DatagramPacket(data, data.length, a, UDP_PORT));
+                        } catch (IOException ignored) {
+                            // Some interfaces refuse broadcasts; the others still work
+                        }
                     }
                 }
                 Thread.sleep(700);
@@ -199,11 +251,11 @@ final class LanSession extends NetSession {
                     Socket s = new Socket();
                     s.connect(new InetSocketAddress(ip, port), 5000);
                     if (udp != null) udp.close();
-                    attach(s);
+                    startPeer(0, s);
                 } catch (Exception e) {
                     if (!closing) {
                         state = ST_WAITING;
-                        closeReason = "Could not reach " + ip + ". Check that both phones are on the same Wi-Fi.";
+                        closeReason = "Could not reach " + ip + ". Check that all phones are on the same Wi-Fi.";
                     }
                 }
             }
@@ -212,55 +264,109 @@ final class LanSession extends NetSession {
         t.start();
     }
 
-    // ------------------------------------------------------------------ connection
+    // ------------------------------------------------------------------ connections
 
-    private void attach(Socket s) throws IOException {
-        socket = s;
-        s.setTcpNoDelay(true);
-        final DataInputStream in = new DataInputStream(new BufferedInputStream(s.getInputStream()));
-        final DataOutputStream out = new DataOutputStream(new BufferedOutputStream(s.getOutputStream()));
-        lastRecv = System.nanoTime();
-        state = ST_CONNECTED;
-        closeReason = null;
+    private void startPeer(final int slot, final Socket s) {
+        final Peer p = new Peer(slot, s);
+        synchronized (this) {
+            peers[slot] = p;
+        }
+        Thread reader = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                runPeer(p);
+            }
+        }, "net-peer-" + slot);
+        reader.setDaemon(true);
+        reader.start();
+    }
+
+    private void runPeer(final Peer p) {
+        final DataInputStream in;
+        final DataOutputStream out;
+        try {
+            p.socket.setTcpNoDelay(true);
+            in = new DataInputStream(new BufferedInputStream(p.socket.getInputStream()));
+            out = new DataOutputStream(new BufferedOutputStream(p.socket.getOutputStream()));
+        } catch (IOException e) {
+            peerGone(p, "Lost connection");
+            return;
+        }
         Thread writer = new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
                     while (true) {
-                        byte[] b = outbox.poll(1, TimeUnit.SECONDS);
+                        byte[] b = p.outbox.poll(1, TimeUnit.SECONDS);
                         if (b == null) {
-                            if (closing || state == ST_CLOSED) break;
+                            if (closing || !p.open) break;
                             continue;
                         }
                         if (b.length == 0) break; // shutdown marker
                         out.write(b);
-                        if (outbox.isEmpty()) out.flush();
+                        if (p.outbox.isEmpty()) out.flush();
                     }
                     out.flush();
                 } catch (Exception ignored) {
                     // the reader notices the broken connection
                 } finally {
-                    closeQuietly(socket);
+                    closeQuietly(p.socket);
                 }
             }
-        }, "net-writer");
+        }, "net-writer-" + p.slot);
         writer.setDaemon(true);
         writer.start();
+        p.lastRecv = System.nanoTime();
+        if (host) {
+            state = ST_CONNECTED;
+            Msg j = new Msg();
+            j.type = M_JOINED;
+            j.from = p.slot;
+            inbox.add(j);
+        } else {
+            state = ST_CONNECTED;
+            closeReason = null;
+        }
+        String why = null;
+        boolean heard = false;
         try {
             while (true) {
                 Msg m = NetCodec.read(in);
-                lastRecv = System.nanoTime();
+                p.lastRecv = System.nanoTime();
                 if (m.type == M_PING) continue;
                 if (m.type == M_BYE) {
-                    fail("Your friend left the game");
+                    why = host ? "left the game" : heard ? "The host left the game"
+                            : "That room is full (" + MAX_PLAYERS + " players max) or its match already started";
                     break;
                 }
+                heard = true;
+                m.from = p.slot;
                 inbox.add(m);
             }
         } catch (IOException e) {
-            if (!closing) fail("Lost connection to your friend");
+            why = host ? "lost connection" : "Lost connection to the host";
         } finally {
-            closeQuietly(socket);
+            closeQuietly(p.socket);
+        }
+        peerGone(p, why);
+    }
+
+    private void peerGone(Peer p, String why) {
+        p.open = false;
+        p.outbox.offer(new byte[0]);
+        synchronized (this) {
+            if (peers[p.slot] != p) return;
+            peers[p.slot] = null;
+        }
+        if (closing) return;
+        if (host) {
+            Msg m = new Msg();
+            m.type = M_LEFT;
+            m.from = p.slot;
+            m.name = why;
+            inbox.add(m);
+        } else {
+            fail(why != null ? why : "Lost connection to the host");
         }
     }
 
@@ -268,32 +374,76 @@ final class LanSession extends NetSession {
         if (state == ST_CLOSED) return;
         closeReason = reason;
         state = ST_CLOSED;
-        outbox.offer(new byte[0]);
+        for (Peer p : peersNow()) p.shut(false);
     }
 
-    /** Messages received since the last call, oldest first. Also handles keep-alive and timeouts. */
+    private synchronized Peer[] peersNow() {
+        int n = 0;
+        for (Peer p : peers) if (p != null) n++;
+        Peer[] out = new Peer[n];
+        n = 0;
+        for (Peer p : peers) if (p != null) out[n++] = p;
+        return out;
+    }
+
+    /** Next message, oldest first. Also handles keep-alive and timeouts. */
     @Override
     Msg poll() {
         if (state == ST_CONNECTED) {
             long now = System.nanoTime();
-            if (now - lastPing > 1_000_000_000L) {
-                lastPing = now;
-                send(NetCodec.single(M_PING));
+            boolean ping = now - lastPing > 1_000_000_000L;
+            if (ping) lastPing = now;
+            for (Peer p : peersNow()) {
+                if (ping) p.send(NetCodec.single(M_PING));
+                if (now - p.lastRecv > 8_000_000_000L) {
+                    // Silent for too long: drop it (the reader thread reports it)
+                    p.shut(false);
+                    closeQuietly(p.socket);
+                }
             }
-            if (now - lastRecv > 8_000_000_000L) fail("Lost connection to your friend");
         }
         return inbox.poll();
     }
 
     // ------------------------------------------------------------------ sending
 
-    private void send(byte[] b) {
-        if (state == ST_CONNECTED) outbox.offer(b);
+    @Override
+    void sendBytes(byte[] b) {
+        if (state != ST_CONNECTED) return;
+        for (Peer p : peersNow()) p.send(b);
     }
 
     @Override
-    void sendBytes(byte[] b) {
-        send(b);
+    void sendTo(int slot, byte[] b) {
+        Peer p;
+        synchronized (this) {
+            p = slot >= 0 && slot < peers.length ? peers[slot] : null;
+        }
+        if (p != null) p.send(b);
+    }
+
+    @Override
+    void kick(int slot) {
+        Peer p;
+        synchronized (this) {
+            p = slot > 0 && slot < peers.length ? peers[slot] : null;
+        }
+        if (p != null) {
+            p.shut(true);
+            // The writer closes the socket after BYE; the reader then reports the guest as gone
+        }
+    }
+
+    @Override
+    void lockRoom() {
+        if (!host || locked) return;
+        locked = true;
+        closeQuietly(server);
+    }
+
+    @Override
+    int maxPlayers() {
+        return MAX_PLAYERS;
     }
 
     @Override
@@ -312,21 +462,18 @@ final class LanSession extends NetSession {
         return true;
     }
 
-    /** Ends the session and tells the other phone. Safe to call more than once. */
+    /** Ends the session and tells the other phones. Safe to call more than once. */
     @Override
     void close() {
         if (closing) return;
         closing = true;
-        if (state == ST_CONNECTED) {
-            outbox.offer(NetCodec.single(M_BYE));
-            outbox.offer(new byte[0]);
-        }
         state = ST_CLOSED;
         closeQuietly(server);
         if (udp != null) udp.close();
-        if (socket == null) return;
-        // The writer thread closes the socket after sending BYE; make sure it happens anyway
-        final Socket s = socket;
+        final Peer[] ps = peersNow();
+        for (Peer p : ps) p.shut(true);
+        if (ps.length == 0) return;
+        // The writer threads close the sockets after sending BYE; make sure it happens anyway
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -335,20 +482,11 @@ final class LanSession extends NetSession {
                 } catch (InterruptedException ignored) {
                     // closing anyway
                 }
-                closeQuietly(s);
+                for (Peer p : ps) closeQuietly(p.socket);
             }
         }, "net-close");
         t.setDaemon(true);
         t.start();
-    }
-
-    private static void closeQuietly(java.io.Closeable c) {
-        if (c == null) return;
-        try {
-            c.close();
-        } catch (IOException ignored) {
-            // already closed
-        }
     }
 
     private static void closeQuietly(ServerSocket c) {

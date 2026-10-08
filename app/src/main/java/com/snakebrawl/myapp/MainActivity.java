@@ -373,6 +373,24 @@ public final class MainActivity extends Activity implements Platform {
     }
 
     @Override
+    public boolean share(final String text) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
+                    send.setType("text/plain");
+                    send.putExtra(android.content.Intent.EXTRA_TEXT, text);
+                    startActivity(android.content.Intent.createChooser(send, "Share"));
+                } catch (RuntimeException ignored) {
+                    // No app can share text: nothing to do
+                }
+            }
+        });
+        return true;
+    }
+
+    @Override
     public void vibrate(int millis) {
         if (view != null) {
             view.performHapticFeedback(millis > 100 ? HapticFeedbackConstants.LONG_PRESS : HapticFeedbackConstants.VIRTUAL_KEY);

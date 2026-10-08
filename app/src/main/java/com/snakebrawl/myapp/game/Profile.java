@@ -35,6 +35,16 @@ final class Profile {
     int passSeason, passXp, passFree, passPremium;
     boolean passPlus;
 
+    /** Arena picked on the menu (see Maps). */
+    int map;
+    /** 1 once the first-match tutorial is done. */
+    int tutorial;
+    /** Daily reward: day number of the last claim and which of the 7 days it was (0..6). */
+    int dailyDay = -1, dailyIndex = -1;
+    /** Daily quests: the day they belong to, progress of each, and which were claimed (bits). */
+    int questDay = -1, questClaimed;
+    final int[] questProgress = new int[Quests.COUNT];
+
     // Settings
     boolean sound, vibration, damageNumbers, lowGraphics, leftHanded, autoAim;
     int stickSize;  // 0 small, 1 medium, 2 large
@@ -78,6 +88,17 @@ final class Profile {
         customClubName = p.loadString("clubName", "");
         customClubBadge = clamp(p.loadInt("clubBadge", 0), 0, Clubs.BADGE_COLORS.length - 1);
 
+        map = p.loadInt("map", Maps.SUNNY);
+        if (!Maps.valid(p, map)) map = Maps.SUNNY;
+        // Players who already played before the tutorial existed skip it
+        tutorial = p.loadInt("tutorial", games > 0 ? 1 : 0);
+        dailyDay = p.loadInt("dailyDay", -1);
+        dailyIndex = p.loadInt("dailyIndex", -1);
+        questDay = p.loadInt("questDay", -1);
+        questClaimed = p.loadInt("questClaimed", 0);
+        for (int i = 0; i < questProgress.length; i++) questProgress[i] = Math.max(0, p.loadInt("quest" + i, 0));
+        Quests.refresh(this);
+
         sound = p.loadInt("sound", 1) == 1;
         vibration = p.loadInt("vibration", 1) == 1;
         damageNumbers = p.loadInt("dmgNumbers", 1) == 1;
@@ -115,6 +136,13 @@ final class Profile {
         p.saveInt("club", club);
         p.saveString("clubName", customClubName);
         p.saveInt("clubBadge", customClubBadge);
+        p.saveInt("map", map);
+        p.saveInt("tutorial", tutorial);
+        p.saveInt("dailyDay", dailyDay);
+        p.saveInt("dailyIndex", dailyIndex);
+        p.saveInt("questDay", questDay);
+        p.saveInt("questClaimed", questClaimed);
+        for (int i = 0; i < questProgress.length; i++) p.saveInt("quest" + i, questProgress[i]);
         p.saveInt("sound", sound ? 1 : 0);
         p.saveInt("vibration", vibration ? 1 : 0);
         p.saveInt("dmgNumbers", damageNumbers ? 1 : 0);
@@ -139,6 +167,9 @@ final class Profile {
         passPlus = false;
         club = -1;
         hints = 0;
+        dailyDay = dailyIndex = -1;
+        questDay = -1;
+        Quests.refresh(this);
         save();
     }
 

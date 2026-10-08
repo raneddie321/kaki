@@ -94,4 +94,12 @@ public interface Platform {
 
     /** Online play, or null when this platform has none. */
     OnlineLink online();
+
+    /**
+     * Opens the system share sheet (or copies the text) so the player can send it to friends.
+     * Returns false when this platform can't share.
+     */
+    default boolean share(String text) {
+        return false;
+    }
 }

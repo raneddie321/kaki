@@ -56,6 +56,17 @@ public final class SimTest {
             prefs.put("onboarded", 1);
             prefs.put("age", 20);
             strings.put("nickname", "Tester");
+            // Skip the daily reward screen and the first-match tutorial unless a test wants them
+            prefs.put("dailyDay", Quests.today());
+            prefs.put("tutorial", 1);
+        }
+
+        String shared;
+
+        @Override
+        public boolean share(String text) {
+            shared = text;
+            return true;
         }
 
         @Override
@@ -102,6 +113,13 @@ public final class SimTest {
             case "replay":
                 System.out.println("REPLAY " + NetReplay.run(new DesktopPlatform(), Long.parseLong(args[1]), Integer.parseInt(args[2])));
                 break;
+            case "features":
+                features(args[1]);
+                return;
+            case "net3":
+                net3(args.length > 1 ? Integer.parseInt(args[1]) : 0, args.length > 2 ? Float.parseFloat(args[2]) : 60f,
+                        args.length > 3 && !args[3].equals("-") ? args[3] : null, args.length > 4 ? Integer.parseInt(args[4]) : 0);
+                return;
             case "net":
                 net(args.length > 1 ? Integer.parseInt(args[1]) : 0, args.length > 2 ? Float.parseFloat(args[2]) : 90f,
                         args.length > 3 && !args[3].equals("-") ? args[3] : null, args.length > 4 ? args[4] : "wifi");
@@ -581,6 +599,272 @@ public final class SimTest {
             Thread.sleep(5);
         }
         System.out.println("after guest left: host net=" + (host.net == null ? "closed (bot took over)" : "still open"));
+    }
+
+    /**
+     * Three phones on one Wi-Fi room: host plus two guests. Plays {@code seconds} of lockstep and
+     * compares all three worlds tick by tick. Then one guest leaves mid-match ({@code leave} = 1) and
+     * the other two must stay in sync with the leaver's snake played by a bot on both.
+     */
+    static void net3(int lobbyMode, float seconds, String shotDir, int map) throws Exception {
+        DesktopPlatform hp = new DesktopPlatform(), ap = new DesktopPlatform(), bp = new DesktopPlatform();
+        hp.strings.put("nickname", "HostRan");
+        ap.strings.put("nickname", "Avi");
+        bp.strings.put("nickname", "Bella");
+        hp.prefs.put("brawler", 1);
+        ap.prefs.put("brawler", 3);
+        bp.prefs.put("brawler", 2);
+        hp.prefs.put("map", map);
+        if (Maps.isCustom(map)) {
+            Maps.Custom c = Maps.starter();
+            c.name = "TEST ARENA";
+            c.theme = Maps.FROST;
+            for (int i = 0; i < Maps.G; i++) c.cells[5 * Maps.G + i] = Maps.WALL;
+            Maps.save(hp, map - Maps.CUSTOM, c);
+        }
+        Game host = new Game(hp), ga = new Game(ap), gb = new Game(bp);
+        Game[] all = {host, ga, gb};
+        for (Game g : all) g.resize(W, H);
+        Font font = shotDir != null ? Font.createFont(Font.TRUETYPE_FONT, new File("app/src/main/assets/fonts/LilitaOne-Regular.ttf")) : null;
+        if (shotDir != null) new File(shotDir).mkdirs();
+        tapBtn(host, Game.B_FRIENDS);
+        tapBtn(host, 600); // host
+        if (lobbyMode == 1) tapBtn(host, 602); // versus
+        Thread.sleep(300);
+        for (Game g : new Game[]{ga, gb}) {
+            tapBtn(g, Game.B_FRIENDS);
+            tapBtn(g, 601); // join
+            ((DesktopPlatform) (g == ga ? ap : bp)).nextText = "127.0.0.1";
+            tapBtn(g, 605); // type address
+            long until = System.currentTimeMillis() + 8000;
+            while (System.currentTimeMillis() < until) {
+                for (Game x : all) x.tick(DT);
+                Ui.Btn lv = g.ui.find(603);
+                if (lv != null && "LEAVE".equals(lv.label)) break;
+                Thread.sleep(5);
+            }
+        }
+        long until = System.currentTimeMillis() + 4000;
+        while (System.currentTimeMillis() < until) {
+            for (Game x : all) x.tick(DT);
+            if (host.friendsForTest().playerCount() == 3 && ga.friendsForTest().playerCount() == 3 && gb.friendsForTest().playerCount() == 3) break;
+            Thread.sleep(5);
+        }
+        System.out.println("lobby players: host=" + host.friendsForTest().playerCount() + " a=" + ga.friendsForTest().playerCount()
+                + " b=" + gb.friendsForTest().playerCount());
+        if (shotDir != null) {
+            run(host, 0.3f);
+            shot(host, font, (int) W, (int) H, shotDir + "/t0_host_lobby.png");
+            shot(ga, font, (int) W, (int) H, shotDir + "/t1_guest_lobby.png");
+        }
+        // A fourth phone is turned away: the room is full
+        DesktopPlatform dp = new DesktopPlatform();
+        dp.strings.put("nickname", "Dan");
+        Game gd = new Game(dp);
+        gd.resize(W, H);
+        tapBtn(gd, Game.B_FRIENDS);
+        tapBtn(gd, 601);
+        dp.nextText = "127.0.0.1";
+        tapBtn(gd, 605);
+        until = System.currentTimeMillis() + 3000;
+        while (System.currentTimeMillis() < until && gd.popTitleForTest() == null) {
+            for (Game x : all) x.tick(DT);
+            gd.tick(DT);
+            Thread.sleep(5);
+        }
+        System.out.println("4th phone: popup=" + gd.popTitleForTest() + " host players=" + host.friendsForTest().playerCount());
+
+        tapBtn(host, 604); // start
+        until = System.currentTimeMillis() + 5000;
+        while ((ga.screenId() != Game.PLAY || gb.screenId() != Game.PLAY) && System.currentTimeMillis() < until) {
+            for (Game x : all) x.tick(DT);
+            Thread.sleep(5);
+        }
+        for (Game x : all) if (x.screenId() != Game.PLAY) throw new IllegalStateException("match did not start on all phones");
+        World hw0 = host.currentWorld();
+        System.out.println("match: mode=" + hw0.mode + " teamSize=" + hw0.teamSize + " humans=" + hw0.humans + " snakes=" + hw0.snakeCount
+                + " map=" + hw0.mapId + " theme=" + hw0.theme.name + " names=" + hw0.snakes[0].name + "," + hw0.snakes[1].name + ","
+                + hw0.snakes[2].name);
+        Pilot[] pil = {new Pilot(host), new Pilot(ga), new Pilot(gb)};
+        int checked = 0;
+        float t = 0;
+        boolean shotTaken = false, left = false;
+        while (t < seconds) {
+            for (int i = 0; i < 3; i++) if (all[i] != null && all[i].screenId() == Game.PLAY) pil[i].step(DT);
+            for (Game x : all) if (x != null) x.tick(DT);
+            t += DT;
+            if (!left && t > seconds / 2) {
+                // Guest B leaves in the middle of the match
+                left = true;
+                gb.onBack();
+                tapBtnIfPresent(gb, Game.B_QUIT);
+                all[2] = null;
+                System.out.println("guest B left at " + t + "s, tick " + host.netTick);
+            }
+            // Wait until the remaining phones reach the same tick, then compare their worlds
+            long w0 = System.nanoTime();
+            while (System.nanoTime() - w0 < 3_000_000_000L) {
+                int lo = Integer.MAX_VALUE, hi = 0;
+                for (Game x : all) if (x != null && x.net != null) {
+                    lo = Math.min(lo, x.netTick);
+                    hi = Math.max(hi, x.netTick);
+                }
+                if (lo == hi || lo == Integer.MAX_VALUE) break;
+                for (Game x : all) if (x != null && x.net != null && x.netTick < hi) x.tick(DT);
+                Thread.sleep(0, 200000);
+            }
+            int ref = Integer.MIN_VALUE, refTick = -1;
+            boolean same = true;
+            for (Game x : all) {
+                if (x == null || x.net == null) continue;
+                if (refTick < 0) {
+                    refTick = x.netTick;
+                    ref = x.currentWorld().stateHash();
+                } else if (x.netTick == refTick) {
+                    if (x.currentWorld().stateHash() != ref) same = false;
+                } else {
+                    same = false;
+                }
+            }
+            if (!same) throw new IllegalStateException("DESYNC at tick " + refTick);
+            if (refTick >= 0) checked++;
+            if (host.net == null) break;
+            if (shotDir != null && !shotTaken && t > 8) {
+                shot(host, font, (int) W, (int) H, shotDir + "/t2_host_play.png");
+                shot(ga, font, (int) W, (int) H, shotDir + "/t3_guest_play.png");
+                shotTaken = true;
+            }
+        }
+        World hw = host.currentWorld(), aw = ga.currentWorld();
+        System.out.println("net3 mode=" + lobbyMode + " ticks=" + host.netTick + " checked=" + checked + " in sync; host net="
+                + (host.net != null) + " a net=" + (ga.net != null) + "; B snake is bot on host=" + (hw.snakes[2].brain != null)
+                + " on A=" + (aw.snakes[2].brain != null) + " hashes equal=" + (hw.stateHash() == aw.stateHash()));
+        host.onBack();
+        tapBtnIfPresent(host, Game.B_QUIT);
+    }
+
+    /** Screenshots and checks of the 3.5 features: quests, maps, the map maker, tutorial and photo mode. */
+    static void features(String out) throws Exception {
+        new File(out).mkdirs();
+        Font font = Font.createFont(Font.TRUETYPE_FONT, new File("app/src/main/assets/fonts/LilitaOne-Regular.ttf"));
+        int sw = (int) W, sh = (int) H;
+        DesktopPlatform pf = new DesktopPlatform();
+        pf.prefs.remove("dailyDay");
+        pf.prefs.put("coins", 500);
+        Game g = new Game(pf);
+        g.resize(W, H);
+        run(g, 0.3f);
+        shot(g, font, sw, sh, out + "/a0_menu.png");
+        run(g, 1f);
+        System.out.println("auto-opened screen=" + g.screenId() + " (QUESTS=" + Game.QUESTS + ")");
+        shot(g, font, sw, sh, out + "/a1_quests.png");
+        int coins = pf.loadInt("coins", 0);
+        tapBtn(g, 800);
+        System.out.println("daily claimed: coins " + coins + " -> " + g.profile.coins + " popup=" + g.popTitleForTest());
+        shot(g, font, sw, sh, out + "/a2_daily_popup.png");
+        tapBtn(g, Game.B_OK);
+        tapBtn(g, Game.B_BACK);
+
+        tapBtn(g, Game.B_MAP);
+        run(g, 0.2f);
+        shot(g, font, sw, sh, out + "/b0_maps.png");
+        tapBtn(g, 820); // map maker
+        shot(g, font, sw, sh, out + "/b1_editor_new.png");
+        // Paint a wall line with a finger drag
+        Ui.Btn grid = null;
+        float gl = 60, gt = 120;
+        g.touchDown(5, 400, 300);
+        for (int k = 0; k <= 20; k++) g.touchMove(5, 400 + k * 15, 300);
+        g.touchUp(5, 700, 300);
+        tapBtn(g, 871); // bush tool
+        g.touchDown(5, 300, 600);
+        for (int k = 0; k <= 10; k++) g.touchMove(5, 300, 600 + k * 12);
+        g.touchUp(5, 300, 720);
+        shot(g, font, sw, sh, out + "/b2_editor_painted.png");
+        tapBtn(g, 882); // random
+        tapBtn(g, 876); // theme -> frost
+        tapBtn(g, 876); // theme -> lava
+        shot(g, font, sw, sh, out + "/b3_editor_lava.png");
+        tapBtn(g, Game.B_BACK); // saves
+        run(g, 0.2f);
+        shot(g, font, sw, sh, out + "/b4_maps_with_custom.png");
+        Maps.Custom saved = Maps.load(pf, 0);
+        System.out.println("saved custom map: " + (saved != null ? saved.name + " walls=" + saved.count(Maps.WALL) + " theme=" + saved.theme : "none"));
+        tapBtn(g, 855); // share slot 0
+        System.out.println("share text: " + pf.shared);
+        // Import it on another phone
+        DesktopPlatform pf2 = new DesktopPlatform();
+        Game g2 = new Game(pf2);
+        g2.resize(W, H);
+        tapBtn(g2, Game.B_MAP);
+        pf2.nextText = pf.shared;
+        tapBtn(g2, 821);
+        Maps.Custom imp = Maps.load(pf2, 0);
+        System.out.println("imported: " + (imp != null && java.util.Arrays.equals(imp.cells, saved.cells) && imp.name.equals(saved.name))
+                + " popup=" + g2.popTitleForTest() + " selected map=" + g2.profile.map);
+
+        // Play the custom map from the map maker
+        tapBtn(g, 845); // edit slot 0
+        tapBtn(g, 879); // test play
+        Pilot pil = new Pilot(g);
+        for (int i = 0; i < 60 * 6; i++) {
+            pil.step(DT);
+            g.tick(DT);
+        }
+        shot(g, font, sw, sh, out + "/c0_custom_map_play.png");
+        // Photo mode
+        g.onBack();
+        tapBtn(g, Game.B_PHOTO);
+        for (int i = 0; i < 60; i++) {
+            pil.step(DT);
+            g.tick(DT);
+        }
+        shot(g, font, sw, sh, out + "/c1_photo_mode.png");
+        g.onBack();
+        tapBtn(g, Game.B_PHOTO);
+        while (g.screenId() == Game.PLAY) {
+            pil.step(DT);
+            g.tick(DT);
+        }
+        run(g, 0.5f);
+        shot(g, font, sw, sh, out + "/c2_result.png");
+        System.out.println("quest progress: " + g.profile.questProgress[0] + "," + g.profile.questProgress[1] + "," + g.profile.questProgress[2]
+                + " (" + Quests.text(g.profile, 0) + " | " + Quests.text(g.profile, 1) + " | " + Quests.text(g.profile, 2) + ")");
+
+        // Lava Canyon
+        DesktopPlatform pl = new DesktopPlatform();
+        pl.prefs.put("map", Maps.LAVA);
+        pl.prefs.put("brawler", 2);
+        Game g3 = new Game(pl);
+        g3.resize(W, H);
+        tapBtn(g3, Game.B_PLAY);
+        Pilot p3 = new Pilot(g3);
+        for (int i = 0; i < 60 * 8; i++) {
+            p3.step(DT);
+            g3.tick(DT);
+        }
+        shot(g3, font, sw, sh, out + "/d0_lava.png");
+
+        // Tutorial on a brand new player
+        DesktopPlatform pt = new DesktopPlatform();
+        pt.prefs.remove("tutorial");
+        Game g4 = new Game(pt);
+        g4.resize(W, H);
+        tapBtn(g4, Game.B_PLAY);
+        run(g4, 0.5f);
+        shot(g4, font, sw, sh, out + "/e0_tutorial_steer.png");
+        Pilot p4 = new Pilot(g4);
+        int lastStep = 0;
+        for (int i = 0; i < 60 * 70 && g4.screenId() == Game.PLAY; i++) {
+            p4.step(DT);
+            g4.tick(DT);
+            if (g4.tutStep != lastStep) {
+                System.out.println("tutorial step " + lastStep + " -> " + g4.tutStep + " at " + g4.currentWorld().matchTime + "s");
+                if (g4.tutStep == 2) shot(g4, font, sw, sh, out + "/e1_tutorial_boost.png");
+                lastStep = g4.tutStep;
+            }
+        }
+        System.out.println("tutorial done flag=" + g4.profile.tutorial);
     }
 
     static final boolean REALTIME = System.getenv("REALTIME") != null;

@@ -11,8 +11,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION_CODE=${VERSION_CODE:-18}
-VERSION_NAME=${VERSION_NAME:-3.4}
+VERSION_CODE=${VERSION_CODE:-19}
+VERSION_NAME=${VERSION_NAME:-3.5}
 MIN_SDK=24
 TARGET_SDK=36
 # Package name on Google Play. (The Java code keeps its com.snakebrawl.myapp package.)
@@ -47,6 +47,11 @@ if [ ! -f "$BUNDLETOOL" ]; then
     curl -fsSL -o "$BUNDLETOOL" "https://github.com/google/bundletool/releases/download/$BUNDLETOOL_VERSION/bundletool-all-$BUNDLETOOL_VERSION.jar"
 fi
 
+if [ ! -f "$KEYSTORE" ] && [ "${ALLOW_NEW_KEY:-0}" != 1 ]; then
+    # Google Play only accepts updates signed with the original upload key: never make a new one by accident
+    echo "Upload key $KEYSTORE is missing. Put the original key there, or set ALLOW_NEW_KEY=1 for a brand new app." >&2
+    exit 1
+fi
 if [ ! -f "$KEYSTORE" ]; then
     mkdir -p "$(dirname "$KEYSTORE")"
     if [ -z "$KEYSTORE_PASS" ]; then

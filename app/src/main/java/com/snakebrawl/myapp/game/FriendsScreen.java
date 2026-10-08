@@ -9,7 +9,7 @@ import java.util.List;
 final class FriendsScreen {
     static final int B_FIRST = 600;
     private static final int B_HOST = 600, B_JOIN = 601, B_MODE = 602, B_CANCEL = 603, B_START = 604, B_ADDRESS = 605,
-            B_NETWORK = 606, B_ROOM = 610;
+            B_NETWORK = 606, B_MAP = 607, B_INVITE = 608, B_ROOM = 610;
     static final int B_LAST = 640;
 
     static final int HOME = 0, HOSTING = 1, SEARCHING = 2, GUEST_LOBBY = 3;
@@ -21,9 +21,15 @@ final class FriendsScreen {
     int state = HOME;
     NetSession net;
     private boolean helloSent;
-    /** The friend's HELLO, once received. */
-    NetSession.Msg friend;
+    /** Everyone in the room by slot (slot 0 is the host), null for empty slots. */
+    NetSession.Msg[] roster = new NetSession.Msg[NetSession.MAX_PLAYERS];
+    /** This phone's slot in the room. */
+    int mySlot;
+    /** Guest: the host's HELLO arrived and passed the version checks. */
+    private boolean hostOk;
     int mode = TOGETHER;
+    /** Guest: the map the host picked (name for the lobby). */
+    private String mapName = "";
     private List<NetSession.Room> shownRooms = new java.util.ArrayList<NetSession.Room>();
     private float roomRefresh;
     private String lastError;
@@ -63,10 +69,61 @@ final class FriendsScreen {
     void cancel() {
         if (net != null) net.close();
         net = null;
-        friend = null;
+        clearRoster();
         helloSent = false;
+        hostOk = false;
         state = HOME;
         game.gated.setNetworkDiscovery(false);
+    }
+
+    private void clearRoster() {
+        for (int i = 0; i < roster.length; i++) roster[i] = null;
+        mySlot = 0;
+    }
+
+    /** Players in the room, this phone included. */
+    int playerCount() {
+        int n = 0;
+        for (NetSession.Msg m : roster) if (m != null) n++;
+        return n;
+    }
+
+    /** This phone as a roster entry. */
+    private NetSession.Msg me() {
+        Profile pr = game.profile;
+        NetSession.Msg m = new NetSession.Msg();
+        m.name = pr.displayName();
+        m.brawler = pr.selected;
+        m.level = pr.levels[pr.selected];
+        m.trophies = pr.trophies;
+        m.palette = pr.palette();
+        m.exact = net != null && net.exact();
+        m.platform = net != null ? net.platform() : NetSession.PLAT_APP;
+        return m;
+    }
+
+    private byte[] myHello() {
+        Profile pr = game.profile;
+        Brawler b = Brawler.ALL[pr.selected];
+        return net.hello(pr.displayName(), b.id, pr.levels[b.id], pr.trophies, pr.palette());
+    }
+
+    private byte[] modeMsg() {
+        int map = hostMap();
+        return NetCodec.mode(mode, map, Maps.name(game.gated, map));
+    }
+
+    /** The map the host plays: the one picked on the menu. */
+    private int hostMap() {
+        int map = game.profile.map;
+        return Maps.valid(game.gated, map) ? map : Maps.SUNNY;
+    }
+
+    /** Host: tells every guest who is in the room. */
+    private void sendRoster() {
+        if (net == null || !net.host) return;
+        roster[0] = me();
+        for (int s = 1; s < roster.length; s++) if (roster[s] != null) net.sendTo(s, NetCodec.roster(roster, s));
     }
 
     // ------------------------------------------------------------------ update
@@ -88,59 +145,87 @@ final class FriendsScreen {
                 game.showInfo("CAN'T CONNECT", lastError, 0, 0);
             }
         }
-        if (net.state == NetSession.ST_CONNECTED && !helloSent) {
-            sendHello();
+        if (!net.host && net.state == NetSession.ST_CONNECTED && !helloSent) {
+            helloSent = true;
+            net.sendBytes(myHello());
             game.gated.playSound(Platform.SND_POWER, 0.8f);
             game.layout();
         }
         NetSession.Msg m;
-        while ((m = net.poll()) != null) {
-            if (m.type == NetSession.M_HELLO) {
-                // Always introduce ourselves first, so a friend we turn away learns why
-                if (!helloSent) sendHello();
-                m.name = SocialScreens.cleanName(m.name);
-                if (m.name.length() == 0) m.name = "Friend";
-                if (m.protocol != NetSession.PROTOCOL) {
-                    String why = "Your friend has a different version of Snake Brawl. Update both phones to the same version.";
-                    cancel();
-                    game.showInfo("VERSION MISMATCH", why, 0, 0);
+        while (net != null && (m = net.poll()) != null) {
+            switch (m.type) {
+                case NetSession.M_JOINED:
+                    // A phone connected: introduce ourselves first, so a friend we turn away learns why
+                    net.sendTo(m.from, myHello());
+                    net.sendTo(m.from, modeMsg());
+                    break;
+                case NetSession.M_LEFT:
+                    if (m.from > 0 && m.from < roster.length && roster[m.from] != null) {
+                        roster[m.from] = null;
+                        sendRoster();
+                        game.layout();
+                    }
+                    break;
+                case NetSession.M_HELLO: {
+                    m.name = SocialScreens.cleanName(m.name);
+                    if (m.name.length() == 0) m.name = "Friend";
+                    String why = null;
+                    if (m.protocol != NetSession.PROTOCOL) {
+                        why = net.host ? "A friend tried to join with a different version of Snake Brawl. Update all phones to the same version."
+                                : "Your friend has a different version of Snake Brawl. Update all phones to the same version.";
+                    } else if (m.exact != net.exact()) {
+                        why = net.exact()
+                                ? m.name + "'s browser is too old to play with you. Ask them to update Safari or Chrome."
+                                : "This browser is too old to play with " + m.name + ". Update Safari or Chrome and try again.";
+                    }
+                    if (net.host) {
+                        if (why != null) {
+                            net.kick(m.from);
+                            game.showInfo("CAN'T JOIN", why, 0, 0);
+                        } else if (m.from > 0 && m.from < roster.length) {
+                            roster[m.from] = m;
+                            sendRoster();
+                            game.gated.playSound(Platform.SND_POWER, 0.8f);
+                        }
+                    } else if (why != null) {
+                        cancel();
+                        game.showInfo(m.protocol != NetSession.PROTOCOL ? "VERSION MISMATCH" : "CAN'T PLAY TOGETHER", why, 0, 0);
+                        game.layout();
+                        return;
+                    } else {
+                        hostOk = true;
+                        if (roster[0] != null) state = GUEST_LOBBY;
+                    }
                     game.layout();
-                    return;
+                    break;
                 }
-                if (m.exact != net.exact()) {
-                    String why = net.exact()
-                            ? m.name + "'s browser is too old to play with you. Ask them to update Safari or Chrome."
-                            : "This browser is too old to play with " + m.name + ". Update Safari or Chrome and try again.";
-                    cancel();
-                    game.showInfo("CAN'T PLAY TOGETHER", why, 0, 0);
+                case NetSession.M_ROSTER:
+                    if (net.host || m.roster == null) break;
+                    clearRoster();
+                    for (int i = 0; i < m.roster.length && i < roster.length; i++) roster[i] = m.roster[i];
+                    mySlot = m.you;
+                    if (hostOk) state = GUEST_LOBBY;
                     game.layout();
-                    return;
-                }
-                friend = m;
-                if (!net.host) state = GUEST_LOBBY;
-                game.layout();
-            } else if (m.type == NetSession.M_MODE) {
-                mode = m.mode == VERSUS ? VERSUS : TOGETHER;
-            } else if (m.type == NetSession.M_START && !net.host && friend != null) {
-                mode = m.mode == VERSUS ? VERSUS : TOGETHER;
-                begin(m.seed);
-                return; // leave the following messages (inputs) for the match
+                    break;
+                case NetSession.M_MODE:
+                    mode = m.mode == VERSUS ? VERSUS : TOGETHER;
+                    mapName = m.name == null ? "" : m.name;
+                    break;
+                case NetSession.M_START:
+                    if (net.host || !hostOk || roster[0] == null) break;
+                    mode = m.mode == VERSUS ? VERSUS : TOGETHER;
+                    begin(m.seed, m.mapId, m.mapData);
+                    return; // leave the following messages (inputs) for the match
+                default:
+                    break;
             }
         }
-        if (net.state == NetSession.ST_CLOSED) {
+        if (net != null && net.state == NetSession.ST_CLOSED) {
             String why = net.closeReason != null ? net.closeReason : "Connection closed";
             cancel();
-            game.showInfo("DISCONNECTED", why, 0, 0);
+            game.showInfo(why.contains("full") ? "ROOM FULL" : "DISCONNECTED", why, 0, 0);
             game.layout();
         }
-    }
-
-    private void sendHello() {
-        helloSent = true;
-        Profile pr = game.profile;
-        Brawler b = Brawler.ALL[pr.selected];
-        net.sendHello(pr.displayName(), b.id, pr.levels[b.id], pr.trophies, pr.palette());
-        if (net.host) net.sendMode(mode);
     }
 
     private boolean sameRooms(List<NetSession.Room> r) {
@@ -150,15 +235,17 @@ final class FriendsScreen {
         return true;
     }
 
-    private void begin(long seed) {
+    private void begin(long seed, int mapId, byte[] mapData) {
         NetSession s = net;
-        NetSession.Msg f = friend;
+        NetSession.Msg[] r = roster.clone();
+        int slot = mySlot;
         net = null; // the match owns the session now
-        friend = null;
+        clearRoster();
         helloSent = false;
+        hostOk = false;
         state = HOME;
         game.gated.setNetworkDiscovery(false);
-        game.startNetGame(s, f, seed, mode);
+        game.startNetGame(s, r, slot, seed, mode, mapId, mapData);
     }
 
     // ------------------------------------------------------------------ input
@@ -176,6 +263,8 @@ final class FriendsScreen {
                     net = Lan.host(game.profile.displayName());
                     game.gated.setNetworkDiscovery(true);
                 }
+                clearRoster();
+                roster[0] = me();
                 state = HOSTING;
                 break;
             case B_JOIN:
@@ -188,6 +277,8 @@ final class FriendsScreen {
                 }
                 shownRooms = new java.util.ArrayList<NetSession.Room>();
                 lastError = null;
+                clearRoster();
+                mapName = "";
                 state = SEARCHING;
                 break;
             case B_CANCEL:
@@ -195,13 +286,26 @@ final class FriendsScreen {
                 break;
             case B_MODE:
                 mode = mode == TOGETHER ? VERSUS : TOGETHER;
-                if (net != null) net.sendMode(mode);
+                if (net != null) net.sendBytes(modeMsg());
                 break;
+            case B_MAP:
+                game.profile.map = Maps.next(game.gated, hostMap());
+                game.profile.save();
+                if (net != null) net.sendBytes(modeMsg());
+                break;
+            case B_INVITE:
+                game.invite();
+                return;
             case B_START:
-                if (net != null && net.state == NetSession.ST_CONNECTED && friend != null) {
+                if (net != null && net.state == NetSession.ST_CONNECTED && playerCount() >= 2) {
+                    net.lockRoom();
+                    sendRoster();
                     long seed = new java.util.Random().nextLong();
-                    net.sendStart(seed, mode);
-                    begin(seed);
+                    int map = hostMap();
+                    Maps.Custom c = Maps.isCustom(map) ? Maps.load(game.gated, map - Maps.CUSTOM) : null;
+                    byte[] data = c != null ? Maps.encode(c) : null;
+                    net.sendBytes(NetCodec.start(seed, mode, playerCount(), c != null ? Maps.CUSTOM : map, data));
+                    begin(seed, c != null ? Maps.CUSTOM : map, data);
                     return;
                 }
                 break;
@@ -256,6 +360,8 @@ final class FriendsScreen {
                 float cw = 560 * u, ch = 430 * u, top = game.padT + 190 * u;
                 ui.add(B_HOST, cx - cw - 30 * u, top, cx - 30 * u, top + ch, null, null, 0);
                 ui.add(B_JOIN, cx + 30 * u, top, cx + cw + 30 * u, top + ch, null, null, 0);
+                ui.add(B_INVITE, cx - 260 * u, top + ch + 40 * u, cx + 260 * u, top + ch + 150 * u, "INVITE FRIENDS",
+                        "Send them the game", 0xff4ad04a);
                 if (bothNetworks()) {
                     ui.add(B_NETWORK, w - game.padR - 430 * u, game.padT + 10 * u, w - game.padR - 10 * u, game.padT + 120 * u,
                             online ? "ONLINE" : "WI-FI", online ? "Tap for Wi-Fi" : "Tap for online", online ? 0xff3fb6a8 : 0xff6a5cff);
@@ -263,12 +369,14 @@ final class FriendsScreen {
                 break;
             }
             case HOSTING: {
-                ui.add(B_MODE, cx - 330 * u, bottom - 290 * u, cx + 330 * u, bottom - 170 * u,
-                        mode == TOGETHER ? "TOGETHER" : "VERSUS", mode == TOGETHER ? "Team up vs 4 bot teams" : "Fight each other + 8 bots",
-                        mode == TOGETHER ? 0xffff7a2e : 0xff3fa0ff);
+                ui.add(B_MODE, cx - 690 * u, bottom - 290 * u, cx - 30 * u, bottom - 170 * u,
+                        mode == TOGETHER ? "TOGETHER" : "VERSUS", modeSub(), mode == TOGETHER ? 0xffff7a2e : 0xff3fa0ff);
+                int map = hostMap();
+                ui.add(B_MAP, cx + 30 * u, bottom - 290 * u, cx + 690 * u, bottom - 170 * u, "MAP: " + Maps.name(game.gated, map),
+                        "Tap to change", 0xff3fb6a8);
                 ui.add(B_CANCEL, cx - 500 * u, bottom - 130 * u, cx - 30 * u, bottom, "CLOSE ROOM", null, 0xffff5a5a);
                 Ui.Btn st = ui.add(B_START, cx + 30 * u, bottom - 130 * u, cx + 500 * u, bottom, "START", null, 0xffffc928);
-                st.enabled = friend != null;
+                st.enabled = playerCount() >= 2;
                 break;
             }
             case SEARCHING: {
@@ -287,6 +395,12 @@ final class FriendsScreen {
                 ui.add(B_CANCEL, cx - 240 * u, bottom - 130 * u, cx + 240 * u, bottom, "LEAVE", null, 0xffff5a5a);
                 break;
         }
+    }
+
+    private String modeSub() {
+        int n = Math.max(2, playerCount());
+        if (mode == VERSUS) return "Fight each other + " + (10 - n) + " bots";
+        return n >= 3 ? "Trio vs 3 bot teams" : "Team up vs 4 bot teams";
     }
 
     // ------------------------------------------------------------------ render
@@ -382,64 +496,83 @@ final class FriendsScreen {
 
     private void renderHosting(Gfx g) {
         float u = game.u, w = game.w, cx = w / 2;
-        float top = game.padT + 170 * u;
+        float top = game.padT + 150 * u;
         String label = net != null ? net.roomLabel() : null;
         String addr = label == null ? (lanMode() ? "No Wi-Fi found" : "Opening room...") : label;
-        ui.panel(g, cx - 560 * u, top, cx + 560 * u, top + 150 * u, 0xee22264a);
+        ui.panel(g, cx - 560 * u, top, cx + 560 * u, top + 130 * u, 0xee22264a);
         g.color(0xffb8bdf0);
-        g.text(lanMode() ? "YOUR ROOM ADDRESS" : "YOUR ROOM CODE", cx, top + 50 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        g.text(lanMode() ? "YOUR ROOM ADDRESS" : "YOUR ROOM CODE", cx, top + 42 * u, 28 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
         g.color(0xffffffff);
-        g.text(addr, cx, top + 118 * u, 60 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
-        drawPlayers(g, top + 190 * u, friend == null ? null : friend.name, friend == null ? -1 : friend.brawler,
-                friend == null ? null : friend.palette);
+        g.text(addr, cx, top + 104 * u, 56 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
+        drawPlayers(g, top + 150 * u);
         g.color(0xffb8bdf0);
-        String note = friend == null ? (lanMode() ? "Ask your friend to tap JOIN A ROOM. Your room shows up on their phone."
-                : "Ask your friend to tap JOIN A ROOM and enter this code.") : "Pick a mode and tap START!";
-        g.text(note, cx, top + 470 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        int max = net != null ? net.maxPlayers() : 2;
+        int n = playerCount();
+        String note;
+        if (n < 2) note = lanMode() ? "Ask your friends to tap JOIN A ROOM. Your room shows up on their phones (up to " + max + " players)."
+                : "Ask your friend to tap JOIN A ROOM and enter this code.";
+        else if (n < max) note = "Tap START, or wait for one more friend to join!";
+        else note = "The room is full. Pick a mode and tap START!";
+        g.text(note, cx, top + 420 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 
     private void renderGuestLobby(Gfx g) {
         float u = game.u, w = game.w, cx = w / 2;
         float top = game.padT + 170 * u;
-        drawPlayers(g, top + 40 * u, friend == null ? null : friend.name, friend == null ? -1 : friend.brawler,
-                friend == null ? null : friend.palette);
-        String m = mode == TOGETHER ? "TOGETHER: team up vs 4 bot teams" : "VERSUS: fight each other + 8 bots";
+        drawPlayers(g, top);
+        int n = playerCount();
+        String m = mode == TOGETHER ? (n >= 3 ? "TOGETHER: trio vs 3 bot teams" : "TOGETHER: team up vs 4 bot teams")
+                : "VERSUS: fight each other + " + (10 - Math.max(2, n)) + " bots";
         g.color(mode == TOGETHER ? 0xffffa35a : 0xff8ac8ff);
-        g.text(m, cx, top + 360 * u, 44 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
+        g.text(m, cx, top + 320 * u, 44 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
+        if (mapName.length() > 0) {
+            g.color(0xff8af0e0);
+            g.text("MAP: " + mapName, cx, top + 375 * u, 36 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+        }
         g.color(0xffb8bdf0);
-        String host = friend == null ? "the host" : friend.name;
+        String host = roster[0] == null ? "the host" : roster[0].name;
         int dots = (int) (game.clock * 2) % 4;
-        g.text("Waiting for " + host + " to start" + "...".substring(0, dots), cx, top + 430 * u, 34 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        g.text("Waiting for " + host + " to start" + "...".substring(0, dots), cx, top + 435 * u, 34 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 
-    /** You and your friend side by side. */
-    private void drawPlayers(Gfx g, float top, String friendName, int friendBrawler, int[] friendPal) {
+    /** Everyone in the room side by side (you first), with empty seats while waiting. */
+    private void drawPlayers(Gfx g, float top) {
         float u = game.u, w = game.w, cx = w / 2;
-        Profile pr = game.profile;
-        float cw = 480 * u, ch = 230 * u;
-        float l1 = cx - cw - 50 * u, l2 = cx + 50 * u;
-        ui.panel(g, l1, top, l1 + cw, top + ch, 0xee22264a);
-        ui.panel(g, l2, top, l2 + cw, top + ch, 0xee22264a);
-        g.color(0xff9cff8a);
-        g.text(pr.displayName(), l1 + cw / 2, top + 58 * u, 42 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
-        ui.snakeArt(g, Brawler.ALL[pr.selected], pr.palette(), l1 + cw / 2, top + 150 * u, 0.85f * u, game.clock);
-        g.color(0xffffd23f);
-        g.text(mode == TOGETHER ? "+" : "VS", cx, top + ch / 2 + 24 * u, 70 * u, Gfx.ALIGN_CENTER, 8 * u, Ui.INK);
-        if (friendName != null) {
-            g.color(0xff8ad8ff);
-            g.text(friendName, l2 + cw / 2, top + 58 * u, Ui.fit(g, friendName, 42 * u, cw - 40 * u), Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
-            Brawler fb = Brawler.ALL[Math.max(0, Math.min(Brawler.ALL.length - 1, friendBrawler))];
-            ui.snakeArt(g, fb, friendPal != null && friendPal.length >= 2 ? friendPal : new int[]{fb.color1, fb.color2},
-                    l2 + cw / 2, top + 150 * u, 0.85f * u, game.clock + 1.3f);
-            if (friend != null) {
-                g.color(0xffb8bdf0);
-                g.text(friend.platform == NetSession.PLAT_BROWSER ? "playing in a browser" : "playing in the app", l2 + cw / 2,
-                        top + ch - 16 * u, 24 * u, Gfx.ALIGN_CENTER, 3 * u, Ui.INK);
+        int seats = net != null ? Math.min(net.maxPlayers(), roster.length) : 2;
+        float cw = seats >= 3 ? 400 * u : 480 * u, ch = 230 * u, gap = seats >= 3 ? 40 * u : 100 * u;
+        float total = seats * cw + (seats - 1) * gap;
+        float l0 = cx - total / 2;
+        // You first, then the others in slot order
+        int[] order = new int[seats];
+        int k = 0;
+        order[k++] = mySlot;
+        for (int s = 0; s < roster.length && k < seats; s++) if (s != mySlot) order[k++] = s;
+        for (int i = 0; i < seats; i++) {
+            float l = l0 + i * (cw + gap);
+            ui.panel(g, l, top, l + cw, top + ch, 0xee22264a);
+            NetSession.Msg p = roster[order[i]];
+            if (i > 0) {
+                g.color(0xffffd23f);
+                g.text(mode == TOGETHER ? "+" : "VS", l - gap / 2, top + ch / 2 + 22 * u, (seats >= 3 ? 50 : 70) * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
             }
-        } else {
-            int dots = (int) (game.clock * 2) % 4;
-            g.color(0xffb8bdf0);
-            g.text("Waiting" + "...".substring(0, dots), l2 + cw / 2, top + ch / 2 + 14 * u, 40 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+            if (p == null) {
+                int dots = (int) (game.clock * 2) % 4;
+                g.color(0xffb8bdf0);
+                g.text("Waiting" + "...".substring(0, dots), l + cw / 2, top + ch / 2 + 14 * u, 40 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+                continue;
+            }
+            boolean mine = i == 0;
+            Brawler fb = Brawler.ALL[Math.max(0, Math.min(Brawler.ALL.length - 1, mine ? game.profile.selected : p.brawler))];
+            int[] pal = mine ? game.profile.palette() : (p.palette != null && p.palette.length >= 2 ? p.palette : new int[]{fb.color1, fb.color2});
+            String nm = mine ? game.profile.displayName() : p.name;
+            g.color(mine ? 0xff9cff8a : 0xff8ad8ff);
+            g.text(nm, l + cw / 2, top + 58 * u, Ui.fit(g, nm, 42 * u, cw - 40 * u), Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+            ui.snakeArt(g, fb, pal, l + cw / 2, top + 150 * u, (seats >= 3 ? 0.72f : 0.85f) * u, game.clock + i * 1.3f);
+            if (!mine) {
+                g.color(0xffb8bdf0);
+                String where = order[i] == 0 ? "host" : p.platform == NetSession.PLAT_BROWSER ? "in a browser" : "in the app";
+                g.text(where, l + cw / 2, top + ch - 16 * u, 24 * u, Gfx.ALIGN_CENTER, 3 * u, Ui.INK);
+            }
         }
     }
 

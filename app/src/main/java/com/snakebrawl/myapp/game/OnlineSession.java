@@ -49,6 +49,9 @@ final class OnlineSession extends NetSession {
         sync();
     }
 
+    /** The host learns about its (only) guest like a Wi-Fi host does: as a JOINED message in slot 1. */
+    private boolean joinedSent;
+
     private void sync() {
         if (closed) return;
         int s = link.state();
@@ -74,6 +77,13 @@ final class OnlineSession extends NetSession {
                 return null;
             }
         }
+        if (host && state == ST_CONNECTED && !joinedSent) {
+            joinedSent = true;
+            Msg j = new Msg();
+            j.type = M_JOINED;
+            j.from = 1;
+            return j;
+        }
         while (true) {
             String s = link.poll();
             if (s == null) return null;
@@ -91,6 +101,7 @@ final class OnlineSession extends NetSession {
                 fail("Your friend left the game");
                 return null;
             }
+            m.from = host ? 1 : 0;
             return m;
         }
     }
@@ -108,6 +119,26 @@ final class OnlineSession extends NetSession {
         char[] c = new char[b.length];
         for (int i = 0; i < b.length; i++) c[i] = (char) (b[i] & 0xff);
         link.send(new String(c));
+    }
+
+    @Override
+    void sendTo(int slot, byte[] b) {
+        sendBytes(b);
+    }
+
+    @Override
+    void kick(int slot) {
+        close();
+    }
+
+    @Override
+    void lockRoom() {
+        // Online rooms hold exactly two players
+    }
+
+    @Override
+    int maxPlayers() {
+        return 2;
     }
 
     @Override
