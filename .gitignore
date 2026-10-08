@@ -16,3 +16,4 @@ keystore/
 local.properties
 *.iml
 .DS_Store
+__pycache__/
