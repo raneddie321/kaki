@@ -1845,8 +1845,8 @@ final class World {
             for (int j = 0; j < o.segs; j += 2) {
                 float rr = radius + o.radius;
                 if (MathUtil.dist2(x, y, o.sx[j], o.sy[j]) < rr * rr) {
-                    // Negative knockback pulls the victim towards the Reaper
-                    hurt(o, dmg, s, o.sx[j], o.sy[j], MathUtil.angleTo(x, y, o.sx[j], o.sy[j]), -380, CAUSE_SHOT);
+                    // Knockback towards the Reaper pulls the victim in
+                    hurt(o, dmg, s, o.sx[j], o.sy[j], MathUtil.angleTo(o.sx[j], o.sy[j], x, y), 380, CAUSE_SHOT);
                     slow(o, 0.6f, 1.2f);
                     fx.add(Particles.DOT, o.sx[j], o.sy[j], (x - o.sx[j]) * 1.5f, (y - o.sy[j]) * 1.5f, 9, 0xff8affd8, 0.6f);
                     break;
@@ -3501,7 +3501,8 @@ final class World {
                     drawAimLane(g, hx, hy, ca, sa, range, 14, col, edge);
                     break;
                 }
-                float d = MathUtil.clamp(aimDist, 180, range);
+                // Same landing point as systemCrash: a little short of the aim
+                float d = MathUtil.clamp(aimDist - 120, 180, range);
                 drawAimLane(g, hx, hy, ca, sa, d, s.radius, col, edge);
                 g.color(col);
                 g.fillCircle(hx + ca * d, hy + sa * d, 210);

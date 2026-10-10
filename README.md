@@ -82,39 +82,27 @@ The **SNAKE PASS** card on the main menu opens a 30-tier season pass. Seasons la
   The club screen lists the members and their trophies.
 - **Play Duo** from the club screen to team up with your club's duo partner. The partner card under
   the minimap shows their health and respawn timer.
-- There is no online server yet, so club members and your duo partner are computer players.
-  Playing with real friends needs an online backend or local Wi-Fi play.
+- There is no online server, so club members and your duo partner are computer players.
 
-### Play with friends (online and Wi-Fi, app and browser together)
+### Play with friends (Wi-Fi only, up to 3 phones)
 
-**FRIENDS** on the main menu has two connection types (switch with the button at the top right in the app):
+There is no internet play (it was removed in 3.7). **FRIENDS** on the main menu plays over local Wi-Fi in the app:
 
-- **ONLINE** (default): the host gets a 5-character room code and the friend types it in, from
-  anywhere. Works between the app and the browser version. The app runs the browser version's own
-  WebRTC code (`web/static/sb-net.js` + PeerJS) in a hidden WebView (`WebNetLink`), so both use the
-  same connection. PeerJS's free public server only introduces the two players.
-- **WI-FI** (app only): rooms on the same Wi-Fi are found automatically; if not, type the address
-  shown on the host's screen.
-- One player taps **HOST A ROOM**, the other **JOIN A ROOM**.
-- The host picks **TOGETHER** (team up against 4 bot pairs) or **VERSUS** (fight each other plus 8 bots).
-- Both phones run the same match in lockstep: they share a random seed, exchange only their controls
-  (60 small packets a second) and compare a checksum every 2 seconds. If a phone disconnects or the
-  games get out of sync, the friend's snake is taken over by a bot.
-- Wi-Fi ports: TCP 47321 (game), UDP 47322 (room announcements).
-- Cross-play needs bit-identical simulation: the game uses its own random generator (`Rng`) and
-  math (`MathUtil`), and the browser runs a WebAssembly build whose 32-bit float math matches Java's.
-  Browsers without WebAssembly GC (older than Safari 18.2 / Chrome 119) fall back to a JavaScript
-  build, which can only play with other such browsers; the lobby explains this when it happens.
-- `SimTest replay <seed> <ticks>` and `?replay=<seed>` in the browser print state hashes that must match.
-- Test: `java -cp /tmp/sb com.snakebrawl.myapp.game.SimTest net 0 60` runs two games over localhost
-  and checks they stay identical every tick.
+- Rooms on the same Wi-Fi (or one phone's hotspot) are found automatically; if not, type the address
+  shown on the host's screen. Up to 3 phones per room; the host relays everyone's inputs.
+- The host picks **TOGETHER** (a duo or trio against bot teams) or **VERSUS** (fight each other plus bots) and the map.
+- All phones run the same match in lockstep: they share a random seed, exchange only their controls
+  (60 small packets a second) and compare a checksum every 2 seconds. A player who leaves becomes a
+  bot on every phone at the same tick.
+- Wi-Fi ports: TCP 47321 (game), UDP 47322 (room announcements). `NetSession.PROTOCOL` must be raised
+  whenever the simulation changes, so different versions never join the same room.
+- `SimTest net 0 60` (two phones) and `SimTest net3 0 60` (three phones) run games over localhost
+  and check they stay identical every tick.
 
 ### Privacy and safety for younger players
 
 - First launch asks for the **age first**. Players under 13 pick a generated nickname (no free typing).
 - The package name is `com.snakebrawl.raneddie` (`APP_ID` in `build.sh`); the Java package stays `com.snakebrawl.myapp`.
-- **Online play is for ages 16+** (WebRTC lets the friend and the connection server see IP addresses);
-  younger players can still use Wi-Fi play with a friend nearby.
 - Nothing is sent to a server we run; there are no ads, analytics or accounts. Settings has a
   **PRIVACY** button with a short notice; the full policy is `web/static/privacy.html`
   (published with the browser build at `/privacy.html`).
@@ -184,9 +172,7 @@ static site to `dist/web` (plus `dist/SnakeBrawl-web-<version>.zip`). Host the f
 web host (GitHub Pages, Netlify, ...), open it in Safari and choose **Share > Add to Home Screen** to
 get a full-screen app icon. After the first visit it also works offline.
 
-Everything works, including online play with friends in the app or another browser (WebRTC through
-[PeerJS](https://peerjs.com), bundled in `web/static/vendor`). Some mobile networks block direct
-connections, in which case joining fails with an error; Wi-Fi usually works.
+Everything works except playing with friends, which needs the Android app (Wi-Fi).
 Progress is saved in the browser's local storage. Needs JDK 11+ and Maven.
 
 ## Desktop test harness
