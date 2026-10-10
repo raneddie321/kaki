@@ -55,6 +55,7 @@ final class FriendsScreen {
 
     /** Leaves the lobby, closing any connection. */
     void cancel() {
+        if (net != null) game.gated.setNetworkFast(false);
         if (net != null) net.close();
         net = null;
         clearRoster();
@@ -244,6 +245,7 @@ final class FriendsScreen {
                 if (blocked()) return;
                 net = Lan.host(game.profile.displayName());
                 game.gated.setNetworkDiscovery(true);
+                game.gated.setNetworkFast(true);
                 clearRoster();
                 roster[0] = me();
                 state = HOSTING;
@@ -251,6 +253,7 @@ final class FriendsScreen {
             case B_JOIN:
                 if (blocked()) return;
                 game.gated.setNetworkDiscovery(true);
+                game.gated.setNetworkFast(true);
                 net = Lan.search(game.profile.displayName());
                 shownRooms = new java.util.ArrayList<NetSession.Room>();
                 lastError = null;

@@ -1,0 +1,2 @@
+latest=22
+min=0

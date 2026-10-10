@@ -54,6 +54,22 @@ public interface Platform {
      */
     void setNetworkDiscovery(boolean on);
 
+    /** This app's version code, or 0 where updates don't apply (the browser version). */
+    default int appVersionCode() {
+        return 0;
+    }
+
+    /** Downloads a small text file (blocking; call from a background thread). Null on any failure. */
+    default String fetchText(String url) {
+        return null;
+    }
+
+    /** Opens the game's page in the store so the player can update. */
+    default void openStorePage() {}
+
+    /** Keeps the Wi-Fi radio awake and in low-latency mode while friends are connected. */
+    default void setNetworkFast(boolean on) {}
+
     /**
      * Opens the system share sheet (or copies the text) so the player can send it to friends.
      * Returns false when this platform can't share.

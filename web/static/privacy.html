@@ -19,7 +19,7 @@
 <body>
 <main>
 <h1>Snake Brawl Privacy Policy</h1>
-<p class="muted">Effective date: October 10, 2026 (online play removed; Wi-Fi play only)</p>
+<p class="muted">Effective date: October 10, 2026 (Wi-Fi play only; update check)</p>
 
 <p>Snake Brawl ("the game") is made by RanEddie Games ("we", "us"). This policy explains what information the game uses,
 where it is stored and who can see it. It applies to the Android app and to the browser version of the game.</p>
@@ -60,6 +60,10 @@ same local network. The game announces your room on the local network so nearby 
 Your nickname, selected brawler, skin colors, power level, trophy count and in-game controls are sent to your friend's
 device. Nothing is sent over the internet.</p>
 <p>The browser version has no multiplayer.</p>
+<p><strong>Update check (Android app).</strong> When the game starts it downloads a small public text file from GitHub
+(raw.githubusercontent.com) that says which game version is the newest, so it can tell you when an update is available.
+No information about you or your game is sent; like any download, GitHub sees your IP address. See GitHub's privacy
+statement.</p>
 <p><strong>Sharing.</strong> If you tap "Invite friends" or "Share" on a map, the game opens your device's own share
 menu with a short text (an invite or a map code). You choose where it goes; the game does not send it anywhere itself.</p>
 
@@ -73,8 +77,9 @@ Google Family Link. The browser version has no purchases.</p>
 <h2>6. Permissions (Android)</h2>
 <p>The Android app requests only these permissions, which do not show a prompt:</p>
 <ul>
-  <li>Network access: Android needs this permission for the Wi-Fi connection between phones in the same room, and for
-    Google Play purchases. The game does not connect to any server of its own.</li>
+  <li>Network access: Android needs this permission for the Wi-Fi connection between phones in the same room, for
+    Google Play purchases, and to check for updates (see section 4).</li>
+  <li>Wake lock: keeps Wi-Fi fast during a match with friends.</li>
   <li>Wi-Fi state and multicast: to find and announce rooms on your local Wi-Fi network for Wi-Fi play.</li>
 </ul>
 <p>The game does not access your location, contacts, camera, microphone, photos or files.</p>

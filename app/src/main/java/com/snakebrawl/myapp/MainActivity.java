@@ -208,6 +208,7 @@ public final class MainActivity extends Activity implements Platform {
 
     @Override
     protected void onDestroy() {
+        setNetworkFast(false);
         if (billing != null) billing.destroy();
         if (pool != null) {
             pool.release();
@@ -295,6 +296,35 @@ public final class MainActivity extends Activity implements Platform {
 
     private android.widget.FrameLayout root;
 
+    private android.net.wifi.WifiManager.WifiLock wifiLock;
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void setNetworkFast(final boolean on) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (on && wifiLock == null) {
+                        android.net.wifi.WifiManager wm =
+                                (android.net.wifi.WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+                        if (wm == null) return;
+                        // Low-latency mode on Android 10+, high-performance mode before that
+                        int mode = Build.VERSION.SDK_INT >= 29 ? 4 /* WIFI_MODE_FULL_LOW_LATENCY */ : 3 /* WIFI_MODE_FULL_HIGH_PERF */;
+                        wifiLock = wm.createWifiLock(mode, "snakebrawl-match");
+                        wifiLock.setReferenceCounted(false);
+                        wifiLock.acquire();
+                    } else if (!on && wifiLock != null) {
+                        wifiLock.release();
+                        wifiLock = null;
+                    }
+                } catch (RuntimeException ignored) {
+                    // Without the lock the game still works, just with more Wi-Fi lag
+                }
+            }
+        });
+    }
+
     private android.net.wifi.WifiManager.MulticastLock multicastLock;
 
     @Override
@@ -362,6 +392,58 @@ public final class MainActivity extends Activity implements Platform {
             }
         });
         billing.start();
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public int appVersionCode() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    @Override
+    public String fetchText(String url) {
+        java.net.HttpURLConnection c = null;
+        try {
+            c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            c.setConnectTimeout(5000);
+            c.setReadTimeout(5000);
+            c.setUseCaches(false);
+            if (c.getResponseCode() != 200) return null;
+            java.io.InputStream in = c.getInputStream();
+            byte[] buf = new byte[2048];
+            int n = 0, r;
+            while (n < buf.length && (r = in.read(buf, n, buf.length - n)) > 0) n += r;
+            in.close();
+            return new String(buf, 0, n, "UTF-8");
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (c != null) c.disconnect();
+        }
+    }
+
+    @Override
+    public void openStorePage() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse("market://details?id=" + getPackageName())));
+                } catch (RuntimeException e) {
+                    try {
+                        startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://play.google.com/store/apps/details?id=" + getPackageName())));
+                    } catch (RuntimeException ignored) {
+                        // No store or browser
+                    }
+                }
+            }
+        });
     }
 
     @Override

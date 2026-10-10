@@ -11,8 +11,8 @@ import java.util.List;
  * guest's messages to the other guests, so guests only ever talk to the host.
  */
 abstract class NetSession {
-    /** Version 4: the four new brawlers (3: up to three players per room, slots, rosters and the map in START). */
-    static final int PROTOCOL = 4;
+    /** Version 5: longer input delay (4: the four new brawlers; 3: up to three players, slots, rosters, maps). */
+    static final int PROTOCOL = 5;
     static final int MAX_PLAYERS = 3;
 
     static final int ST_WAITING = 0, ST_CONNECTING = 1, ST_CONNECTED = 2, ST_CLOSED = 3;

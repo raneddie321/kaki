@@ -8,13 +8,13 @@ public final class Game {
 
     static final int B_PLAY = 1, B_MODE = 2, B_BRAWLERS = 3, B_SHOP = 4, B_SETTINGS = 5, B_BACK = 6,
             B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_CLUB = 11, B_FRIENDS = 12, B_PASS = 13, B_SHOWCASE = 14, B_MAP = 15,
-            B_QUESTS = 16, B_PHOTO = 17, B_YES = 90, B_NO = 91, B_OK = 92,
+            B_QUESTS = 16, B_PHOTO = 17, B_UPDATE = 18, B_YES = 90, B_NO = 91, B_OK = 92,
             B_SHEET_BUY = 93, B_SHEET_CANCEL = 94;
 
     // Popup actions confirmed with YES
     static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
             ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9, ACT_PASS_PLUS = 10,
-            ACT_DELETE_MAP = 11;
+            ACT_DELETE_MAP = 11, ACT_UPDATE = 12;
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
     private static final int[] RANK_COINS = {50, 40, 32, 26, 20, 15, 11, 8, 5, 3};
@@ -31,6 +31,57 @@ public final class Game {
     private QuestScreen quests;
     /** Hides the HUD so players can film clean videos (the controls still work). */
     boolean photoMode;
+    /**
+     * Update check: a text file in the game's public GitHub repository says which version code is the
+     * newest ("latest") and which is the oldest still allowed ("min"). Older apps ask the player to
+     * update; below "min" the game can't be played until it is updated.
+     */
+    static final String UPDATE_URL = "https://raw.githubusercontent.com/raneddie321/kaki/main/update.txt";
+    private volatile int updLatest = -1, updMin = -1;
+    private boolean updShown;
+    /** This version is too old to play: only the update screen is shown. */
+    boolean forcedUpdate;
+
+    private void startUpdateCheck() {
+        if (gated.appVersionCode() <= 0) return;
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String txt = gated.fetchText(UPDATE_URL);
+                if (txt == null) return;
+                int latest = 0, min = 0;
+                for (String line : txt.split("\n")) {
+                    String[] kv = line.trim().split("=");
+                    if (kv.length != 2) continue;
+                    try {
+                        if (kv[0].trim().equals("latest")) latest = Integer.parseInt(kv[1].trim());
+                        else if (kv[0].trim().equals("min")) min = Integer.parseInt(kv[1].trim());
+                    } catch (NumberFormatException ignored) {
+                        // bad line: skip it
+                    }
+                }
+                updMin = min;
+                updLatest = latest;
+            }
+        }, "update-check");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Shows the update notice once, on the menu, when the check has an answer. */
+    private void maybeShowUpdate() {
+        if (updShown || updLatest < 0 || screen != MENU || popup || sheetPack >= 0) return;
+        updShown = true;
+        int me = gated.appVersionCode();
+        if (me < updMin) {
+            forcedUpdate = true;
+            layout();
+        } else if (me < updLatest) {
+            confirm("NEW UPDATE!", "A new version of Snake Brawl is out with new stuff and fixes. Update now on Google Play?", 0, 0,
+                    ACT_UPDATE, 0);
+        }
+    }
+
     /** The daily reward screen opens by itself once per session when a reward is waiting. */
     private boolean dailyShown;
 
@@ -43,7 +94,7 @@ public final class Game {
     };
 
     // Wi-Fi match (lockstep: every phone simulates the same world from the same inputs)
-    private static final int NET_DELAY = 4, NET_RING = 512, NET_HASH_EVERY = 120;
+    private static final int NET_DELAY = 5, NET_RING = 512, NET_HASH_EVERY = 120;
     private static final int NO_DROP = Integer.MAX_VALUE;
     NetSession net;
     private boolean netHost;
@@ -67,6 +118,8 @@ public final class Game {
     private final NetInput[][] netInputs = new NetInput[NetSession.MAX_PLAYERS][NET_RING];
     private final int[] netHashTick = new int[64], netHashVal = new int[64];
     private float netStall;
+    /** The player whose controls this phone is waiting for (shown when the wait gets long). */
+    private int netWaitIdx;
     float w = 1920, h = 1080, u = 1;
     private float insL, insT, insR, insB;
     float padL, padT, padR, padB;
@@ -79,7 +132,7 @@ public final class Game {
     float clock;
     /** Studio splash shown on start-up; tests turn it off. */
     static boolean showSplash = true;
-    static final float SPLASH_TIME = 3f;
+    static final float SPLASH_TIME = 3.6f;
     float splash = showSplash ? SPLASH_TIME : 0;
 
     private boolean paused;
@@ -162,6 +215,26 @@ public final class Game {
             }
 
             @Override
+            public void setNetworkFast(boolean on) {
+                host.setNetworkFast(on);
+            }
+
+            @Override
+            public int appVersionCode() {
+                return host.appVersionCode();
+            }
+
+            @Override
+            public String fetchText(String url) {
+                return host.fetchText(url);
+            }
+
+            @Override
+            public void openStorePage() {
+                host.openStorePage();
+            }
+
+            @Override
             public boolean share(String text) {
                 return host.share(text);
             }
@@ -181,6 +254,7 @@ public final class Game {
         newDemo();
         if (!profile.onboarded) screen = ONBOARD;
         layout();
+        startUpdateCheck();
     }
 
     private void newDemo() {
@@ -495,7 +569,10 @@ public final class Game {
     public void onPause() {
         releaseControls();
         profile.save();
-        // A Wi-Fi match can't pause (the friend keeps playing), so only local matches pause here
+        // Leaving the app in a Wi-Fi match would freeze everyone else: leave the match instead,
+        // so the friends carry on with a bot in this player's place
+        if (net != null) dropNet("LEFT THE MATCH", "You left the Wi-Fi match when the app went to the background. "
+                + "Your friends kept playing with a bot in your place.");
         if (screen == PLAY && endTimer < 0 && net == null) {
             paused = true;
             layout();
@@ -575,7 +652,7 @@ public final class Game {
 
     /** Your Duo partner: a member of your club, or a friendly bot if you have no club. */
     String partnerName() {
-        return profile.club >= 0 ? Clubs.memberName(profile, 0) : "Buddy";
+        return "Buddy";
     }
 
     void startGame() {
@@ -755,7 +832,10 @@ public final class Game {
             boolean ready = true;
             for (int i = 0; i < netPlayers && ready; i++) {
                 if (i == netMe || netDropTick[i] <= netTick) continue;
-                if (netInputs[i][netTick % NET_RING].tick != netTick) ready = false;
+                if (netInputs[i][netTick % NET_RING].tick != netTick) {
+                    ready = false;
+                    netWaitIdx = i;
+                }
             }
             if (!ready) {
                 // Waiting for a friend's controls for this tick
@@ -808,6 +888,7 @@ public final class Game {
     /** Continues the match without the other phones: their snakes become bots. */
     private void dropNet(String title, String text) {
         if (net == null) return;
+        gated.setNetworkFast(false);
         net.close();
         net = null;
         acc = 0;
@@ -831,6 +912,7 @@ public final class Game {
     }
 
     private void endNet() {
+        if (net != null) gated.setNetworkFast(false);
         if (net != null) net.close();
         net = null;
     }
@@ -938,6 +1020,7 @@ public final class Game {
             if (action == ACT_JOIN_CLUB || action == ACT_LEAVE_CLUB) social.perform(action, arg);
             else if (action == ACT_PASS_PLUS) pass.perform(action);
             else if (action == ACT_DELETE_MAP) maps.deleteMap(arg);
+            else if (action == ACT_UPDATE) gated.openStorePage();
             else meta.perform(action, arg);
         }
     }
@@ -990,6 +1073,8 @@ public final class Game {
     // ------------------------------------------------------------------ update
 
     private void update(float dt) {
+        maybeShowUpdate();
+        if (forcedUpdate) return;
         if (screen == FRIENDS) friends.update(dt);
         if (screen == MENU && !dailyShown && !popup && sheetPack < 0 && profile.onboarded && screenTime > 0.6f) {
             dailyShown = true;
@@ -1324,6 +1409,10 @@ public final class Game {
     }
 
     private void onButton(int id) {
+        if (forcedUpdate) {
+            if (id == B_UPDATE) gated.openStorePage();
+            return;
+        }
         if (sheetPack >= 0) {
             sheetButton(id);
             return;
@@ -1453,6 +1542,10 @@ public final class Game {
         mapY = padT;
 
         ui.clear();
+        if (forcedUpdate) {
+            ui.add(B_UPDATE, w / 2 - 300 * u, h * 0.62f, w / 2 + 300 * u, h * 0.62f + 140 * u, "UPDATE", "Opens Google Play", 0xff4ad04a);
+            return;
+        }
         if (sheetPack >= 0) {
             if (sheetPhase == 0) {
                 ui.add(B_SHEET_CANCEL, 0, 0, w, h, null, null, 0);
@@ -1488,9 +1581,8 @@ public final class Game {
                 float pl = padL + 30 * u;
                 // Left column: shop, club and brawlers; the Snake Pass card sits below them
                 ui.add(B_SHOP, pl, padT + 200 * u, pl + 300 * u, padT + 320 * u, "SHOP", "Skins & boxes", 0xffff5ab5);
-                String club = Clubs.name(profile);
-                ui.add(B_CLUB, pl, padT + 345 * u, pl + 300 * u, padT + 465 * u, "CLUB", club != null ? club : "Join a club!", 0xff3fb6a8);
-                ui.add(B_BRAWLERS, pl, padT + 490 * u, pl + 300 * u, padT + 610 * u, "BRAWLERS", Brawler.ALL.length + " snakes",
+                // Clubs are hidden for now
+                ui.add(B_BRAWLERS, pl, padT + 345 * u, pl + 300 * u, padT + 465 * u, "BRAWLERS", Brawler.ALL.length + " snakes",
                         0xff4ad04a);
                 ui.add(B_PASS, pl, b - 240 * u, pl + 470 * u, b, null, null, 0);
                 // Tap the brawler in the middle to change it
@@ -1503,7 +1595,7 @@ public final class Game {
                 ui.add(B_SETTINGS, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, null, null, 0xff8a8fb8);
                 if (!Maps.valid(gated, profile.map)) profile.map = Maps.SUNNY;
                 ui.add(B_MAP, r - bw, b - bh - 150 * u, r, b - bh - 30 * u, "MAP", Maps.name(gated, profile.map), 0xff3fb6a8);
-                ui.add(B_QUESTS, pl, padT + 635 * u, pl + 300 * u, padT + 755 * u, "QUESTS", "Daily rewards", 0xffffa42e);
+                ui.add(B_QUESTS, pl, padT + 490 * u, pl + 300 * u, padT + 610 * u, "QUESTS", "Daily rewards", 0xffffa42e);
                 break;
             }
             case PLAY: {
@@ -1549,78 +1641,288 @@ public final class Game {
 
     // ------------------------------------------------------------------ render
 
+    private static final String[] TIPS = {
+            "Move fast and stay aware of your surroundings.", "Hide in bushes to surprise other snakes!",
+            "Eat glowing orbs to grow longer and stronger.", "Break boxes to collect power cubes.",
+            "Hit snakes to charge your SUPER.", "Stay out of the poison when it closes in!",
+            "Play with up to 3 friends on the same Wi-Fi.", "Build your own arena in the MAP MAKER.",
+            "Claim your daily reward every day!", "Hold BOOST to escape, but it costs length.",
+    };
+    private final int tipIndex = (int) ((System.currentTimeMillis() / 1000) % TIPS.length);
+
+    /** Loading screen: a bright arena, cartoon snakes, the logo, a loading bar and a tip. */
     private void renderSplash(Gfx g) {
         float t = SPLASH_TIME - splash;
-        float alpha = MathUtil.clamp(splash / 0.45f, 0, 1);
-        int a = (int) (alpha * 255) << 24;
-        g.vertical(0, 0, w, h, (0xff1a1450 & 0xffffff) | a, (0xff06071a & 0xffffff) | a);
-        if (alpha <= 0) return;
-        float cx = w / 2, cy = h * 0.42f;
-        float pop = MathUtil.clamp(t / 0.5f, 0, 1);
-        float sc = pop < 1 ? 0.6f + 0.5f * pop - 0.1f * pop * pop : 1f;
-        g.radial(cx, cy, 520 * u, MathUtil.withAlpha(0xffffc94a, 0.28f * alpha), 0x00ffc94a);
-        // Rotating rays
-        g.save();
-        g.translate(cx, cy);
-        g.rotate(clock * 14f);
-        g.color(MathUtil.withAlpha(0xffffffff, 0.05f * alpha));
-        float[] ray = splashRay;
-        for (int k = 0; k < 12; k++) {
-            float a0 = k * MathUtil.TAU / 12f;
-            ray[0] = 0;
-            ray[1] = 0;
-            ray[2] = MathUtil.cos(a0 - 0.1f) * 900 * u;
-            ray[3] = MathUtil.sin(a0 - 0.1f) * 900 * u;
-            ray[4] = MathUtil.cos(a0 + 0.1f) * 900 * u;
-            ray[5] = MathUtil.sin(a0 + 0.1f) * 900 * u;
-            g.fillPoly(ray, 3);
+        float alpha = MathUtil.clamp(splash / 0.4f, 0, 1);
+        float cx = w / 2;
+        // Sky and the warm arena floor
+        g.vertical(0, 0, w, h * 0.5f, 0xff7ec8ff, 0xffd8c8ff);
+        g.vertical(0, h * 0.5f, w, h, 0xfff2b08a, 0xffd9785a);
+        // Distant towers with crown banners
+        for (int k = 0; k < 9; k++) {
+            float tx = w * (k + 0.5f) / 9f + MathUtil.sin(k * 2.3f) * 40 * u;
+            float th = (150 + (k * 37 % 5) * 30) * u, tw = 120 * u;
+            float base = h * 0.52f;
+            g.color(k % 2 == 0 ? 0xffb8a0e8 : 0xffd8a8e0);
+            g.fillRoundRect(tx - tw / 2, base - th, tx + tw / 2, base, 16 * u);
+            g.color(0x33ffffff);
+            g.fillRoundRect(tx - tw / 2 + 8 * u, base - th + 8 * u, tx - tw / 2 + 30 * u, base - 10 * u, 8 * u);
+            g.color(k % 3 == 0 ? 0xffe050c8 : 0xff9a5ae0);
+            g.fillRoundRect(tx - 30 * u, base - th + 30 * u, tx + 30 * u, base - th + 100 * u, 8 * u);
+            drawCrown(g, tx, base - th + 64 * u, 34 * u, 0xccffffff);
         }
-        g.restore();
+        // Floor tiles in soft perspective rows
+        for (int row = 0; row < 7; row++) {
+            float y0 = h * 0.53f + row * row * 9 * u + row * 28 * u;
+            float y1 = y0 + 18 * u + row * 6 * u;
+            g.color(row % 2 == 0 ? 0x22ffffff : 0x14000000);
+            g.fillRect(0, y0, w, y1);
+        }
+        // Glowing orbs
+        int[] orbCols = {0xffffd23f, 0xff4ad8ff, 0xffff5ad7, 0xff6dff6d, 0xffffa23a};
+        for (int k = 0; k < 16; k++) {
+            float ox = w * ((k * 0.618f) % 1f), oy = h * (0.55f + ((k * 0.381f) % 1f) * 0.42f);
+            float bob = MathUtil.sin(clock * 2f + k) * 6 * u;
+            float r = (12 + (k % 4) * 6) * u;
+            int c = orbCols[k % orbCols.length];
+            g.radial(ox, oy + bob, r * 2.6f, MathUtil.withAlpha(c, 0.55f), c & 0x00ffffff);
+            g.color(c);
+            g.fillCircle(ox, oy + bob, r);
+            g.color(0xccffffff);
+            g.fillCircle(ox - r * 0.3f, oy + bob - r * 0.3f, r * 0.35f);
+        }
+        // Snakes
+        float wig = clock * 3f;
+        drawLoadSnake(g, w * 0.22f, h * 0.18f, 6, 46 * u, 0.2f, wig, new int[]{0xff2f8fff, 0xff2ad8ff}, 0xff2f8fff, false, -0.2f);
+        drawLoadSnake(g, w * 0.76f, h * 0.27f, 5, 46 * u, 2.9f, wig + 1, new int[]{0xffffc23f, 0xffffa21a}, 0xffffc23f, false, 3.3f);
+        drawLoadSnake(g, w * 0.93f, h * 0.42f, 5, 42 * u, 3.0f, wig + 2, new int[]{0xffb04af0, 0xffd06aff}, 0xffb04af0, false, 3.2f);
+        drawLoadSnake(g, w * 0.33f, h * 0.62f, 12, 82 * u, -0.25f, wig + 3,
+                new int[]{0xffa02af0, 0xff2a8aff, 0xff2ad86a, 0xffffe03a, 0xffffa21a, 0xffff4a3a}, 0xffff3a3a, true, -0.45f);
+        drawLoadSnake(g, w * 0.76f, h * 0.67f, 9, 74 * u, 3.6f, wig + 4, new int[]{0xff2ac83a, 0xff1a9a2a}, 0xff2ad83a, true, 3.3f);
+        // Bushes in the corners
+        for (int k = 0; k < 7; k++) {
+            float bx = k < 4 ? k * 90 * u - 20 * u : w - (k - 4) * 100 * u + 20 * u, by = h - (k % 2) * 50 * u;
+            g.color(0xff2a7a2a);
+            g.fillCircle(bx, by, 90 * u);
+            g.color(0xff3fae3a);
+            g.fillCircle(bx - 10 * u, by - 14 * u, 70 * u);
+            g.color(0x445cff6a);
+            g.fillCircle(bx - 26 * u, by - 34 * u, 30 * u);
+        }
+        // Logo: leaves, crown, SNAKE / BRAWL
+        float ly = h * 0.3f + MathUtil.sin(clock * 2.2f) * 6 * u;
+        float pop = MathUtil.clamp(t / 0.45f, 0, 1);
+        float sc = pop < 1 ? 0.55f + 0.55f * pop - 0.1f * pop * pop : 1f;
         g.save();
-        g.translate(cx, cy);
+        g.translate(cx, ly);
         g.scale(sc);
-        g.translate(-cx, -cy);
-        // Emblem: a coiled snake in a golden ring
-        float er = 120 * u;
-        g.color(MathUtil.withAlpha(Ui.INK, alpha));
-        g.fillCircle(cx, cy - 150 * u, er + 12 * u);
-        g.radial(cx, cy - 170 * u, er, MathUtil.withAlpha(0xffffe27a, alpha), MathUtil.withAlpha(0xffe09a12, alpha));
-        g.color(MathUtil.withAlpha(0xff2a1a5c, alpha));
-        g.fillCircle(cx, cy - 150 * u, er * 0.8f);
-        for (int k = 0; k < 14; k++) {
-            float ang = clock * 2.2f + k * 0.42f;
-            float rr = er * (0.55f - k * 0.022f);
-            float sx = cx + MathUtil.cos(ang) * rr, sy = cy - 150 * u + MathUtil.sin(ang) * rr;
-            g.color(MathUtil.withAlpha(k % 2 == 0 ? 0xff5be05b : 0xff38b838, alpha));
-            g.fillCircle(sx, sy, (16 - k * 0.6f) * u);
-            if (k == 0) {
-                g.color(MathUtil.withAlpha(0xffffffff, alpha));
-                g.fillCircle(sx, sy - 5 * u, 6 * u);
-                g.color(MathUtil.withAlpha(0xff14142a, alpha));
-                g.fillCircle(sx, sy - 5 * u, 3 * u);
+        g.rotate(MathUtil.sin(clock * 1.3f) * 1.2f);
+        for (int k = 0; k < 8; k++) {
+            float a = -MathUtil.PI * 0.95f + k * MathUtil.PI * 1.9f / 7f;
+            float lx = MathUtil.cos(a) * 330 * u, lyy = MathUtil.sin(a) * 150 * u - 10 * u;
+            g.save();
+            g.translate(lx, lyy);
+            g.rotate((float) Math.toDegrees(a) + 90);
+            for (int pass = 0; pass < 2; pass++) {
+                float k2 = pass == 0 ? 1f : 0.8f;
+                poly[0] = 0;
+                poly[1] = -90 * u * k2;
+                poly[2] = 38 * u * k2;
+                poly[3] = 0;
+                poly[4] = 0;
+                poly[5] = 90 * u * k2;
+                poly[6] = -38 * u * k2;
+                poly[7] = 0;
+                g.color(pass == 0 ? 0xff1f6a1f : 0xff3ec03a);
+                g.fillPoly(poly, 4);
             }
+            g.color(0xff1f6a1f);
+            g.line(0, -60 * u, 0, 60 * u, 4 * u);
+            g.restore();
         }
-        g.color(MathUtil.withAlpha(0xffffd23f, alpha));
-        g.text("RanEddie", cx, cy + 90 * u, 150 * u, Gfx.ALIGN_CENTER, 14 * u, MathUtil.withAlpha(Ui.INK, alpha));
-        float gl = MathUtil.clamp((t - 0.45f) / 0.4f, 0, 1);
-        g.color(MathUtil.withAlpha(0xffffffff, alpha * gl));
-        g.text("G A M E S", cx, cy + 175 * u, 64 * u, Gfx.ALIGN_CENTER, 8 * u, MathUtil.withAlpha(Ui.INK, alpha * gl));
+        drawCrown(g, 0, -185 * u, 70 * u, 0xffffc21a);
+        g.color(0xff3a1a08);
+        g.text("SNAKE", 6 * u, -18 * u, 160 * u, Gfx.ALIGN_CENTER, 18 * u, 0xff3a1a08);
+        g.color(0xffffb21a);
+        g.text("SNAKE", 0, -24 * u, 160 * u, Gfx.ALIGN_CENTER, 14 * u, 0xff4a2008);
+        g.color(0xffffe066);
+        g.text("SNAKE", 0, -30 * u, 160 * u, Gfx.ALIGN_CENTER, 0, 0);
+        g.color(0xff10204a);
+        g.text("BRAWL", 6 * u, 128 * u, 150 * u, Gfx.ALIGN_CENTER, 18 * u, 0xff10204a);
+        g.color(0xff2a9aff);
+        g.text("BRAWL", 0, 122 * u, 150 * u, Gfx.ALIGN_CENTER, 14 * u, 0xff0a2a6a);
+        g.color(0xff8ae0ff);
+        g.text("BRAWL", 0, 116 * u, 150 * u, Gfx.ALIGN_CENTER, 0, 0);
         g.restore();
+
         // Loading bar
-        float bw = 520 * u, by = h * 0.86f;
-        float prog = MathUtil.clamp(t / (SPLASH_TIME - 0.5f), 0, 1);
-        g.color(MathUtil.withAlpha(Ui.INK, alpha));
-        g.fillRoundRect(cx - bw / 2 - 6 * u, by - 6 * u, cx + bw / 2 + 6 * u, by + 30 * u, 18 * u);
-        g.color(MathUtil.withAlpha(0xff2a2e5a, alpha));
-        g.fillRoundRect(cx - bw / 2, by, cx + bw / 2, by + 24 * u, 12 * u);
-        if (prog > 0.03f) {
-            g.color(MathUtil.withAlpha(0xffffc928, alpha));
-            g.fillRoundRect(cx - bw / 2, by, cx - bw / 2 + bw * prog, by + 24 * u, 12 * u);
-            g.color(MathUtil.withAlpha(0x66ffffff, alpha));
-            g.fillRoundRect(cx - bw / 2 + 6 * u, by + 4 * u, cx - bw / 2 + bw * prog - 6 * u, by + 10 * u, 4 * u);
+        float prog = MathUtil.clamp(t / (SPLASH_TIME - 0.45f), 0, 1);
+        prog = 1f - (1f - prog) * (1f - prog);
+        float bw = 620 * u, by = h * 0.72f;
+        g.color(0xffffffff);
+        g.text(prog < 1 ? "Loading..." : "Ready!", cx, by - 22 * u, 44 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
+        g.color(Ui.INK);
+        g.fillRoundRect(cx - bw / 2 - 8 * u, by - 8 * u, cx + bw / 2 + 8 * u, by + 50 * u, 29 * u);
+        g.color(0xff1a1e3a);
+        g.fillRoundRect(cx - bw / 2, by, cx + bw / 2, by + 42 * u, 21 * u);
+        float fill = (bw - 120 * u) * prog;
+        if (fill > 30 * u) {
+            g.vertical(cx - bw / 2, by, cx - bw / 2 + fill, by + 42 * u, 0xff6ae0ff, 0xff1a8ae0);
+            g.save();
+            g.clip(cx - bw / 2, by, cx - bw / 2 + fill, by + 42 * u);
+            g.color(0x33ffffff);
+            float off = (clock * 60 * u) % (40 * u);
+            for (float sx = cx - bw / 2 - 40 * u + off; sx < cx - bw / 2 + fill; sx += 40 * u) {
+                poly[0] = sx;
+                poly[1] = by + 42 * u;
+                poly[2] = sx + 18 * u;
+                poly[3] = by + 42 * u;
+                poly[4] = sx + 38 * u;
+                poly[5] = by;
+                poly[6] = sx + 20 * u;
+                poly[7] = by;
+                g.fillPoly(poly, 4);
+            }
+            g.restore();
+            g.color(0x77ffffff);
+            g.fillRoundRect(cx - bw / 2 + 10 * u, by + 6 * u, cx - bw / 2 + fill - 10 * u, by + 14 * u, 4 * u);
         }
-        g.color(MathUtil.withAlpha(0xffb8bdf0, alpha));
-        g.text(prog < 1 ? "LOADING..." : "READY!", cx, by + 80 * u, 34 * u, Gfx.ALIGN_CENTER, 4 * u, MathUtil.withAlpha(Ui.INK, alpha));
+        g.color(0xffffffff);
+        g.text((int) (prog * 100) + "%", cx + bw / 2 - 20 * u, by + 34 * u, 34 * u, Gfx.ALIGN_RIGHT, 4 * u, Ui.INK);
+        // Tip box
+        float tw = 820 * u, ty = by + 76 * u;
+        g.color(0xdd14142a);
+        g.fillRoundRect(cx - tw / 2, ty, cx + tw / 2, ty + 92 * u, 18 * u);
+        float bx = cx - tw / 2 + 56 * u, bcy = ty + 44 * u;
+        g.radial(bx, bcy, 40 * u, 0x66ffd23f, 0x00ffd23f);
+        g.color(0xffffd23f);
+        g.fillCircle(bx, bcy, 20 * u);
+        g.color(0xff8a8aa0);
+        g.fillRoundRect(bx - 9 * u, bcy + 16 * u, bx + 9 * u, bcy + 30 * u, 4 * u);
+        g.color(0xffffd23f);
+        g.text("Tip:", cx - tw / 2 + 100 * u, ty + 38 * u, 34 * u, Gfx.ALIGN_LEFT, 4 * u, Ui.INK);
+        g.color(0xffffffff);
+        String tip = TIPS[tipIndex];
+        g.text(tip, cx - tw / 2 + 100 * u, ty + 78 * u, Ui.fit(g, tip, 30 * u, tw - 130 * u), Gfx.ALIGN_LEFT, 3 * u, Ui.INK);
+        // Studio logo
+        float sy = h - 62 * u;
+        float hx = cx - 160 * u;
+        for (int k = 0; k < 6; k++) {
+            float a0 = k * MathUtil.TAU / 6f + MathUtil.PI / 6f;
+            poly[k * 2] = hx + MathUtil.cos(a0) * 26 * u;
+            poly[k * 2 + 1] = sy + MathUtil.sin(a0) * 26 * u;
+        }
+        g.color(0xff1a6aff);
+        g.fillPoly(poly, 6);
+        g.color(0xffffffff);
+        g.text("R", hx, sy + 13 * u, 34 * u, Gfx.ALIGN_CENTER, 0, 0);
+        g.text("RANEDDIE", hx + 40 * u, sy + 18 * u, 52 * u, Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
+        g.color(0xddffffff);
+        g.text("A L L   G A M E S .   O N E   P L A T F O R M .", cx, sy + 56 * u, 22 * u, Gfx.ALIGN_CENTER, 3 * u, Ui.INK);
+        // Fade out at the end
+        if (alpha < 1) {
+            g.color(MathUtil.withAlpha(0xff05060f, 1f - alpha));
+            g.fillRect(0, 0, w, h);
+        }
+    }
+
+    private void renderForcedUpdate(Gfx g) {
+        g.color(0xf00a0c22);
+        g.fillRect(0, 0, w, h);
+        drawCrown(g, w / 2, h * 0.2f, 60 * u, 0xffffc21a);
+        g.color(0xffffd23f);
+        g.text("UPDATE NEEDED", w / 2, h * 0.36f, 110 * u, Gfx.ALIGN_CENTER, 12 * u, Ui.INK);
+        g.color(0xffffffff);
+        g.text("This version of Snake Brawl is too old.", w / 2, h * 0.46f, 44 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+        g.color(0xffb8bdf0);
+        g.text("Update on Google Play to keep playing. Your progress stays safe.", w / 2, h * 0.53f, 34 * u, Gfx.ALIGN_CENTER, 4 * u,
+                Ui.INK);
+        for (int i = 0; i < ui.count; i++) ui.button(g, ui.btns[i]);
+    }
+
+    private void drawCrown(Gfx g, float x, float y, float s, int col) {
+        poly[0] = x - s;
+        poly[1] = y + s * 0.5f;
+        poly[2] = x - s;
+        poly[3] = y - s * 0.45f;
+        poly[4] = x - s * 0.5f;
+        poly[5] = y;
+        poly[6] = x;
+        poly[7] = y - s * 0.6f;
+        poly[8] = x + s * 0.5f;
+        poly[9] = y;
+        poly[10] = x + s;
+        poly[11] = y - s * 0.45f;
+        poly[12] = x + s;
+        poly[13] = y + s * 0.5f;
+        g.color(0xff6a3a08);
+        g.save();
+        g.translate(3 * u, 4 * u);
+        g.fillPoly(poly, 7);
+        g.restore();
+        g.color(col);
+        g.fillPoly(poly, 7);
+        g.color(0xffe0204a);
+        g.fillCircle(x, y + s * 0.15f, s * 0.16f);
+        g.color(0xffffffff);
+        g.fillCircle(x - s, y - s * 0.45f, s * 0.1f);
+        g.fillCircle(x, y - s * 0.6f, s * 0.12f);
+        g.fillCircle(x + s, y - s * 0.45f, s * 0.1f);
+    }
+
+    /** A big cartoon snake for the loading screen: body along a wavy line, then a face. */
+    private void drawLoadSnake(Gfx g, float hx, float hy, int segs, float r, float dir, float time, int[] cols, int headCol,
+                               boolean angry, float lookAng) {
+        float ca = MathUtil.cos(dir), sa = MathUtil.sin(dir);
+        float step = r * 0.9f;
+        for (int i = segs; i >= 1; i--) {
+            float d = i * step;
+            float wav = MathUtil.sin(time - i * 0.55f) * r * 0.55f * Math.min(1f, i / 3f);
+            float x = hx - ca * d - sa * wav, y = hy - sa * d + ca * wav;
+            float rr = r * (i > segs - 3 ? 0.65f + 0.35f * (segs - i) / 3f : 1f);
+            int c = cols[(i / 2) % cols.length];
+            g.color(MathUtil.darker(c, 0.45f));
+            g.fillCircle(x, y, rr + 3 * u);
+            g.color(c);
+            g.fillCircle(x, y, rr);
+            g.color(MathUtil.withAlpha(0xffffffff, 0.35f));
+            g.fillCircle(x - rr * 0.25f, y - rr * 0.35f, rr * 0.4f);
+        }
+        float hr = r * 1.35f;
+        g.color(MathUtil.darker(headCol, 0.45f));
+        g.fillCircle(hx, hy, hr + 4 * u);
+        g.color(headCol);
+        g.fillCircle(hx, hy, hr);
+        g.color(MathUtil.withAlpha(0xffffffff, 0.35f));
+        g.fillCircle(hx - hr * 0.3f, hy - hr * 0.4f, hr * 0.35f);
+        // Front-facing cartoon face: two big eyes, brows and a grin
+        float look = MathUtil.cos(lookAng) * hr * 0.09f, lookY = MathUtil.sin(lookAng) * hr * 0.06f;
+        for (int sgn = -1; sgn <= 1; sgn += 2) {
+            float ex = hx + sgn * hr * 0.36f, ey = hy - hr * 0.18f;
+            g.color(Ui.INK);
+            g.fillCircle(ex, ey, hr * 0.34f);
+            g.color(0xffffffff);
+            g.fillCircle(ex, ey, hr * 0.3f);
+            float lx = ex + look, ly = ey + lookY;
+            g.color(Ui.INK);
+            g.fillCircle(lx, ly, hr * 0.15f);
+            g.color(0xffffffff);
+            g.fillCircle(lx - hr * 0.05f, ly - hr * 0.06f, hr * 0.05f);
+            g.color(Ui.INK);
+            if (angry) g.line(ex + hr * 0.3f * sgn, ey - hr * 0.52f, ex - hr * 0.24f * sgn, ey - hr * 0.3f, hr * 0.12f);
+            else g.arc(ex, ey - hr * 0.1f, hr * 0.4f, 215, 110, hr * 0.06f);
+        }
+        // Open grin
+        float my = hy + hr * 0.36f;
+        g.color(0xff3a0a14);
+        g.save();
+        g.clip(hx - hr * 0.5f, my, hx + hr * 0.5f, my + hr * 0.5f);
+        g.fillCircle(hx, my, hr * (angry ? 0.42f : 0.32f));
+        g.color(0xffff5a6a);
+        g.fillCircle(hx, my + hr * (angry ? 0.3f : 0.24f), hr * 0.2f);
+        g.restore();
+        g.color(0xffffffff);
+        g.fillRect(hx - hr * 0.28f, my, hx + hr * 0.28f, my + hr * 0.07f);
     }
 
     private final float[] splashRay = new float[6];
@@ -1672,6 +1974,7 @@ public final class Game {
         }
         if (popup) renderPopup(g);
         if (sheetPack >= 0) renderSheet(g);
+        if (forcedUpdate) renderForcedUpdate(g);
         renderCoinFly(g);
         if (splash > 0) renderSplash(g);
         if (fade > 0) {
@@ -1749,12 +2052,8 @@ public final class Game {
         g.color(0xffffe066);
         g.text(Integer.toString(profile.coins), cl + 92 * u, tt + 64 * u, 54 * u, Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
         g.color(0xffd8dcff);
-        // Player card: club badge, nickname and wins
+        // Player card: nickname and wins
         float nx = tl + 10 * u;
-        if (profile.club >= 0) {
-            Clubs.drawBadge(g, Clubs.badge(profile), tl + 30 * u, tt + 128 * u, 40 * u);
-            nx = tl + 62 * u;
-        }
         g.color(0xffffffff);
         g.text(profile.displayName(), nx, tt + 142 * u, 38 * u, Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
         g.color(0xffd8dcff);
@@ -2028,6 +2327,15 @@ public final class Game {
             g.restore();
         }
 
+        if (net != null && netStall > 0.6f && netWaitIdx < wd.snakeCount) {
+            // A friend's phone is slow: say so instead of looking frozen
+            String who = wd.snakes[netWaitIdx].name;
+            int dots = (int) (clock * 3) % 4;
+            g.color(0xcc0e1024);
+            g.fillRoundRect(cx - 420 * u, h * 0.42f - 60 * u, cx + 420 * u, h * 0.42f + 40 * u, 30 * u);
+            g.color(0xffffd23f);
+            g.text("Waiting for " + who + "...".substring(0, dots), cx, h * 0.42f + 6 * u, 44 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+        }
         if (tutStep >= 0 && p.alive) {
             // Wait for the match banner to go first
             if (wd.bannerTime <= 0.2f || wd.matchTime > 4f) drawTutorial(g, p);

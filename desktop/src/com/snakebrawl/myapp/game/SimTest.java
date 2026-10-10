@@ -19,7 +19,7 @@ import javax.imageio.ImageIO;
 public final class SimTest {
     private static final float DT = 1f / 60f;
 
-    static final class DesktopPlatform implements Platform {
+    static class DesktopPlatform implements Platform {
         final Map<String, Integer> prefs = new HashMap<>();
         int sounds;
 
@@ -182,6 +182,47 @@ public final class SimTest {
                     System.out.println(Brawler.ALL[b].name + ": alive=" + w.player.alive + " kills=" + w.player.kills + " hp=" + (int) w.player.hp
                             + "/" + (int) w.player.maxHp + " mass=" + (int) w.player.mass + " superUsed=" + shotSuper);
                 }
+                return;
+            }
+            case "splash": {
+                Font font = Font.createFont(Font.TRUETYPE_FONT, new File("app/src/main/assets/fonts/LilitaOne-Regular.ttf"));
+                Game.showSplash = true;
+                Game sg = new Game(new DesktopPlatform());
+                sg.resize(W, H);
+                run(sg, Float.parseFloat(args[2]));
+                shot(sg, font, (int) W, (int) H, args[1]);
+                return;
+            }
+            case "update": {
+                // args: out version updateText ; checks the update notice
+                Font font = Font.createFont(Font.TRUETYPE_FONT, new File("app/src/main/assets/fonts/LilitaOne-Regular.ttf"));
+                final int ver = Integer.parseInt(args[2]);
+                final String txt = args[3].replace("|", "\n");
+                final int[] opened = {0};
+                DesktopPlatform pf = new DesktopPlatform() {
+                    @Override
+                    public int appVersionCode() {
+                        return ver;
+                    }
+
+                    @Override
+                    public String fetchText(String url) {
+                        return url.equals(Game.UPDATE_URL) ? txt : null;
+                    }
+
+                    @Override
+                    public void openStorePage() {
+                        opened[0]++;
+                    }
+                };
+                Game g = new Game(pf);
+                g.resize(W, H);
+                run(g, 1f);
+                shot(g, font, (int) W, (int) H, args[1]);
+                System.out.println("version " + ver + " with [" + args[3] + "]: forced=" + g.forcedUpdate + " popup=" + g.popTitleForTest());
+                if (g.forcedUpdate) tapBtn(g, Game.B_UPDATE);
+                else if (g.popTitleForTest() != null) tapBtn(g, Game.B_YES);
+                System.out.println("  store opened " + opened[0] + " time(s)");
                 return;
             }
             case "features":
@@ -656,8 +697,8 @@ public final class SimTest {
             if (!left && t > seconds / 2) {
                 // Guest B leaves in the middle of the match
                 left = true;
-                gb.onBack();
-                tapBtnIfPresent(gb, Game.B_QUIT);
+                // Guest B switches to another app: it leaves the match instead of freezing everyone
+                gb.onPause();
                 all[2] = null;
                 System.out.println("guest B left at " + t + "s, tick " + host.netTick);
             }
