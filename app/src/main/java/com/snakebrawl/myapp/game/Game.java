@@ -42,7 +42,7 @@ public final class Game {
             "EAT GLOWING ORBS TO GROW", "HIT SNAKES TO CHARGE YOUR SUPER", "BE THE LAST SNAKE STANDING!",
     };
 
-    // Wi-Fi / online match (lockstep: every phone simulates the same world from the same inputs)
+    // Wi-Fi match (lockstep: every phone simulates the same world from the same inputs)
     private static final int NET_DELAY = 4, NET_RING = 512, NET_HASH_EVERY = 120;
     private static final int NO_DROP = Integer.MAX_VALUE;
     NetSession net;
@@ -159,11 +159,6 @@ public final class Game {
             @Override
             public void setNetworkDiscovery(boolean on) {
                 host.setNetworkDiscovery(on);
-            }
-
-            @Override
-            public OnlineLink online() {
-                return host.online();
             }
 
             @Override
@@ -500,7 +495,7 @@ public final class Game {
     public void onPause() {
         releaseControls();
         profile.save();
-        // An online match can't pause (the friend keeps playing), so only local matches pause here
+        // A Wi-Fi match can't pause (the friend keeps playing), so only local matches pause here
         if (screen == PLAY && endTimer < 0 && net == null) {
             paused = true;
             layout();
@@ -1501,10 +1496,9 @@ public final class Game {
                 // Tap the brawler in the middle to change it
                 float showL = pl + 520 * u, showR = r - bw - 30 * u - 460 * u;
                 ui.add(B_SHOWCASE, showL, h * 0.5f, Math.max(showL + 200 * u, showR), b, null, null, 0);
-                boolean onl = OnlineSession.available(gated) && profile.canPlayOnline();
-                if (OnlineSession.available(gated) || Lan.available()) {
+                if (Lan.available()) {
                     ui.add(B_FRIENDS, r - bw - 30 * u - 430 * u, b - bh - 150 * u, r - bw - 30 * u, b - bh - 30 * u, "FRIENDS",
-                            onl ? "Play together online" : "Play together on Wi-Fi", 0xff6a5cff);
+                            "Play together on Wi-Fi", 0xff6a5cff);
                 }
                 ui.add(B_SETTINGS, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, null, null, 0xff8a8fb8);
                 if (!Maps.valid(gated, profile.map)) profile.map = Maps.SUNNY;

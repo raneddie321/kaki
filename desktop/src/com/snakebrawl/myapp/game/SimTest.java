@@ -88,13 +88,6 @@ public final class SimTest {
         @Override
         public void setNetworkDiscovery(boolean on) {}
 
-        /** In-memory stand-in for the WebRTC link, so two games in one process can play online. */
-        LoopLink link;
-
-        @Override
-        public OnlineLink online() {
-            return link;
-        }
     }
 
     public static void main(String[] args) throws Exception {
@@ -142,6 +135,53 @@ public final class SimTest {
                 pf.nextText = args[2];
                 tapBtn(g2, 422);
                 System.out.println("after restart, first code -> " + g2.popTitleForTest());
+                return;
+            }
+            case "crazy": {
+                // New brawlers: screens, and a match with each (super used when ready)
+                String out = args[1];
+                new File(out).mkdirs();
+                Font font = Font.createFont(Font.TRUETYPE_FONT, new File("app/src/main/assets/fonts/LilitaOne-Regular.ttf"));
+                DesktopPlatform pf = new DesktopPlatform();
+                pf.prefs.put("unlocked", 0xffff);
+                pf.prefs.put("coins", 9000);
+                Game g = new Game(pf);
+                g.resize(W, H);
+                tapBtn(g, Game.B_BRAWLERS);
+                run(g, 0.5f);
+                shot(g, font, (int) W, (int) H, out + "/brawlers.png");
+                g.onBack();
+                DesktopPlatform pf2 = new DesktopPlatform();
+                Game g2 = new Game(pf2);
+                g2.resize(W, H);
+                tapBtn(g2, Game.B_SHOP);
+                tapBtn(g2, 302);
+                run(g2, 0.3f);
+                g2.ui.scrollY = g2.ui.scrollMax;
+                run(g2, 0.3f);
+                shot(g2, font, (int) W, (int) H, out + "/shop_brawlers.png");
+                for (int b = Brawler.JOKER; b <= Brawler.GLITCH; b++) {
+                    pf.prefs.put("brawler", b);
+                    Game m = new Game(pf);
+                    m.resize(W, H);
+                    tapBtn(m, Game.B_PLAY);
+                    Pilot pil = new Pilot(m);
+                    World w = m.currentWorld();
+                    boolean shotSuper = false;
+                    for (int i = 0; i < 60 * 40 && m.screenId() == Game.PLAY; i++) {
+                        if (i == 60 * 9) w.player.superCharge = 1f;
+                        pil.step(DT);
+                        m.tick(DT);
+                        if (i == 60 * 6) shot(m, font, (int) W, (int) H, out + "/play_" + Brawler.ALL[b].name + ".png");
+                        if (!shotSuper && i > 60 * 9 && w.player.superCharge < 0.5f) {
+                            run(m, 0.25f);
+                            shot(m, font, (int) W, (int) H, out + "/super_" + Brawler.ALL[b].name + ".png");
+                            shotSuper = true;
+                        }
+                    }
+                    System.out.println(Brawler.ALL[b].name + ": alive=" + w.player.alive + " kills=" + w.player.kills + " hp=" + (int) w.player.hp
+                            + "/" + (int) w.player.maxHp + " mass=" + (int) w.player.mass + " superUsed=" + shotSuper);
+                }
                 return;
             }
             case "features":
@@ -424,113 +464,8 @@ public final class SimTest {
         System.out.printf("%dx%d: %d frames, avg java2d frame %.2f ms%n", width, height, frames, renderNanos / 1e6 / Math.max(1, frames));
     }
 
-    // ------------------------------------------------------------------ online play (loopback)
-
-    static final class LoopLink implements Platform.OnlineLink {
-        static final java.util.Map<String, LoopLink> ROOMS = new java.util.HashMap<String, LoopLink>();
-        final java.util.ArrayDeque<String> inbox = new java.util.ArrayDeque<String>();
-        LoopLink peer;
-        int state = 3;
-        String reason, code = "";
-        boolean browser, exact = true;
-
-        @Override
-        public boolean available() {
-            return true;
-        }
-
-        @Override
-        public void host() {
-            code = "T" + (10000 + ROOMS.size());
-            ROOMS.put(code, this);
-            state = 0;
-            peer = null;
-        }
-
-        @Override
-        public void search() {
-            state = 0;
-            code = "";
-        }
-
-        @Override
-        public void join(String c) {
-            LoopLink h = ROOMS.get(c);
-            if (h == null || h.peer != null) {
-                reason = "No room with code " + c;
-                return;
-            }
-            peer = h;
-            h.peer = this;
-            state = h.state = 2;
-        }
-
-        @Override
-        public int state() {
-            return state;
-        }
-
-        @Override
-        public String reason() {
-            return reason;
-        }
-
-        @Override
-        public void clearReason() {
-            reason = null;
-        }
-
-        @Override
-        public String code() {
-            return code;
-        }
-
-        @Override
-        public void send(String data) {
-            if (System.getProperty("netdebug") != null) System.out.println((browser ? "guest" : "host") + " send type " + (int) data.charAt(0) + " state " + state);
-            if (state == 2 && peer != null) peer.inbox.add(data);
-        }
-
-        @Override
-        public String poll() {
-            String d = inbox.poll();
-            if (d != null && System.getProperty("netdebug") != null) System.out.println((browser ? "guest" : "host") + " got type " + (int) d.charAt(0));
-            return d;
-        }
-
-        @Override
-        public void close() {
-            if (peer != null && peer.state == 2) {
-                peer.state = 3;
-                peer.reason = "Your friend left the game";
-            }
-            state = 3;
-            ROOMS.remove(code);
-        }
-
-        @Override
-        public boolean exactFloats() {
-            return exact;
-        }
-
-        @Override
-        public boolean isBrowser() {
-            return browser;
-        }
-    }
-
-    // ------------------------------------------------------------------ Wi-Fi play
-
-    /** Two games in one process connected over localhost: checks the lobby and lockstep sync. */
     static void net(int lobbyMode, float seconds, String shotDir, String kind) throws Exception {
         DesktopPlatform hp = new DesktopPlatform(), gp = new DesktopPlatform();
-        boolean online = !kind.equals("wifi");
-        if (online) {
-            hp.link = new LoopLink();
-            gp.link = new LoopLink();
-            gp.link.browser = true;
-            gp.link.exact = !kind.equals("oldbrowser");
-        }
         hp.strings.put("nickname", "HostRan");
         gp.strings.put("nickname", "GuestEddie");
         hp.prefs.put("brawler", 1);
@@ -549,7 +484,7 @@ public final class SimTest {
         if (lobbyMode == 1) tapBtn(host, 602); // versus
         tapBtn(guest, Game.B_FRIENDS);
         tapBtn(guest, 601); // join
-        gp.nextText = online ? hp.link.code : "127.0.0.1";
+        gp.nextText = "127.0.0.1";
         Thread.sleep(300);
         if (shotDir != null) shot(guest, font, (int) W, (int) H, shotDir + "/f1_searching.png");
         tapBtn(guest, 605); // type address
@@ -566,12 +501,6 @@ public final class SimTest {
             run(host, 0.3f);
             shot(host, font, (int) W, (int) H, shotDir + "/f2_host_lobby.png");
             shot(guest, font, (int) W, (int) H, shotDir + "/f3_guest_lobby.png");
-        }
-        if (kind.equals("oldbrowser")) {
-            for (int i = 0; i < 30; i++) { host.tick(DT); guest.tick(DT); }
-            System.out.println("old browser: host screen=" + host.screenId() + " popup=" + host.popTitleForTest() + " / guest popup="
-                    + guest.popTitleForTest());
-            return;
         }
         tapBtn(host, 604); // start
         until = System.currentTimeMillis() + 5000;
@@ -963,12 +892,11 @@ public final class SimTest {
                 || fresh.loadInt("onboarded", 0) != 1) {
             throw new IllegalStateException("onboarding not saved / typed name for a child: " + fresh.strings + " " + fresh.prefs);
         }
-        // 16 and over: typing a nickname works and online play is offered
+        // 13 and over: typing a nickname works
         DesktopPlatform adult = new DesktopPlatform();
         adult.prefs.remove("onboarded");
         adult.prefs.remove("age");
         adult.strings.clear();
-        adult.link = new LoopLink();
         Game ad = new Game(adult);
         ad.resize(width, height);
         for (int i = 0; i < 8; i++) tapBtn(ad, 504); // 10 -> 17
@@ -981,16 +909,6 @@ public final class SimTest {
         if (!"KakiKing".equals(adult.strings.get("nickname")) || adult.loadInt("age", 0) != 17) {
             throw new IllegalStateException("adult onboarding wrong: " + adult.strings + " " + adult.prefs);
         }
-        // Online play is blocked under 16
-        DesktopPlatform kidNet = new DesktopPlatform();
-        kidNet.prefs.put("age", 12);
-        kidNet.link = new LoopLink();
-        Game kn = new Game(kidNet);
-        kn.resize(width, height);
-        tapBtn(kn, Game.B_FRIENDS);
-        if (kn.ui.find(606) != null) throw new IllegalStateException("online toggle offered to a 12-year-old");
-        run(kn, 0.4f);
-        shot(kn, font, width, height, outDir + "/0f_friends_young.png");
         Game again = new Game(fresh);
         if (again.screenId() != Game.MENU) throw new IllegalStateException("onboarding shown twice");
         again.resize(width, height);

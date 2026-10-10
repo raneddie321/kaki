@@ -3,13 +3,13 @@ package com.snakebrawl.myapp.game;
 import java.util.List;
 
 /**
- * Multiplayer lobby: host a room or join a friend's room, then start together. On Android rooms are
- * on the local Wi-Fi; in the browser they are online and joined with a room code.
+ * Multiplayer lobby: host a room or join a friend's room on the same Wi-Fi, then start together.
+ * There is no internet play; the browser version has no multiplayer.
  */
 final class FriendsScreen {
     static final int B_FIRST = 600;
     private static final int B_HOST = 600, B_JOIN = 601, B_MODE = 602, B_CANCEL = 603, B_START = 604, B_ADDRESS = 605,
-            B_NETWORK = 606, B_MAP = 607, B_INVITE = 608, B_ROOM = 610;
+            B_MAP = 607, B_INVITE = 608, B_ROOM = 610;
     static final int B_LAST = 640;
 
     static final int HOME = 0, HOSTING = 1, SEARCHING = 2, GUEST_LOBBY = 3;
@@ -33,32 +33,20 @@ final class FriendsScreen {
     private List<NetSession.Room> shownRooms = new java.util.ArrayList<NetSession.Room>();
     private float roomRefresh;
     private String lastError;
-    /** Online (internet, works with browser players) or local Wi-Fi. */
-    boolean online;
 
     FriendsScreen(Game game) {
         this.game = game;
         this.ui = game.ui;
-        online = OnlineSession.available(game.gated) || !Lan.available();
     }
 
-    /** Online play is only offered to players old enough for it (see Profile.ONLINE_AGE). */
-    private boolean onlineOk() {
-        return OnlineSession.available(game.gated) && game.profile.canPlayOnline();
-    }
-
-    /** Nothing to play with: browser build (no Wi-Fi play) and too young for online play. */
+    /** Nothing to play with: the browser version has no Wi-Fi play. */
     private boolean blocked() {
-        return !Lan.available() && !onlineOk();
+        return !Lan.available();
     }
 
-    /** True when the current (or chosen) connection is local Wi-Fi. */
+    /** Always local Wi-Fi now (kept as a method so the texts read clearly). */
     private boolean lanMode() {
-        return net != null ? net.lan() : !online;
-    }
-
-    private boolean bothNetworks() {
-        return Lan.available() && onlineOk();
+        return true;
     }
 
     static boolean handles(int id) {
@@ -252,29 +240,18 @@ final class FriendsScreen {
 
     void onButton(int id) {
         switch (id) {
-            case B_NETWORK:
-                online = !online && onlineOk();
-                break;
             case B_HOST:
-                if (online && !onlineOk()) return;
-                if (online) {
-                    net = OnlineSession.host(game.gated);
-                } else {
-                    net = Lan.host(game.profile.displayName());
-                    game.gated.setNetworkDiscovery(true);
-                }
+                if (blocked()) return;
+                net = Lan.host(game.profile.displayName());
+                game.gated.setNetworkDiscovery(true);
                 clearRoster();
                 roster[0] = me();
                 state = HOSTING;
                 break;
             case B_JOIN:
-                if (online && !onlineOk()) return;
-                if (online) {
-                    net = OnlineSession.search(game.gated);
-                } else {
-                    game.gated.setNetworkDiscovery(true);
-                    net = Lan.search(game.profile.displayName());
-                }
+                if (blocked()) return;
+                game.gated.setNetworkDiscovery(true);
+                net = Lan.search(game.profile.displayName());
                 shownRooms = new java.util.ArrayList<NetSession.Room>();
                 lastError = null;
                 clearRoster();
@@ -355,17 +332,12 @@ final class FriendsScreen {
         float bottom = h - game.padB - 30 * u;
         switch (state) {
             case HOME: {
-                online = Lan.available() ? online && onlineOk() : true;
                 if (blocked()) break;
                 float cw = 560 * u, ch = 430 * u, top = game.padT + 190 * u;
                 ui.add(B_HOST, cx - cw - 30 * u, top, cx - 30 * u, top + ch, null, null, 0);
                 ui.add(B_JOIN, cx + 30 * u, top, cx + cw + 30 * u, top + ch, null, null, 0);
                 ui.add(B_INVITE, cx - 260 * u, top + ch + 40 * u, cx + 260 * u, top + ch + 150 * u, "INVITE FRIENDS",
                         "Send them the game", 0xff4ad04a);
-                if (bothNetworks()) {
-                    ui.add(B_NETWORK, w - game.padR - 430 * u, game.padT + 10 * u, w - game.padR - 10 * u, game.padT + 120 * u,
-                            online ? "ONLINE" : "WI-FI", online ? "Tap for Wi-Fi" : "Tap for online", online ? 0xff3fb6a8 : 0xff6a5cff);
-                }
                 break;
             }
             case HOSTING: {
@@ -436,9 +408,9 @@ final class FriendsScreen {
         float u = game.u, w = game.w, h = game.h;
         if (blocked()) {
             g.color(0xffffffff);
-            g.text("ONLINE PLAY IS FOR AGES " + Profile.ONLINE_AGE + "+", w / 2, h * 0.45f, 56 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
+            g.text("PLAY WITH FRIENDS IN THE APP", w / 2, h * 0.45f, 56 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
             g.color(0xffb8bdf0);
-            g.text("To keep younger players safe, playing online with others is turned off.", w / 2, h * 0.45f + 70 * u, 32 * u,
+            g.text("Friends play together on the same Wi-Fi in the Snake Brawl app.", w / 2, h * 0.45f + 70 * u, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
             g.text("You can still play Showdown, Duo and Endless against bots!", w / 2, h * 0.45f + 115 * u, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
@@ -447,10 +419,7 @@ final class FriendsScreen {
         drawChoice(g, ui.find(B_HOST), 0xffff7a2e, "HOST A ROOM", "Your friend joins you", true);
         drawChoice(g, ui.find(B_JOIN), 0xff3fa0ff, "JOIN A ROOM", "Find your friend's room", false);
         g.color(0xffb8bdf0);
-        String note = lanMode() ? "Both phones must be on the same Wi-Fi network (or one phone's hotspot)."
-                : "Play online with a friend anywhere, in the app or the browser: share your room code.";
-        if (lanMode() && !game.profile.canPlayOnline()) note = "Play with a friend next to you on the same Wi-Fi. Online play is for ages "
-                + Profile.ONLINE_AGE + "+.";
+        String note = "Up to 3 phones on the same Wi-Fi network (or one phone's hotspot).";
         g.text(note, w / 2, h - game.padB - 90 * u, 32 * u,
                 Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }

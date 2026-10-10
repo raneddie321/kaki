@@ -161,7 +161,7 @@ final class BotBrain {
             wantBoost = dist < 380 && me.mass > 90 && MathUtil.rand() < skill;
             return MathUtil.angleTo(hx, hy, tx, ty);
         }
-        if (me.type.id == Brawler.BLAZE || me.type.id == Brawler.RUMBLE) {
+        if (me.type.id == Brawler.BLAZE || me.type.id == Brawler.RUMBLE || me.type.id == Brawler.REAPER) {
             return toT;
         }
         float ideal = me.type.range * 0.7f;
@@ -196,6 +196,9 @@ final class BotBrain {
             else if (b.id == Brawler.ZIGGY) use = d < 500;
             else if (b.id == Brawler.COBRA) use = d < 460;
             else if (b.id == Brawler.RUMBLE) use = d < 330;
+            else if (b.id == Brawler.REAPER) use = d < 360;
+            else if (b.id == Brawler.MAGMA) use = d < 420;
+            else if (b.id == Brawler.JOKER) use = d < 520;
             else if (b.id == Brawler.SHADE) {
                 // Shadow Step is an escape: blink away from danger and vanish
                 if (me.hp < me.maxHp * 0.5f && me.trySuper(w, MathUtil.angleTo(t.hx(), t.hy(), me.hx(), me.hy()), b.superRange)) return;

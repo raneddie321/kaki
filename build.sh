@@ -73,10 +73,8 @@ echo "build-tools: $BT"
 rm -rf "$OUT"
 mkdir -p "$OUT"/res "$OUT"/gen "$OUT"/classes "$OUT"/dex "$OUT"/apk "$OUT"/aab/base "$DIST"
 
-# Assets: the app's own plus the browser version's WebRTC code, which the app runs for online play
-mkdir -p "$OUT/assets/net"
+mkdir -p "$OUT/assets"
 cp -r app/src/main/assets/. "$OUT/assets/"
-cp web/static/vendor/peerjs.min.js web/static/sb-net.js "$OUT/assets/net/"
 
 # Libraries: drop AARs or JARs into libs/ (e.g. Google Play Billing). Their classes are dexed in
 # and their manifests merged. Without the billing AAR the game simply hides the coin store.

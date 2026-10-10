@@ -1188,6 +1188,14 @@ final class World {
                 return 0xffffb07a;
             case Brawler.NOVA:
                 return 0xffc8aaff;
+            case Brawler.JOKER:
+                return 0xffff6ad0;
+            case Brawler.REAPER:
+                return 0xff8affd8;
+            case Brawler.MAGMA:
+                return 0xffff8a2a;
+            case Brawler.GLITCH:
+                return 0xff2affd0;
             default:
                 return 0xffffd060;
         }
@@ -1356,6 +1364,77 @@ final class World {
                     sound(Platform.SND_BOLT, mx, my, 0.6f);
                 }
                 break;
+            case Brawler.JOKER:
+                if (sup) {
+                    for (int i = 0; i < 18; i++) {
+                        float a = ang + MathUtil.TAU * i / 18f;
+                        float sp = 1150 + (i % 3) * 180;
+                        Projectile p = spawnProj(Projectile.CARD, s, s.hx() + MathUtil.cos(a) * hr, s.hy() + MathUtil.sin(a) * hr, a, sp,
+                                s.type.superRange, 430 * mult, 12, 150, false);
+                        if (p != null) p.bounces = 2;
+                    }
+                    fx.ring(s.hx(), s.hy(), 140, 0xffff6ad0, 0.35f);
+                    fx.burst(s.hx(), s.hy(), 24, 0xffffe14a, 500, 8, 0.5f);
+                    sound(Platform.SND_SUPER, mx, my, 0.9f);
+                } else {
+                    for (int i = -1; i <= 1; i++) {
+                        Projectile p = spawnProj(Projectile.CARD, s, mx, my, ang + i * 0.14f + MathUtil.rand(-0.05f, 0.05f),
+                                MathUtil.rand(1350, 1600), s.type.range, s.type.damage * mult, 11, 100, false);
+                        if (p == null) continue;
+                        // Every card is a surprise
+                        float r = MathUtil.rand();
+                        if (r < 0.34f) p.bounces = 1;
+                        else if (r < 0.67f) {
+                            p.slowFactor = 0.55f;
+                            p.slowDur = 1.2f;
+                        } else p.damage *= 1.35f;
+                    }
+                    sound(Platform.SND_THROW, mx, my, 0.7f);
+                }
+                break;
+            case Brawler.REAPER:
+                if (sup) {
+                    soulHarvest(s, s.type.superRange, 1300 * mult);
+                    sound(Platform.SND_SUPER, mx, my, 1f);
+                } else {
+                    for (int i = -1; i <= 1; i++)
+                        spawnProj(Projectile.SLASH, s, mx, my, ang + i * 0.38f, 1150, s.type.range, s.type.damage * mult, 26, 160, false);
+                    sound(Platform.SND_SHOTGUN, mx, my, 0.6f);
+                }
+                break;
+            case Brawler.MAGMA:
+                if (sup) {
+                    s.burstLeft = 9;
+                    s.burstInterval = 0.12f;
+                    s.burstTimer = 0;
+                    s.burstAng = ang;
+                    s.burstSuper = true;
+                    fx.ring(s.hx(), s.hy(), 160, 0xffff8a2a, 0.4f);
+                    fx.fireball(s.hx(), s.hy(), 110, 0.5f);
+                    shakeAt(s.hx(), s.hy(), 10);
+                    sound(Platform.SND_EXPLODE, mx, my, 0.9f);
+                } else {
+                    float d = MathUtil.clamp(dist, 140, s.type.range);
+                    for (int i = -1; i <= 1; i++) {
+                        float a = ang + i * 0.16f;
+                        float dd = d * (i == 0 ? 1f : 0.86f);
+                        lavaBlob(s, mx, my, s.hx() + MathUtil.cos(a) * dd, s.hy() + MathUtil.sin(a) * dd, s.type.damage * mult, 70, 0.6f + i * i * 0.08f);
+                    }
+                    sound(Platform.SND_THROW, mx, my, 0.8f);
+                }
+                break;
+            case Brawler.GLITCH:
+                if (sup) {
+                    systemCrash(s, ang, dist, 1150 * mult);
+                    sound(Platform.SND_EXPLODE, mx, my, 1f);
+                } else {
+                    for (int i = -1; i <= 1; i += 2) {
+                        Projectile p = spawnProj(Projectile.PIXEL, s, mx, my, ang + i * 0.045f, 2300, s.type.range, s.type.damage * mult, 9, 120, false);
+                        if (p != null) p.throughWalls = true;
+                    }
+                    sound(Platform.SND_BOLT, mx, my, 0.8f);
+                }
+                break;
             case Brawler.BLAZE:
             default:
                 if (sup) {
@@ -1416,6 +1495,13 @@ final class World {
                 p.t = 0;
                 p.aoe = 120;
             }
+        } else if (s.type.id == Brawler.MAGMA) {
+            // Eruption: lava rocks rain down all around Magma
+            float a = MathUtil.rand(0, MathUtil.TAU);
+            float d = MathUtil.rand(140, s.type.superRange);
+            float tx = MathUtil.clamp(s.hx() + MathUtil.cos(a) * d, 0, size), ty = MathUtil.clamp(s.hy() + MathUtil.sin(a) * d, 0, size);
+            Projectile p = lavaBlob(s, s.hx(), s.hy(), tx, ty, 620 * mult, 115, 0.65f);
+            if (p != null) p.radius = 17;
         } else if (s.type.id == Brawler.ZIGGY) {
             float a = s.burstAng + MathUtil.rand(-0.05f, 0.05f);
             float mx = s.hx() + MathUtil.cos(a) * hr, my = s.hy() + MathUtil.sin(a) * hr;
@@ -1477,7 +1563,7 @@ final class World {
             float step = (float) Math.sqrt(p.vx * p.vx + p.vy * p.vy) * dt;
             p.traveled += step;
             if (p.kind == Projectile.FLAME) p.radius = 12f + 20f * (p.traveled / p.range);
-            if (p.kind == Projectile.BALL && p.traveled < p.range && p.bounces > 0
+            if ((p.kind == Projectile.BALL || p.kind == Projectile.CARD) && p.traveled < p.range && p.bounces > 0
                     && (p.x < 0 || p.y < 0 || p.x >= size || p.y >= size || tiles[(int) (p.y / T) * n + (int) (p.x / T)] == WALL)) {
                 boolean flipX = solidAt(p.x, p.py), flipY = solidAt(p.px, p.y);
                 if (!flipX && !flipY) flipX = flipY = true;
@@ -1578,9 +1664,22 @@ final class World {
             splash(p, x, y, r);
             return;
         }
+        if (p.kind == Projectile.LAVA) {
+            float mult = p.owner != null ? p.owner.damageMult() : 1f;
+            addArea(x, y, r * 0.85f, 2.6f, 420 * mult, p.owner, true);
+            fx.fireball(x, y, r * 0.9f, 0.4f);
+            fx.ring(x, y, r, 0xffffb03a, 0.35f);
+            fx.burst(x, y, 16, 0xffff6a1a, r * 3f, 8, 0.5f);
+            fx.smoke(x, y, 3, 0xff4a2a20, r * 0.4f, 0.7f);
+            addDecal(x, y, r * 0.7f);
+            sound(Platform.SND_EXPLODE, x, y, 0.4f);
+            shakeAt(x, y, 4);
+            splash(p, x, y, r);
+            return;
+        }
         if (p.kind == Projectile.GLOB || p.kind == Projectile.MEGAGLOB) {
             boolean big = p.kind == Projectile.MEGAGLOB;
-            addArea(x, y, r, big ? 5f : 3f, (big ? 850 : 650) * (p.owner != null ? p.owner.damageMult() : 1f), p.owner);
+            addArea(x, y, r, big ? 5f : 3f, (big ? 850 : 650) * (p.owner != null ? p.owner.damageMult() : 1f), p.owner, false);
             fx.burst(x, y, big ? 30 : 16, 0xffa6ff3a, r * 3f, 9, 0.5f);
             fx.ring(x, y, r, 0xffa6ff3a, 0.35f);
             fx.flash(x, y, r * 1.3f, 0xffa6ff3a, 0.2f);
@@ -1716,6 +1815,90 @@ final class World {
         }
     }
 
+    /** Magma's lava blob: lobbed to (tx, ty), bursts into burning ground. */
+    private Projectile lavaBlob(Snake s, float sx, float sy, float tx, float ty, float dmg, float aoe, float flight) {
+        Projectile p = spawnProj(Projectile.LAVA, s, sx, sy, 0, 0, s.type.superRange, dmg, 12, 140, true);
+        if (p != null) {
+            p.startX = sx;
+            p.startY = sy;
+            p.targetX = MathUtil.clamp(tx, 0, size);
+            p.targetY = MathUtil.clamp(ty, 0, size);
+            p.flight = flight;
+            p.t = 0;
+            p.aoe = aoe;
+        }
+        return p;
+    }
+
+    /** Reaper's Soul Harvest: pulls nearby snakes in and drains their life. */
+    private void soulHarvest(Snake s, float radius, float dmg) {
+        float x = s.hx(), y = s.hy();
+        fx.ring(x, y, radius, 0xff8affd8, 0.5f);
+        fx.ring(x, y, radius * 0.55f, 0xff3a3a52, 0.45f);
+        fx.burst(x, y, 36, 0xff8affd8, radius * 2.2f, 9, 0.6f);
+        fx.smoke(x, y, 6, 0xff1c1c2a, radius * 0.3f, 0.7f);
+        shakeAt(x, y, 12);
+        for (int i = 0; i < snakeCount; i++) {
+            Snake o = snakes[i];
+            if (o == s || !o.alive || sameTeam(o, s)) continue;
+            if (x < o.minX - radius || x > o.maxX + radius || y < o.minY - radius || y > o.maxY + radius) continue;
+            for (int j = 0; j < o.segs; j += 2) {
+                float rr = radius + o.radius;
+                if (MathUtil.dist2(x, y, o.sx[j], o.sy[j]) < rr * rr) {
+                    // Negative knockback pulls the victim towards the Reaper
+                    hurt(o, dmg, s, o.sx[j], o.sy[j], MathUtil.angleTo(x, y, o.sx[j], o.sy[j]), -380, CAUSE_SHOT);
+                    slow(o, 0.6f, 1.2f);
+                    fx.add(Particles.DOT, o.sx[j], o.sy[j], (x - o.sx[j]) * 1.5f, (y - o.sy[j]) * 1.5f, 9, 0xff8affd8, 0.6f);
+                    break;
+                }
+            }
+        }
+    }
+
+    /** A blast at (x, y) that damages, knocks back and slows (Glitch's System Crash). */
+    private void blastAt(Snake s, float x, float y, float radius, float dmg) {
+        fx.ring(x, y, radius, 0xff2affd0, 0.45f);
+        fx.ring(x, y, radius * 0.7f, 0xffff2aa8, 0.4f);
+        fx.flash(x, y, radius * 1.4f, 0xffffffff, 0.15f);
+        fx.burst(x, y, 30, 0xff2affd0, radius * 3f, 9, 0.5f);
+        fx.burst(x, y, 20, 0xffff2aa8, radius * 2.5f, 8, 0.5f);
+        shakeAt(x, y, 12);
+        for (int i = 0; i < snakeCount; i++) {
+            Snake o = snakes[i];
+            if (o == s || !o.alive || sameTeam(o, s)) continue;
+            if (x < o.minX - radius || x > o.maxX + radius || y < o.minY - radius || y > o.maxY + radius) continue;
+            for (int j = 0; j < o.segs; j += 2) {
+                float rr = radius + o.radius;
+                if (MathUtil.dist2(x, y, o.sx[j], o.sy[j]) < rr * rr) {
+                    hurt(o, dmg, s, o.sx[j], o.sy[j], MathUtil.angleTo(x, y, o.sx[j], o.sy[j]), 420, CAUSE_SHOT);
+                    slow(o, 0.5f, 1.5f);
+                    break;
+                }
+            }
+        }
+    }
+
+    /** Glitch's System Crash: blows up where it stands, teleports, and blows up again. */
+    private void systemCrash(Snake s, float ang, float dist, float dmg) {
+        float ox = s.hx(), oy = s.hy();
+        blastAt(s, ox, oy, 170, dmg * 0.7f);
+        float d = MathUtil.clamp(dist, 180, s.type.superRange);
+        float tx = ox, ty = oy;
+        for (float k = d; k > 0; k -= 20) {
+            float x = ox + MathUtil.cos(ang) * k, y = oy + MathUtil.sin(ang) * k;
+            if (!solidCircle(x, y, s.radius)) {
+                tx = x;
+                ty = y;
+                break;
+            }
+        }
+        s.sx[0] = tx;
+        s.sy[0] = ty;
+        s.ang = s.targetAng = ang;
+        s.spawnShield = Math.max(s.spawnShield, 0.4f);
+        blastAt(s, tx, ty, 210, dmg);
+    }
+
     /** Shade's Shadow Step: blink forward and turn invisible. */
     private void shadowStep(Snake s, float ang, float dist) {
         float d = MathUtil.clamp(dist, 180, s.type.superRange);
@@ -1744,11 +1927,14 @@ final class World {
     private final float[] areaLife = new float[MAX_AREAS], areaMax = new float[MAX_AREAS], areaDps = new float[MAX_AREAS];
     private final float[] areaTick = new float[MAX_AREAS];
     private final Snake[] areaOwner = new Snake[MAX_AREAS];
+    /** Magma's burning ground instead of Toxin's poison. */
+    private final boolean[] areaLava = new boolean[MAX_AREAS];
     private int areaCount;
 
-    private void addArea(float x, float y, float r, float life, float dps, Snake owner) {
+    private void addArea(float x, float y, float r, float life, float dps, Snake owner, boolean lava) {
         if (areaCount >= MAX_AREAS) return;
         int i = areaCount++;
+        areaLava[i] = lava;
         areaX[i] = x;
         areaY[i] = y;
         areaR[i] = r;
@@ -1771,6 +1957,7 @@ final class World {
                 areaDps[i] = areaDps[last];
                 areaTick[i] = areaTick[last];
                 areaOwner[i] = areaOwner[last];
+                areaLava[i] = areaLava[last];
                 areaOwner[last] = null;
                 i--;
                 continue;
@@ -1799,6 +1986,21 @@ final class World {
             float x = areaX[i], y = areaY[i], rad = areaR[i];
             if (x < l - rad || x > r + rad || y < t - rad || y > b + rad) continue;
             float f = Math.min(1f, areaLife[i] / 0.4f) * Math.min(1f, (areaMax[i] - areaLife[i]) / 0.2f + 0.3f);
+            if (areaLava[i]) {
+                // Glowing lava pool with bubbles
+                if (!lowGraphics) g.radial(x, y, rad * 1.25f, MathUtil.withAlpha(0xffff6a1a, 0.5f * f), 0x00ff3a0a);
+                g.color(MathUtil.withAlpha(0xff5a1a0a, 0.7f * f));
+                g.fillCircle(x, y, rad * 0.9f);
+                g.color(MathUtil.withAlpha(0xffff5a1a, 0.75f * f));
+                g.fillCircle(x, y, rad * 0.74f);
+                g.color(MathUtil.withAlpha(0xffffc23f, 0.8f * f));
+                for (int k = 0; k < 6; k++) {
+                    float a = k * 1.1f + i * 0.7f;
+                    float ph = (tt * 1.2f + k * 0.17f) % 1f;
+                    g.fillCircle(x + MathUtil.cos(a) * rad * 0.45f, y + MathUtil.sin(a) * rad * 0.45f, rad * 0.13f * (1f - ph));
+                }
+                continue;
+            }
             g.color(MathUtil.withAlpha(0xff6a2bd1, 0.35f * f));
             g.fillCircle(x, y, rad);
             g.color(MathUtil.withAlpha(0xffa6ff3a, 0.45f * f));
@@ -1821,6 +2023,13 @@ final class World {
         // Easier fights: the player shrugs off a good part of every hit
         if (v.isPlayer) dmg *= PLAYER_DAMAGE_TAKEN;
         v.hp -= dmg;
+        // Reaper heals from every hit it lands
+        if (by != null && by != v && by.alive && by.type.id == Brawler.REAPER && cause != CAUSE_POISON) {
+            float heal = dmg * 0.35f;
+            by.hp = Math.min(by.maxHp, by.hp + heal);
+            if (heal > 40 && (by == player || isNearCamera(by.hx(), by.hy())) && MathUtil.frand() < 0.5f)
+                fx.text(by.hx(), by.hy() - by.radius - 70, "+" + (int) heal, 0xff8affd8, 26);
+        }
         v.hitFlash = 0.12f;
         v.sinceDamaged = 0;
         if (by != null && by != v) {
@@ -1903,6 +2112,9 @@ final class World {
         for (int j = 0; j < v.segs; j += 4) fx.burst(v.sx[j], v.sy[j], 2, v.color1, 220, 10, 0.6f);
         fx.burst(v.hx(), v.hy(), 26, 0xffffffff, 420, 8, 0.6f);
         fx.ring(v.hx(), v.hy(), 140, v.color1, 0.5f);
+        fx.ring(v.hx(), v.hy(), 220, 0xffffffff, 0.35f);
+        fx.flash(v.hx(), v.hy(), 240, MathUtil.lighter(v.color1, 0.3f), 0.25f);
+        fx.burst(v.hx(), v.hy(), 14, 0xffffd23f, 520, 6, 0.5f);
         fx.smoke(v.hx(), v.hy(), 8, 0xff404040, 40, 1f);
         shakeAt(v.hx(), v.hy(), 10);
 
@@ -2653,6 +2865,14 @@ final class World {
             case Projectile.ORB:
             case Projectile.METEOR:
                 return 0xffb89aff;
+            case Projectile.CARD:
+                return 0xffff6ad0;
+            case Projectile.SLASH:
+                return 0xff8affd8;
+            case Projectile.LAVA:
+                return 0xffff7a1a;
+            case Projectile.PIXEL:
+                return 0xff2affd0;
             default:
                 return 0xffffa62e;
         }
@@ -2908,6 +3128,81 @@ final class World {
                     g.fillCircle(p.x - ca * p.radius * 0.3f, p.y - sa * p.radius * 0.3f, p.radius * 0.45f);
                     break;
                 }
+                case Projectile.CARD: {
+                    // Spinning playing card with a suit
+                    float spin = tt * 14f + p.x * 0.01f;
+                    float w = p.radius * 1.15f, h = p.radius * 1.6f;
+                    g.save();
+                    g.translate(p.x, p.y);
+                    g.rotate((float) Math.toDegrees(spin));
+                    g.color(0xff2a1040);
+                    g.fillRoundRect(-w - 2, -h - 2, w + 2, h + 2, 5);
+                    int face = p.bounces > 0 ? 0xffffe14a : p.slowDur > 0 ? 0xffbff0ff : 0xffffffff;
+                    g.color(face);
+                    g.fillRoundRect(-w, -h, w, h, 4);
+                    g.color(p.slowDur > 0 ? 0xff2a7ad8 : 0xffe8204a);
+                    g.fillCircle(-w * 0.28f, -h * 0.18f, w * 0.34f);
+                    g.fillCircle(w * 0.28f, -h * 0.18f, w * 0.34f);
+                    poly4[0] = -w * 0.62f;
+                    poly4[1] = -h * 0.05f;
+                    poly4[2] = w * 0.62f;
+                    poly4[3] = -h * 0.05f;
+                    poly4[4] = 0;
+                    poly4[5] = h * 0.55f;
+                    g.fillPoly(poly4, 3);
+                    g.restore();
+                    break;
+                }
+                case Projectile.SLASH: {
+                    float a = (float) MathUtil.atan2(p.vy, p.vx);
+                    float f = p.traveled / p.range;
+                    float deg = (float) Math.toDegrees(a);
+                    float rr = p.radius * (1.2f + f * 0.4f);
+                    float cx = p.x - MathUtil.cos(a) * rr * 0.6f, cy = p.y - MathUtil.sin(a) * rr * 0.6f;
+                    g.color(MathUtil.withAlpha(0xff12121e, 0.8f * (1f - f * 0.5f)));
+                    g.arc(cx, cy, rr, deg - 75, 150, p.radius * 0.55f);
+                    g.color(MathUtil.withAlpha(0xff8affd8, 0.95f * (1f - f * 0.5f)));
+                    g.arc(cx, cy, rr, deg - 65, 130, p.radius * 0.3f);
+                    g.color(MathUtil.withAlpha(0xffffffff, 0.9f * (1f - f)));
+                    g.arc(cx, cy, rr, deg - 40, 80, p.radius * 0.1f);
+                    break;
+                }
+                case Projectile.LAVA: {
+                    float f = Math.min(1f, p.t / p.flight);
+                    float hgt = MathUtil.sin(f * MathUtil.PI) * 120;
+                    g.color(MathUtil.withAlpha(0xffff6a1a, 0.18f + 0.3f * f));
+                    g.fillCircle(p.targetX, p.targetY, p.aoe * f);
+                    g.color(0x99ff8a2a);
+                    g.strokeCircle(p.targetX, p.targetY, p.aoe, 3);
+                    g.color(0x44000000);
+                    g.fillCircle(p.x, p.y, p.radius * 0.9f);
+                    float by = p.y - hgt;
+                    if (fancy) g.radial(p.x, by, p.radius * 2.8f, 0xccff8a2a, 0x00ff3a0a);
+                    g.color(0xff3a1410);
+                    g.fillCircle(p.x, by, p.radius + 2.5f);
+                    g.color(0xffff5a1a);
+                    g.fillCircle(p.x, by, p.radius);
+                    g.color(0xffffd23f);
+                    g.fillCircle(p.x - p.radius * 0.25f, by - p.radius * 0.3f, p.radius * 0.45f);
+                    if (MathUtil.frand() < 0.4f) fx.add(Particles.DOT, p.x, by, MathUtil.frand(-30, 30), 40, 5, 0xffff8a2a, 0.35f);
+                    break;
+                }
+                case Projectile.PIXEL: {
+                    // A glitchy beam: square pixels flickering between two colours
+                    float a = (float) MathUtil.atan2(p.vy, p.vx);
+                    float ca = MathUtil.cos(a), sa = MathUtil.sin(a);
+                    for (int k = 0; k < 6; k++) {
+                        float back = k * 16f;
+                        float jit = ((int) (tt * 30f + k * 7) % 3 - 1) * 4f;
+                        float x = p.x - ca * back - sa * jit, y = p.y - sa * back + ca * jit;
+                        float sz = p.radius * (1f - k * 0.12f);
+                        g.color(((int) (tt * 20f) + k) % 2 == 0 ? 0xff2affd0 : 0xffff2aa8);
+                        g.fillRect(x - sz, y - sz, x + sz, y + sz);
+                    }
+                    g.color(0xffffffff);
+                    g.fillRect(p.x - p.radius * 0.5f, p.y - p.radius * 0.5f, p.x + p.radius * 0.5f, p.y + p.radius * 0.5f);
+                    break;
+                }
                 case Projectile.FLAME:
                 default: {
                     float f = p.traveled / p.range;
@@ -3136,6 +3431,24 @@ final class World {
         g.fillCircle(x, y, 3.5f);
     }
 
+    private void drawAimCone(Gfx g, float hx, float hy, float range, float spread, int col, int edge) {
+        int segs = 10;
+        int k = 1;
+        float[] poly = tmpPoly;
+        poly[0] = hx;
+        poly[1] = hy;
+        for (int i = 0; i <= segs; i++) {
+            float a = aimAng - spread + 2 * spread * i / segs;
+            poly[k * 2] = hx + MathUtil.cos(a) * range;
+            poly[k * 2 + 1] = hy + MathUtil.sin(a) * range;
+            k++;
+        }
+        g.color(col);
+        g.fillPoly(poly, k);
+        g.color(edge);
+        g.arc(hx, hy, range, (float) Math.toDegrees(aimAng - spread), (float) Math.toDegrees(2 * spread), 4);
+    }
+
     private void drawAim(Gfx g) {
         if (!aimActive || player == null || !player.alive) return;
         Snake s = player;
@@ -3145,6 +3458,42 @@ final class World {
         float ca = MathUtil.cos(aimAng), sa = MathUtil.sin(aimAng);
         float range = aimSuper ? s.type.superRange : s.type.range;
         switch (s.type.id) {
+            case Brawler.JOKER:
+            case Brawler.REAPER:
+            case Brawler.MAGMA:
+                if (aimSuper) {
+                    g.color(col);
+                    g.fillCircle(hx, hy, range);
+                    g.color(edge);
+                    g.strokeCircle(hx, hy, range, 4);
+                    break;
+                }
+                if (s.type.id == Brawler.MAGMA) {
+                    float d = MathUtil.clamp(aimDist, 140, range);
+                    g.color(col);
+                    for (int i = -1; i <= 1; i++) {
+                        float a = aimAng + i * 0.16f, dd = d * (i == 0 ? 1f : 0.86f);
+                        g.fillCircle(hx + MathUtil.cos(a) * dd, hy + MathUtil.sin(a) * dd, 70);
+                    }
+                    g.color(edge);
+                    g.strokeCircle(hx + ca * d, hy + sa * d, 70, 4);
+                    break;
+                }
+                drawAimCone(g, hx, hy, range, s.type.id == Brawler.REAPER ? 0.5f : 0.2f, col, edge);
+                break;
+            case Brawler.GLITCH: {
+                if (!aimSuper) {
+                    drawAimLane(g, hx, hy, ca, sa, range, 14, col, edge);
+                    break;
+                }
+                float d = MathUtil.clamp(aimDist, 180, range);
+                drawAimLane(g, hx, hy, ca, sa, d, s.radius, col, edge);
+                g.color(col);
+                g.fillCircle(hx + ca * d, hy + sa * d, 210);
+                g.color(edge);
+                g.strokeCircle(hx + ca * d, hy + sa * d, 210, 4);
+                break;
+            }
             case Brawler.FROST:
             case Brawler.ZIGGY:
                 if (aimSuper) {

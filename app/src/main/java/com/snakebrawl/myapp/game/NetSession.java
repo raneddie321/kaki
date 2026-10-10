@@ -3,10 +3,9 @@ package com.snakebrawl.myapp.game;
 import java.util.List;
 
 /**
- * A connection to friends' games. Two kinds exist: {@link LanSession} (Android Wi-Fi, plain
- * sockets, up to {@link #MAX_PLAYERS} phones) and {@link OnlineSession} (internet rooms over
- * WebRTC between two players, in the app and the browser, so app and browser players can play
- * together). The game thread only calls the methods below; none of them block.
+ * A connection to friends' games on the same Wi-Fi ({@link LanSession}: plain sockets, up to
+ * {@link #MAX_PLAYERS} phones). There is no internet play. The game thread only calls the methods
+ * below; none of them block.
  *
  * Players are numbered by slot: the host is slot 0 and guests get 1, 2, ... The host relays every
  * guest's messages to the other guests, so guests only ever talk to the host.
@@ -64,10 +63,10 @@ abstract class NetSession {
         this.host = host;
     }
 
-    /** Rooms found nearby (Wi-Fi only; online rooms are joined by code). */
+    /** Rooms found nearby on the Wi-Fi. */
     abstract List<Room> rooms();
 
-    /** Joins a room: a Wi-Fi address, or an online room code. */
+    /** Joins a room by its Wi-Fi address. */
     abstract void join(String address, int port);
 
     /** Next message, or null. Also handles keep-alive and timeouts. */

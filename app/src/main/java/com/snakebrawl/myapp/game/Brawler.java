@@ -14,6 +14,11 @@ final class Brawler {
     static final int THORN = 9;
     static final int RUMBLE = 10;
     static final int NOVA = 11;
+    // The crazy four: premium brawlers
+    static final int JOKER = 12;
+    static final int REAPER = 13;
+    static final int MAGMA = 14;
+    static final int GLITCH = 15;
 
     static final int MAX_LEVEL = 7;
     /** Coins to go from level i+1 to i+2. */
@@ -79,7 +84,7 @@ final class Brawler {
     }
 
     boolean lobbed() {
-        return id == BOOMER || id == TOXIN;
+        return id == BOOMER || id == TOXIN || id == MAGMA;
     }
 
     static final Brawler[] ALL = {
@@ -155,6 +160,30 @@ final class Brawler {
                     0xff9a7aff, 0xff35208a, 0xffffe066,
                     3300, 700, 720, 1.35f, 1.0f, 3000, 700,
                     2, 4, 5, 3, 4, 2500, 950),
+            new Brawler(JOKER, "JOKER", "Maniac",
+                    "Wild Cards", "3 crazy cards: some bounce, some freeze, some hit extra hard!",
+                    "Jack-in-the-Box", "A spiral of 18 bouncing cards in every direction. Total chaos!",
+                    0xffff2e8a, 0xff7a1fd6, 0xffffe14a,
+                    3400, 540, 650, 1.2f, 1.08f, 2900, 720,
+                    3, 4, 4, 4, 4, 3000, 1500),
+            new Brawler(REAPER, "REAPER", "Soul Eater",
+                    "Scythe Slash", "Three slashes up close. Heals you for every hit!",
+                    "Soul Harvest", "Pulls nearby snakes in and steals their life.",
+                    0xff3a3a52, 0xff12121e, 0xff8affd8,
+                    4600, 470, 380, 1.15f, 1.1f, 2900, 400,
+                    4, 5, 1, 5, 4, 3500, 1100),
+            new Brawler(MAGMA, "MAGMA", "Volcano",
+                    "Lava Burst", "Lobs 3 lava blobs that leave burning ground.",
+                    "Eruption", "Erupts! 9 lava rocks rain down all around.",
+                    0xffff5a1a, 0xff3a1410, 0xffffd23f,
+                    4200, 520, 600, 1.75f, 0.98f, 3100, 470,
+                    4, 4, 4, 2, 4, 4000, 0),
+            new Brawler(GLITCH, "GLITCH", "Hacker",
+                    "Data Beam", "Two laser beams that pass through walls.",
+                    "System Crash", "Teleports to the target and explodes on both ends.",
+                    0xff2affd0, 0xffff2aa8, 0xffffffff,
+                    3100, 430, 780, 1.45f, 1.12f, 3000, 560,
+                    2, 4, 5, 5, 4, 5000, 2300),
     };
 
     /** Colors used for bot snakes so each one is easy to tell apart. */

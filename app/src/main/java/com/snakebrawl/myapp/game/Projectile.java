@@ -19,6 +19,10 @@ final class Projectile {
     static final int WAVE = 15;
     static final int ORB = 16;
     static final int METEOR = 17;
+    static final int CARD = 18;
+    static final int SLASH = 19;
+    static final int LAVA = 20;
+    static final int PIXEL = 21;
 
     boolean active;
     int kind;
@@ -48,6 +52,6 @@ final class Projectile {
     float startX, startY, targetX, targetY, flight, t, aoe;
 
     boolean isBomb() {
-        return kind == BOMB || kind == MEGABOMB || kind == GLOB || kind == MEGAGLOB || kind == SEED || kind == METEOR;
+        return kind == BOMB || kind == MEGABOMB || kind == GLOB || kind == MEGAGLOB || kind == SEED || kind == METEOR || kind == LAVA;
     }
 }

@@ -55,47 +55,6 @@ public interface Platform {
     void setNetworkDiscovery(boolean on);
 
     /**
-     * Internet play over WebRTC (shared by the app and the browser so they can play together).
-     * State codes match {@link NetSession}: 0 waiting, 1 connecting, 2 connected, 3 closed.
-     * Messages are strings whose chars are byte values 0..255.
-     */
-    interface OnlineLink {
-        boolean available();
-
-        /** Opens a room; {@link #code()} becomes its room code. */
-        void host();
-
-        /** Gets ready to join a room. */
-        void search();
-
-        void join(String code);
-
-        int state();
-
-        /** Last error or close reason, or null. */
-        String reason();
-
-        void clearReason();
-
-        String code();
-
-        void send(String data);
-
-        /** Next received message, or null. */
-        String poll();
-
-        void close();
-
-        /** True when the game here runs with real 32-bit float math (needed for cross-play). */
-        boolean exactFloats();
-
-        boolean isBrowser();
-    }
-
-    /** Online play, or null when this platform has none. */
-    OnlineLink online();
-
-    /**
      * Opens the system share sheet (or copies the text) so the player can send it to friends.
      * Returns false when this platform can't share.
      */
