@@ -1418,7 +1418,7 @@ final class World {
                     for (int i = -1; i <= 1; i++) {
                         float a = ang + i * 0.16f;
                         float dd = d * (i == 0 ? 1f : 0.86f);
-                        lavaBlob(s, mx, my, s.hx() + MathUtil.cos(a) * dd, s.hy() + MathUtil.sin(a) * dd, s.type.damage * mult, 70, 0.6f + i * i * 0.08f);
+                        lavaBlob(s, mx, my, s.hx() + MathUtil.cos(a) * dd, s.hy() + MathUtil.sin(a) * dd, s.type.damage * mult * (i == 0 ? 1f : 0.7f), 70, 0.6f + i * i * 0.08f);
                     }
                     sound(Platform.SND_THROW, mx, my, 0.8f);
                 }
@@ -1500,7 +1500,7 @@ final class World {
             float a = MathUtil.rand(0, MathUtil.TAU);
             float d = MathUtil.rand(140, s.type.superRange);
             float tx = MathUtil.clamp(s.hx() + MathUtil.cos(a) * d, 0, size), ty = MathUtil.clamp(s.hy() + MathUtil.sin(a) * d, 0, size);
-            Projectile p = lavaBlob(s, s.hx(), s.hy(), tx, ty, 620 * mult, 115, 0.65f);
+            Projectile p = lavaBlob(s, s.hx(), s.hy(), tx, ty, 520 * mult, 110, 0.65f);
             if (p != null) p.radius = 17;
         } else if (s.type.id == Brawler.ZIGGY) {
             float a = s.burstAng + MathUtil.rand(-0.05f, 0.05f);
@@ -1666,7 +1666,7 @@ final class World {
         }
         if (p.kind == Projectile.LAVA) {
             float mult = p.owner != null ? p.owner.damageMult() : 1f;
-            addArea(x, y, r * 0.85f, 2.6f, 420 * mult, p.owner, true);
+            addArea(x, y, r * 0.75f, 2.2f, 300 * mult, p.owner, true);
             fx.fireball(x, y, r * 0.9f, 0.4f);
             fx.ring(x, y, r, 0xffffb03a, 0.35f);
             fx.burst(x, y, 16, 0xffff6a1a, r * 3f, 8, 0.5f);
@@ -1878,15 +1878,30 @@ final class World {
         }
     }
 
+    /** True if (x, y) is within r of another living snake's body. */
+    private boolean nearBody(Snake self, float x, float y, float r) {
+        for (int i = 0; i < snakeCount; i++) {
+            Snake o = snakes[i];
+            if (o == self || !o.alive) continue;
+            if (x < o.minX - r || x > o.maxX + r || y < o.minY - r || y > o.maxY + r) continue;
+            for (int j = 0; j < o.segs; j++) {
+                float rr = r + o.radius;
+                if (MathUtil.dist2(x, y, o.sx[j], o.sy[j]) < rr * rr) return true;
+            }
+        }
+        return false;
+    }
+
     /** Glitch's System Crash: blows up where it stands, teleports, and blows up again. */
     private void systemCrash(Snake s, float ang, float dist, float dmg) {
         float ox = s.hx(), oy = s.hy();
         blastAt(s, ox, oy, 170, dmg * 0.7f);
-        float d = MathUtil.clamp(dist, 180, s.type.superRange);
+        // Land a little short of the aim point, never inside a wall or another snake's body
+        float d = MathUtil.clamp(dist - 120, 180, s.type.superRange);
         float tx = ox, ty = oy;
         for (float k = d; k > 0; k -= 20) {
             float x = ox + MathUtil.cos(ang) * k, y = oy + MathUtil.sin(ang) * k;
-            if (!solidCircle(x, y, s.radius)) {
+            if (!solidCircle(x, y, s.radius) && !nearBody(s, x, y, s.radius * 3f)) {
                 tx = x;
                 ty = y;
                 break;
@@ -2025,7 +2040,7 @@ final class World {
         v.hp -= dmg;
         // Reaper heals from every hit it lands
         if (by != null && by != v && by.alive && by.type.id == Brawler.REAPER && cause != CAUSE_POISON) {
-            float heal = dmg * 0.35f;
+            float heal = dmg * 0.45f;
             by.hp = Math.min(by.maxHp, by.hp + heal);
             if (heal > 40 && (by == player || isNearCamera(by.hx(), by.hy())) && MathUtil.frand() < 0.5f)
                 fx.text(by.hx(), by.hy() - by.radius - 70, "+" + (int) heal, 0xff8affd8, 26);
