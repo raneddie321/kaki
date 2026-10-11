@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Sora Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  /* RanEddie brand (from the logo) */
+  --color-brand-50: #eef5ff;
+  --color-brand-100: #d9e8ff;
+  --color-brand-400: #4aa3ff;
+  --color-brand-500: #2f7bff;
+  --color-brand-600: #1f5fe6;
+  --color-brand-700: #1a4cc0;
+  --color-cyan-brand: #1fd0e0;
+
+  --color-ink: #0b1226;
+  --color-muted: #5b6478;
+  --color-line: #e3e8f2;
+  --color-field: #f5f7fc;
+  --color-night: #050916;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-night);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Page background: deep night with brand-coloured glows and a faint grid */
+.rid-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(60rem 40rem at 12% -10%, rgb(47 123 255 / 0.45), transparent 60%),
+    radial-gradient(50rem 36rem at 105% 110%, rgb(31 208 224 / 0.32), transparent 60%),
+    radial-gradient(30rem 24rem at 85% 0%, rgb(74 163 255 / 0.18), transparent 70%),
+    var(--color-night);
+}
+
+.rid-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+
+.rid-gradient-text {
+  background: linear-gradient(90deg, #4aa3ff, #1fd0e0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.rid-btn-primary {
+  background: linear-gradient(90deg, #1f5fe6 0%, #2f7bff 55%, #1fb8e0 100%);
+  box-shadow: 0 10px 24px -10px rgb(47 123 255 / 0.75);
+}
+
+.rid-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+@keyframes rid-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rid-step {
+  animation: rid-step-in 0.28s ease-out both;
+}
+
+@keyframes rid-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.rid-pop {
+  animation: rid-pop 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rid-step,
+  .rid-pop {
+    animation: none;
+  }
+}
