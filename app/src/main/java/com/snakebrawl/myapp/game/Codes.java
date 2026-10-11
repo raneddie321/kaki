@@ -188,7 +188,7 @@ final class Codes {
                     res.art = 1;
                 } else {
                     pr.unlocked |= 1 << a;
-                    res.title = "NEW BRAWLER!";
+                    res.title = "NEW SNAKE!";
                     res.text = Brawler.ALL[a].name + " joined your team!";
                     res.art = 3;
                     res.artArg = a;

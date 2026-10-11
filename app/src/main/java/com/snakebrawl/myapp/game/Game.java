@@ -685,7 +685,7 @@ public final class Game {
 
     /** Shares an invite to the game (system share sheet). */
     void invite() {
-        String text = "Play Snake Brawl with me! It's like snake.io with brawler powers. Get it on Google Play: "
+        String text = "Play Snake Brawl with me! It's like snake.io with super powers. Get it on Google Play: "
                 + "https://play.google.com/store/apps/details?id=com.snakebrawl.raneddie";
         if (!gated.share(text)) {
             showInfo("INVITE FRIENDS", "Tell your friends to search for Snake Brawl on Google Play!", 0, 0);
@@ -1582,7 +1582,7 @@ public final class Game {
                 // Left column: shop, club and brawlers; the Snake Pass card sits below them
                 ui.add(B_SHOP, pl, padT + 200 * u, pl + 300 * u, padT + 320 * u, "SHOP", "Skins & boxes", 0xffff5ab5);
                 // Clubs are hidden for now
-                ui.add(B_BRAWLERS, pl, padT + 345 * u, pl + 300 * u, padT + 465 * u, "BRAWLERS", Brawler.ALL.length + " snakes",
+                ui.add(B_BRAWLERS, pl, padT + 345 * u, pl + 300 * u, padT + 465 * u, "SNAKES", Brawler.ALL.length + " to collect",
                         0xff4ad04a);
                 ui.add(B_PASS, pl, b - 240 * u, pl + 470 * u, b, null, null, 0);
                 // Tap the brawler in the middle to change it

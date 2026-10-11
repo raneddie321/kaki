@@ -62,7 +62,7 @@ final class PassScreen {
     void onButton(int id) {
         if (id == B_PLUS) {
             game.confirm("SNAKE PASS+", "Unlock the golden track for this season for " + SnakePass.PLUS_PRICE
-                    + " coins? You get the " + Brawler.ALL[SnakePass.BRAWLER_PLUS].name + " brawler, the "
+                    + " coins? You get the " + Brawler.ALL[SnakePass.BRAWLER_PLUS].name + " snake, the "
                     + Skin.ALL[SnakePass.SKIN_PLUS].name + " skin, Mega Boxes and lots of coins.", 1, 0, Game.ACT_PASS_PLUS, 0);
             return;
         }
@@ -137,7 +137,7 @@ final class PassScreen {
                 } else {
                     pr.ownedSkins |= 1 << a;
                     pr.skin = a;
-                    if (announce) game.showInfo("NEW SKIN!", Skin.ALL[a].name + " is yours and equipped on all your brawlers.", 2, a);
+                    if (announce) game.showInfo("NEW SKIN!", Skin.ALL[a].name + " is yours and equipped on all your snakes.", 2, a);
                 }
                 pr.save();
                 game.gated.playSound(Platform.SND_VICTORY, 0.8f);
@@ -278,7 +278,7 @@ final class PassScreen {
                 ? "MEGA BOX" : type == SnakePass.R_SKIN ? Skin.ALL[a].name.toUpperCase() : Brawler.ALL[a].name;
         g.color(MathUtil.withAlpha(type >= SnakePass.R_SKIN ? 0xffffd23f : 0xffffffff, alpha));
         g.text(title, l + 180 * u, iy - 4 * u, Ui.fit(g, title, 40 * u, r - l - 200 * u), Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
-        String sub = type == SnakePass.R_SKIN ? "Exclusive skin" : type == SnakePass.R_BRAWLER ? "New brawler!"
+        String sub = type == SnakePass.R_SKIN ? "Exclusive skin" : type == SnakePass.R_BRAWLER ? "New snake!"
                 : type == SnakePass.R_COINS ? "Coins" : "Open for prizes";
         g.color(MathUtil.withAlpha(0xffb8bdf0, alpha));
         g.text(sub, l + 180 * u, iy + 38 * u, 26 * u, Gfx.ALIGN_LEFT, 3 * u, Ui.INK);

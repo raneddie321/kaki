@@ -173,7 +173,7 @@ final class SocialScreens {
                 pr.save();
                 game.gated.playSound(Platform.SND_VICTORY, 0.8f);
                 game.setScreen(Game.MENU);
-                game.showInfo("WELCOME, " + pr.nickname.toUpperCase() + "!", "Join a club to get a Duo partner, pick a brawler "
+                game.showInfo("WELCOME, " + pr.nickname.toUpperCase() + "!", "Join a club to get a Duo partner, pick a snake "
                         + "and jump into Showdown. Have fun!", 3, pr.selected);
                 return;
             case B_CLUB_CREATE:

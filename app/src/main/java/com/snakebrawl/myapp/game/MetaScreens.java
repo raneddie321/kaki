@@ -20,7 +20,7 @@ final class MetaScreens {
             + "Coin purchases are handled by Google Play; we never see payment details. "
             + "Questions: raneddie321@gmail.com";
 
-    private static final String[] TABS = {"OFFERS", "SKINS", "BRAWLERS", "COINS"};
+    private static final String[] TABS = {"OFFERS", "SKINS", "SNAKES", "COINS"};
     private static final String[] SETTING_NAMES = {"Sound", "Vibration", "Damage numbers", "Graphics",
             "Auto-aim on tap", "Left-handed controls", "Joystick size", "Camera"};
 
@@ -280,7 +280,7 @@ final class MetaScreens {
                 game.showInfo("PRIVACY", PRIVACY_TEXT, 0, 0);
                 return;
             case B_RESET:
-                game.confirm("RESET PROGRESS?", "This deletes your trophies, coins, skins, unlocked brawlers and upgrades. "
+                game.confirm("RESET PROGRESS?", "This deletes your trophies, coins, skins, unlocked snakes and upgrades. "
                         + "It cannot be undone!", 0, 0, Game.ACT_RESET, 0);
                 break;
             default:
@@ -346,7 +346,7 @@ final class MetaScreens {
                 pr.skin = arg;
                 pr.save();
                 game.gated.playSound(Platform.SND_KILL, 1f);
-                game.showInfo("NEW SKIN!", s.name + " is now equipped on all your brawlers.", 2, arg);
+                game.showInfo("NEW SKIN!", s.name + " is now equipped on all your snakes.", 2, arg);
                 break;
             }
             case Game.ACT_UNLOCK: {
@@ -462,7 +462,7 @@ final class MetaScreens {
         float u = game.u, w = game.w, h = game.h;
         g.color(0xcc0d1030);
         g.fillRect(0, 0, w, h);
-        String title = game.screen == Game.BRAWLERS ? "BRAWLERS" : (game.screen == Game.SHOP ? "SHOP" : "SETTINGS");
+        String title = game.screen == Game.BRAWLERS ? "SNAKES" : (game.screen == Game.SHOP ? "SHOP" : "SETTINGS");
         g.color(0xffffd23f);
         g.text(title, w / 2, game.padT + 92 * u, 84 * u, Gfx.ALIGN_CENTER, 9 * u, Ui.INK);
         if (game.screen != Game.SETTINGS) ui.coinPill(g, w - game.padR - 20 * u, game.padT + 14 * u, pr.coins);
@@ -928,7 +928,7 @@ final class MetaScreens {
             ui.button(g, bt);
         }
         g.color(0xff9aa0d0);
-        g.text("Snake Brawl v3.8  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
+        g.text("Snake Brawl v3.9  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
                 w / 2, h - game.padB - 160 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 }
