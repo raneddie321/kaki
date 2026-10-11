@@ -16,7 +16,7 @@ final class MetaScreens {
     /** Short in-app privacy notice (the full policy is on the store page). */
     static final String PRIVACY_TEXT = "No account, ads or tracking. Your nickname, age and progress stay on this device; "
             + "RESET PROGRESS deletes them. Playing with friends on the same Wi-Fi sends your nickname and game moves to "
-            + "their phones only. There is no online play. "
+            + "their phones only. Online play (16+) connects through the PeerJS server, which sees your IP address. "
             + "Coin purchases are handled by Google Play; we never see payment details. "
             + "Questions: raneddie321@gmail.com";
 
@@ -928,7 +928,7 @@ final class MetaScreens {
             ui.button(g, bt);
         }
         g.color(0xff9aa0d0);
-        g.text("Snake Brawl v3.9  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
+        g.text("Snake Brawl v3.10  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
                 w / 2, h - game.padB - 160 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 }

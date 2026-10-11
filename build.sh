@@ -11,8 +11,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION_CODE=${VERSION_CODE:-23}
-VERSION_NAME=${VERSION_NAME:-3.9}
+VERSION_CODE=${VERSION_CODE:-24}
+VERSION_NAME=${VERSION_NAME:-3.10}
 MIN_SDK=24
 TARGET_SDK=36
 # Package name on Google Play. (The Java code keeps its com.snakebrawl.myapp package.)
@@ -73,8 +73,10 @@ echo "build-tools: $BT"
 rm -rf "$OUT"
 mkdir -p "$OUT"/res "$OUT"/gen "$OUT"/classes "$OUT"/dex "$OUT"/apk "$OUT"/aab/base "$DIST"
 
-mkdir -p "$OUT/assets"
+# Assets: the app's own plus the browser version's WebRTC code, which the app runs for online play
+mkdir -p "$OUT/assets/net"
 cp -r app/src/main/assets/. "$OUT/assets/"
+cp web/static/vendor/peerjs.min.js web/static/sb-net.js "$OUT/assets/net/"
 
 # Libraries: drop AARs or JARs into libs/ (e.g. Google Play Billing). Their classes are dexed in
 # and their manifests merged. Without the billing AAR the game simply hides the coin store.

@@ -220,6 +220,11 @@ public final class Game {
             }
 
             @Override
+            public OnlineLink online() {
+                return host.online();
+            }
+
+            @Override
             public int appVersionCode() {
                 return host.appVersionCode();
             }
@@ -1588,9 +1593,10 @@ public final class Game {
                 // Tap the brawler in the middle to change it
                 float showL = pl + 520 * u, showR = r - bw - 30 * u - 460 * u;
                 ui.add(B_SHOWCASE, showL, h * 0.5f, Math.max(showL + 200 * u, showR), b, null, null, 0);
-                if (Lan.available()) {
+                boolean onl = OnlineSession.available(gated) && profile.canPlayOnline();
+                if (OnlineSession.available(gated) || Lan.available()) {
                     ui.add(B_FRIENDS, r - bw - 30 * u - 430 * u, b - bh - 150 * u, r - bw - 30 * u, b - bh - 30 * u, "FRIENDS",
-                            "Play together on Wi-Fi", 0xff6a5cff);
+                            onl ? "Play together online" : "Play together on Wi-Fi", 0xff6a5cff);
                 }
                 ui.add(B_SETTINGS, w - padR - 120 * u, padT + 10 * u, w - padR - 10 * u, padT + 120 * u, null, null, 0xff8a8fb8);
                 if (!Maps.valid(gated, profile.map)) profile.map = Maps.SUNNY;

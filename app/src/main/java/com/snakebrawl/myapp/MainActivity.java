@@ -50,6 +50,7 @@ public final class MainActivity extends Activity implements Platform {
             font = Typeface.DEFAULT_BOLD;
         }
         root = new android.widget.FrameLayout(this);
+        netLink = new WebNetLink(this, root);
         game = new Game(this);
         view = new GameView(this, game, font);
         view.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
@@ -209,6 +210,7 @@ public final class MainActivity extends Activity implements Platform {
     @Override
     protected void onDestroy() {
         setNetworkFast(false);
+        if (netLink != null) netLink.destroy();
         if (billing != null) billing.destroy();
         if (pool != null) {
             pool.release();
@@ -295,6 +297,12 @@ public final class MainActivity extends Activity implements Platform {
     }
 
     private android.widget.FrameLayout root;
+    private WebNetLink netLink;
+
+    @Override
+    public OnlineLink online() {
+        return netLink;
+    }
 
     private android.net.wifi.WifiManager.WifiLock wifiLock;
 

@@ -29,7 +29,7 @@ where it is stored and who can see it. It applies to the Android app and to the 
   <li>We do not require an account, email address, phone number or real name.</li>
   <li>We do not show ads and we do not use analytics or tracking tools.</li>
   <li>Your progress, nickname and age are stored only on your own device.</li>
-  <li>There is no internet multiplayer. When you play with friends on the same Wi-Fi, some game information is shared
+  <li>Online play is only available to players aged 16 and over. When you play with friends on the same Wi-Fi, some game information is shared
     directly with their devices on your local network, as described below.</li>
 </ul>
 
@@ -59,7 +59,11 @@ stored only on your device.</p>
 same local network. The game announces your room on the local network so nearby devices running Snake Brawl can find it.
 Your nickname, selected brawler, skin colors, power level, trophy count and in-game controls are sent to your friend's
 device. Nothing is sent over the internet.</p>
-<p>The browser version has no multiplayer.</p>
+<p><strong>Online play (Android app and browser version, ages 16 and over, 2 players).</strong> Online rooms use WebRTC
+through the PeerJS service (<a href="https://peerjs.com">peerjs.com</a>). To connect two players, the game contacts the
+PeerJS public server with a random room code; that server and the STUN/TURN servers used to set up the connection can see
+your IP address. After that, game data (your nickname and game moves) goes directly between the two devices, encrypted in
+transit. We do not run our own game server and do not store any of this data. Only share your room code with people you know.</p>
 <p><strong>Update check (Android app).</strong> When the game starts it downloads a small public text file from GitHub
 (raw.githubusercontent.com) that says which game version is the newest, so it can tell you when an update is available.
 No information about you or your game is sent; like any download, GitHub sees your IP address. See GitHub's privacy
@@ -87,8 +91,8 @@ Google Family Link. The browser version has no purchases.</p>
 <h2>7. Children's privacy</h2>
 <p>The game is suitable for players of all ages and is designed to comply with the Children's Online Privacy Protection
 Act (COPPA) and the EU General Data Protection Regulation (GDPR). We do not collect personal information from children:
-their data stays on their device, they cannot type a free-text nickname, and there is no online play or chat with
-strangers. In-app purchases go through Google Play, where parents can require approval for every purchase. Parents can delete
+their data stays on their device, they cannot type a free-text nickname, online play is turned off for players under 16,
+and there is no chat. In-app purchases go through Google Play, where parents can require approval for every purchase. Parents can delete
 all game data at any time as described in section 2. If you believe a child's information has been shared, contact us
 and we will help.</p>
 
