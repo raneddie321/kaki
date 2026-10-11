@@ -2,6 +2,7 @@ package com.snakebrawl.myapp;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -291,17 +292,44 @@ final class PlayBilling {
             Class<?>[] pt = m.getParameterTypes();
             boolean fits = true;
             for (int i = 0; i < pt.length && fits; i++) fits = args[i] == null || box(pt[i]).isInstance(args[i]);
-            if (fits) return m.invoke(target, args);
+            if (fits) return accessible(m).invoke(target, args);
         }
         throw new NoSuchMethodException(name);
     }
 
     private static Object callTyped(Object target, String name, Class<?> type, Object arg) throws Exception {
-        return target.getClass().getMethod(name, type).invoke(target, arg);
+        return accessible(target.getClass().getMethod(name, type)).invoke(target, arg);
     }
 
     private static Object callTyped2(Object target, String name, Class<?> t1, Object a1, Class<?> t2, Object a2) throws Exception {
-        return target.getClass().getMethod(name, t1, t2).invoke(target, a1, a2);
+        return accessible(target.getClass().getMethod(name, t1, t2)).invoke(target, a1, a2);
+    }
+
+    /**
+     * The same method as declared by a public class. The library's objects are often of hidden
+     * classes (BillingClient is really a package-private BillingClientImpl), whose methods can't be
+     * invoked from outside their package even when public; the public parent's declaration can.
+     */
+    private static Method accessible(Method m) {
+        if (Modifier.isPublic(m.getDeclaringClass().getModifiers())) return m;
+        for (Class<?> c = m.getDeclaringClass().getSuperclass(); c != null; c = c.getSuperclass()) {
+            if (!Modifier.isPublic(c.getModifiers())) continue;
+            try {
+                return c.getMethod(m.getName(), m.getParameterTypes());
+            } catch (NoSuchMethodException ignored) {
+                // not declared here; keep looking
+            }
+        }
+        for (Class<?> i : m.getDeclaringClass().getInterfaces()) {
+            if (!Modifier.isPublic(i.getModifiers())) continue;
+            try {
+                return i.getMethod(m.getName(), m.getParameterTypes());
+            } catch (NoSuchMethodException ignored) {
+                // not in this interface
+            }
+        }
+        m.setAccessible(true);
+        return m;
     }
 
     private static Class<?> box(Class<?> c) {

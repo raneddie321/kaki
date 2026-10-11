@@ -6,7 +6,6 @@ For real coin purchases put the **Google Play Billing Library** AAR here, for ex
 `billing-8.0.0.aar` from
 https://maven.google.com/web/index.html#com.android.billingclient:billing
 (direct link pattern: `https://dl.google.com/dl/android/maven2/com/android/billingclient/billing/<version>/billing-<version>.aar`).
-Also add the AARs/JARs it depends on (listed in the same page's `.pom` file). Without it the coin
-store stays hidden.
-
-AAR files are ignored by git (see `.gitignore`).
+Its other dependencies are not needed: `libs/compat/` has small stand-ins for the few AndroidX and
+datatransport classes the library uses (its usage logging is dropped). Without the AAR the coin store
+stays hidden.

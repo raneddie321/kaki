@@ -11,8 +11,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION_CODE=${VERSION_CODE:-24}
-VERSION_NAME=${VERSION_NAME:-3.10}
+VERSION_CODE=${VERSION_CODE:-25}
+VERSION_NAME=${VERSION_NAME:-3.11}
 MIN_SDK=24
 TARGET_SDK=36
 # Package name on Google Play. (The Java code keeps its com.snakebrawl.myapp package.)
@@ -101,6 +101,16 @@ for lib in libs/*.aar libs/*.jar; do
     esac
     echo "library: $name"
 done
+# The billing AAR needs a few AndroidX/datatransport classes; libs/compat has small stand-ins so
+# the build needs no Gradle dependency tree.
+if ls libs/billing-*.aar >/dev/null 2>&1; then
+    mkdir -p "$OUT/compat"
+    javac -nowarn -Xlint:-options -source 8 -target 8 -encoding UTF-8 -bootclasspath "$PLATFORM_JAR" \
+        -d "$OUT/compat" $(find libs/compat/src -name '*.java')
+    (cd "$OUT/compat" && jar cf ../compat.jar .)
+    LIB_JARS+=("$OUT/compat.jar")
+    echo "library: compat (AndroidX/datatransport stand-ins)"
+fi
 python3 tools/merge_manifest.py app/src/main/AndroidManifest.xml "$OUT/AndroidManifest.xml" "$APP_ID" ${LIB_MANIFESTS[@]+"${LIB_MANIFESTS[@]}"}
 
 LINK_FLAGS=(-I "$PLATFORM_JAR" --manifest "$OUT/AndroidManifest.xml" -A "$OUT/assets"
