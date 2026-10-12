@@ -135,3 +135,8 @@ export function navigateAfterAuth(
     else router.push(url);
   };
 }
+
+/** A safe ?redirect_url= value: a path on this site only. */
+export function safeRedirect(r: string | null | undefined): string | null {
+  return r && r.startsWith("/") && !r.startsWith("//") && !r.startsWith("/\\") ? r : null;
+}

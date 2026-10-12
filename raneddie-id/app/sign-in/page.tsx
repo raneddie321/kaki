@@ -1,17 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useRedirect } from "@/lib/use-redirect";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import { useSignIn } from "@clerk/nextjs";
 import { Alert, AuthShell, BackButton, Button, Field, Heading, IdentityChip, MailIcon, PasswordField } from "@/components/ui";
 import { clerkError, isEmail, navigateAfterAuth } from "@/lib/auth-helpers";
 
 type Step = "email" | "password" | "verify";
 
-export default function SignInPage() {
+function SignIn() {
   const { signIn, fetchStatus } = useSignIn();
   const router = useRouter();
+  const { target, withRedirect } = useRedirect();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +23,7 @@ export default function SignInPage() {
   const loading = busy || fetchStatus === "fetching";
 
   async function finish() {
-    await signIn.finalize({ navigate: navigateAfterAuth(router, "/") });
+    await signIn.finalize({ navigate: navigateAfterAuth(router, target()) });
   }
 
   // Step 1: email. Starting the sign-in here tells the player right away if there's no account.
@@ -113,7 +115,7 @@ export default function SignInPage() {
           </Button>
           <p className="mt-6 text-center text-sm text-muted">
             New here?{" "}
-            <Link href="/sign-up" className="font-semibold text-brand-600 hover:text-brand-700">
+            <Link href={withRedirect("/sign-up")} className="font-semibold text-brand-600 hover:text-brand-700">
               Create a RanEddie ID
             </Link>
           </p>
@@ -136,7 +138,7 @@ export default function SignInPage() {
           />
           <div className="mt-2 text-right">
             <Link
-              href={`/forgot-password?email=${encodeURIComponent(email)}`}
+              href={withRedirect(`/forgot-password?email=${encodeURIComponent(email)}`)}
               className="text-sm font-semibold text-brand-600 hover:text-brand-700"
             >
               Forgot password?
@@ -192,5 +194,13 @@ export default function SignInPage() {
         </form>
       )}
     </AuthShell>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense>
+      <SignIn />
+    </Suspense>
   );
 }

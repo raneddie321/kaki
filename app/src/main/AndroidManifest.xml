@@ -31,6 +31,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- RanEddie ID: the website sends the player back with snakebrawl://raneddie?... -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="snakebrawl" android:host="raneddie" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>

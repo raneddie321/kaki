@@ -6,7 +6,7 @@ final class MetaScreens {
     private static final int B_SKIN = 200;
     private static final int B_TAB = 300, B_GIFT = 310, B_BOX = 311, B_MEGA = 312, B_DEAL = 313, B_SHOP_BRAWLER = 330;
     private static final int B_PACK = 350;
-    private static final int B_SETTING = 400, B_RESET = 420, B_PRIVACY = 421, B_REDEEM = 422;
+    private static final int B_SETTING = 400, B_RESET = 420, B_PRIVACY = 421, B_REDEEM = 422, B_RID = 423;
 
     /** The COINS tab only exists while the real-money store is enabled. */
     private static int tabCount() {
@@ -17,6 +17,7 @@ final class MetaScreens {
     static final String PRIVACY_TEXT = "No account, ads or tracking. Your nickname, age and progress stay on this device; "
             + "RESET PROGRESS deletes them. Playing with friends on the same Wi-Fi sends your nickname and game moves to "
             + "their phones only. Online play (16+) connects through the PeerJS server, which sees your IP address. "
+            + "If you connect a RanEddie ID (13+), your progress is saved to your account (run by Clerk) so you can play on other devices. "
             + "Coin purchases are handled by Google Play; we never see payment details. "
             + "Questions: raneddie321@gmail.com";
 
@@ -134,8 +135,11 @@ final class MetaScreens {
                             on ? 0xff4ad04a : (off ? 0xff8a8a9a : 0xff3fa0ff));
                 }
                 float rb = h - padB - 30 * u;
-                ui.add(B_RESET, w / 2 + 20 * u, rb - 100 * u, w / 2 + 500 * u, rb, "RESET PROGRESS", null, 0xffff5a5a);
-                ui.add(B_PRIVACY, w / 2 - 500 * u, rb - 100 * u, w / 2 - 20 * u, rb, "PRIVACY", null, 0xff3fa0ff);
+                RanEddieId rid = game.rid;
+                ui.add(B_PRIVACY, w / 2 - 750 * u, rb - 100 * u, w / 2 - 270 * u, rb, "PRIVACY", null, 0xff3fa0ff);
+                ui.add(B_RID, w / 2 - 240 * u, rb - 100 * u, w / 2 + 240 * u, rb,
+                        rid.linked() ? "ID: " + rid.shortName() : "RANEDDIE ID", null, 0xff2f7bff);
+                ui.add(B_RESET, w / 2 + 270 * u, rb - 100 * u, w / 2 + 750 * u, rb, "RESET PROGRESS", null, 0xffff5a5a);
                 break;
             }
             default:
@@ -276,6 +280,20 @@ final class MetaScreens {
                             }
                         });
                 return;
+            case B_RID: {
+                RanEddieId rid = game.rid;
+                if (!rid.allowed()) {
+                    game.showInfo("RANEDDIE ID", "RanEddie ID accounts are for players aged " + RanEddieId.MIN_AGE + " and over.", 0, 0);
+                } else if (rid.linked()) {
+                    game.confirm("RANEDDIE ID", "Signed in as " + rid.username() + ". Your progress is saved automatically and you "
+                            + "can continue on any device. Sign out on this device? (Your progress stays here.)", 0, 0,
+                            Game.ACT_RID_DISCONNECT, 0, "SIGN OUT", "CLOSE");
+                } else {
+                    game.confirm("RANEDDIE ID", "Connect a RanEddie ID to save your progress and play on other devices. Nothing "
+                            + "you have now will be lost.", 1, 0, Game.ACT_RID_CONNECT, 0, "CONNECT", "LATER");
+                }
+                return;
+            }
             case B_PRIVACY:
                 game.showInfo("PRIVACY", PRIVACY_TEXT, 0, 0);
                 return;

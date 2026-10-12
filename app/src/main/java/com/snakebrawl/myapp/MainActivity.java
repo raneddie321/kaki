@@ -42,6 +42,7 @@ public final class MainActivity extends Activity implements Platform {
 
         prefs = getSharedPreferences("snakebrawl", MODE_PRIVATE);
         loadSounds();
+        keepDeepLink(getIntent());
 
         Typeface font;
         try {
@@ -145,6 +146,89 @@ public final class MainActivity extends Activity implements Platform {
                 // The legacy flags above still apply.
             }
         }
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        keepDeepLink(intent);
+    }
+
+    // ------------------------------------------------------------------ RanEddie ID
+
+    /** snakebrawl://raneddie?... from the RanEddie ID website, waiting for the game to take it. */
+    private volatile String deepLink;
+
+    private void keepDeepLink(android.content.Intent intent) {
+        if (intent == null || intent.getData() == null) return;
+        String uri = intent.getData().toString();
+        if (uri.startsWith("snakebrawl://")) deepLink = uri;
+    }
+
+    @Override
+    public String takeDeepLink() {
+        String d = deepLink;
+        deepLink = null;
+        return d;
+    }
+
+    @Override
+    public void openUrl(final String url) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+                } catch (RuntimeException ignored) {
+                    // no browser
+                }
+            }
+        });
+    }
+
+    @Override
+    public String httpJson(String method, String url, String bearer, String body) {
+        java.net.HttpURLConnection c = null;
+        try {
+            c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(10000);
+            c.setUseCaches(false);
+            c.setRequestMethod(method);
+            c.setRequestProperty("Accept", "application/json");
+            if (bearer != null) c.setRequestProperty("Authorization", "Bearer " + bearer);
+            if (body != null) {
+                byte[] out = body.getBytes("UTF-8");
+                c.setDoOutput(true);
+                c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                c.setFixedLengthStreamingMode(out.length);
+                java.io.OutputStream os = c.getOutputStream();
+                os.write(out);
+                os.close();
+            }
+            int code = c.getResponseCode();
+            java.io.InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            if (in != null) {
+                byte[] b = new byte[4096];
+                int r;
+                while ((r = in.read(b)) > 0 && buf.size() < 64 * 1024) buf.write(b, 0, r);
+                in.close();
+            }
+            return code + "\n" + buf.toString("UTF-8");
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (c != null) c.disconnect();
+        }
+    }
+
+    @Override
+    public byte[] randomBytes(int n) {
+        byte[] b = new byte[n];
+        new java.security.SecureRandom().nextBytes(b);
+        return b;
     }
 
     @Override

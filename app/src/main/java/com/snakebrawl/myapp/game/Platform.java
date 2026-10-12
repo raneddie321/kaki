@@ -120,4 +120,29 @@ public interface Platform {
     default boolean share(String text) {
         return false;
     }
+
+    /** Opens a web page in the player's browser. */
+    default void openUrl(String url) {}
+
+    /**
+     * Sends a JSON request (blocking; call from a background thread). {@code bearer} goes in the
+     * Authorization header when not null. Returns the HTTP status and the body as
+     * "status\nbody", or null when the request couldn't be made at all.
+     */
+    default String httpJson(String method, String url, String bearer, String body) {
+        return null;
+    }
+
+    /** A link that opened the game (like snakebrawl://raneddie?...), handed over once; null if none. */
+    default String takeDeepLink() {
+        return null;
+    }
+
+    /** Unpredictable bytes for secrets (the RanEddie ID link verifier). */
+    default byte[] randomBytes(int n) {
+        byte[] b = new byte[n];
+        java.util.Random r = new java.util.Random(System.nanoTime() ^ System.currentTimeMillis() * 6364136223846793005L);
+        r.nextBytes(b);
+        return b;
+    }
 }

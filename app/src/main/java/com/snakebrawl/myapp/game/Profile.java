@@ -11,7 +11,9 @@ final class Profile {
     /** Online play (WebRTC: the friend and the connection server see IP addresses) starts at this age (COPPA, GDPR). */
     static final int ONLINE_AGE = 16;
 
-    private final Platform p;
+    private Platform p;
+    /** Called after every save (RanEddie ID uses it to know the progress changed). */
+    Runnable onSave;
 
     int coins;
     int trophies, bestTrophies, wins, games, bestLen, totalKills, hints;
@@ -151,6 +153,129 @@ final class Profile {
         p.saveInt("autoAim", autoAim ? 1 : 0);
         p.saveInt("stickSize", stickSize);
         p.saveInt("camera", camera);
+        if (onSave != null && !(p instanceof Recorder)) onSave.run();
+    }
+
+    // ------------------------------------------------------------------ cloud save (RanEddie ID)
+
+    /** Saved keys that live outside the profile but belong to the player's progress. */
+    private static final String[] EXTRA_KEYS = {"codesUsed"};
+
+    /** All progress as text, one "i:key=value" or "s:key=value" line per saved value. */
+    String exportText() {
+        Recorder r = new Recorder();
+        Platform real = p;
+        p = r;
+        try {
+            save();
+        } finally {
+            p = real;
+        }
+        for (String k : EXTRA_KEYS) r.saveString(k, real.loadString(k, ""));
+        return r.text();
+    }
+
+    /** Replaces the progress with a cloud save made by {@link #exportText()}, then saves it here. */
+    void importText(String text) {
+        Recorder r = Recorder.parse(text);
+        Platform real = p;
+        p = r;
+        try {
+            load();
+        } finally {
+            p = real;
+        }
+        save();
+        for (String k : EXTRA_KEYS) {
+            String v = r.loadString(k, null);
+            if (v != null) real.saveString(k, v);
+        }
+    }
+
+    /** A Platform that only stores saved values, so save()/load() can write or read a cloud save. */
+    private static final class Recorder implements Platform {
+        private final java.util.LinkedHashMap<String, String> values = new java.util.LinkedHashMap<String, String>();
+
+        static Recorder parse(String text) {
+            Recorder r = new Recorder();
+            if (text == null) return r;
+            for (String line : text.split("\n")) {
+                int eq = line.indexOf('=');
+                if (line.length() < 3 || line.charAt(1) != ':' || eq < 0) continue;
+                r.values.put(line.substring(0, eq), unescape(line.substring(eq + 1)));
+            }
+            return r;
+        }
+
+        String text() {
+            StringBuilder b = new StringBuilder();
+            for (java.util.Map.Entry<String, String> e : values.entrySet()) {
+                b.append(e.getKey()).append('=').append(escape(e.getValue())).append('\n');
+            }
+            return b.toString();
+        }
+
+        private static String escape(String v) {
+            return v.replace("\\", "\\\\").replace("\n", "\\n");
+        }
+
+        private static String unescape(String v) {
+            StringBuilder b = new StringBuilder();
+            for (int i = 0; i < v.length(); i++) {
+                char c = v.charAt(i);
+                if (c == '\\' && i + 1 < v.length()) {
+                    char n = v.charAt(++i);
+                    b.append(n == 'n' ? '\n' : n);
+                } else {
+                    b.append(c);
+                }
+            }
+            return b.toString();
+        }
+
+        @Override
+        public int loadInt(String key, int def) {
+            String v = values.get("i:" + key);
+            if (v == null) return def;
+            try {
+                return Integer.parseInt(v);
+            } catch (NumberFormatException e) {
+                return def;
+            }
+        }
+
+        @Override
+        public void saveInt(String key, int value) {
+            values.put("i:" + key, Integer.toString(value));
+        }
+
+        @Override
+        public String loadString(String key, String def) {
+            String v = values.get("s:" + key);
+            return v == null ? def : v;
+        }
+
+        @Override
+        public void saveString(String key, String value) {
+            values.put("s:" + key, value == null ? "" : value);
+        }
+
+        @Override
+        public void playSound(int id, float volume) {}
+
+        @Override
+        public void vibrate(int millis) {}
+
+        @Override
+        public void requestText(String title, String initial, int maxLength, boolean numeric, TextCallback callback) {}
+
+        @Override
+        public boolean launchPurchase(String productId) {
+            return false;
+        }
+
+        @Override
+        public void setNetworkDiscovery(boolean on) {}
     }
 
     /** Wipes progress and purchases but keeps settings. */

@@ -173,8 +173,14 @@ final class SocialScreens {
                 pr.save();
                 game.gated.playSound(Platform.SND_VICTORY, 0.8f);
                 game.setScreen(Game.MENU);
-                game.showInfo("WELCOME, " + pr.nickname.toUpperCase() + "!", "Join a club to get a Duo partner, pick a snake "
-                        + "and jump into Showdown. Have fun!", 3, pr.selected);
+                if (game.rid.allowed() && !game.rid.linked()) {
+                    game.confirm("WELCOME, " + pr.nickname.toUpperCase() + "!", "Save your progress with a RanEddie ID: keep your "
+                            + "snakes, coins and trophies safe and keep playing on any device.", 3, pr.selected,
+                            Game.ACT_RID_CONNECT, 0, "CONNECT", "LATER");
+                } else {
+                    game.showInfo("WELCOME, " + pr.nickname.toUpperCase() + "!", "Pick a snake and jump into Showdown. Have fun!",
+                            3, pr.selected);
+                }
                 return;
             case B_CLUB_CREATE:
                 game.gated.requestText("Name your club", "", 16, false, new Platform.TextCallback() {

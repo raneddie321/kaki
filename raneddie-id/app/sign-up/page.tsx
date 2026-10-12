@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRedirect } from "@/lib/use-redirect";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent } from "react";
+import { Suspense, useMemo, useState, type FormEvent } from "react";
 import { useSignUp } from "@clerk/nextjs";
 import {
   Alert,
@@ -44,9 +45,10 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "username", label: "Username" },
 ];
 
-export default function SignUpPage() {
+function SignUp() {
   const { signUp, fetchStatus } = useSignUp();
   const router = useRouter();
+  const { target, withRedirect } = useRedirect();
 
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
@@ -161,7 +163,7 @@ export default function SignUpPage() {
       return;
     }
     if (signUp.status === "complete") {
-      await signUp.finalize({ navigate: navigateAfterAuth(router, "/?welcome=1") });
+      await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1")) });
       return;
     }
     if (signUp.unverifiedFields.includes("email_address")) {
@@ -186,7 +188,7 @@ export default function SignUpPage() {
       return setError(clerkError(error).message);
     }
     if (signUp.status === "complete") {
-      await signUp.finalize({ navigate: navigateAfterAuth(router, "/?welcome=1") });
+      await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1")) });
     } else {
       setBusy(false);
       setError("We couldn't finish creating your account. Please try again.");
@@ -218,7 +220,7 @@ export default function SignUpPage() {
           </Button>
           <p className="mt-6 text-center text-sm text-muted">
             Already have a RanEddie ID?{" "}
-            <Link href="/sign-in" className="font-semibold text-brand-600 hover:text-brand-700">
+            <Link href={withRedirect("/sign-in")} className="font-semibold text-brand-600 hover:text-brand-700">
               Sign in
             </Link>
           </p>
@@ -478,5 +480,13 @@ export default function SignUpPage() {
         </form>
       )}
     </AuthShell>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense>
+      <SignUp />
+    </Suspense>
   );
 }

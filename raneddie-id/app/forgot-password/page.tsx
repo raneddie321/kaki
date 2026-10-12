@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRedirect } from "@/lib/use-redirect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { useSignIn } from "@clerk/nextjs";
@@ -26,6 +27,7 @@ function ForgotPassword() {
   const { signIn, fetchStatus } = useSignIn();
   const router = useRouter();
   const params = useSearchParams();
+  const { target, withRedirect } = useRedirect();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState(params.get("email") ?? "");
   const [code, setCode] = useState("");
@@ -82,7 +84,7 @@ function ForgotPassword() {
       return setError(clerkError(error).message);
     }
     if (signIn.status === "complete") {
-      await signIn.finalize({ navigate: navigateAfterAuth(router, "/?reset=1") });
+      await signIn.finalize({ navigate: navigateAfterAuth(router, target("/?reset=1")) });
     } else {
       setBusy(false);
       setError("Your password was changed. Please sign in with the new password.");
@@ -97,7 +99,7 @@ function ForgotPassword() {
       {step === "email" && (
         <form key="email" onSubmit={sendCode} className="rid-step" noValidate>
           <Link
-            href="/sign-in"
+            href={withRedirect("/sign-in")}
             className="mb-4 -ml-1 inline-flex items-center gap-1 rounded-lg px-1 py-1 text-sm font-semibold text-muted hover:text-ink"
           >
             ‹ Back to sign in

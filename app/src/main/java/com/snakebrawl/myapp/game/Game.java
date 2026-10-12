@@ -14,7 +14,7 @@ public final class Game {
     // Popup actions confirmed with YES
     static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
             ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9, ACT_PASS_PLUS = 10,
-            ACT_DELETE_MAP = 11, ACT_UPDATE = 12;
+            ACT_DELETE_MAP = 11, ACT_UPDATE = 12, ACT_RID_CONNECT = 13, ACT_RID_USE_CLOUD = 14, ACT_RID_DISCONNECT = 15;
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
     private static final int[] RANK_COINS = {50, 40, 32, 26, 20, 15, 11, 8, 5, 3};
@@ -24,6 +24,8 @@ public final class Game {
     final Profile profile;
     final Ui ui = new Ui();
     private final MetaScreens meta;
+    /** RanEddie ID: cloud save and sign-in across devices. */
+    final RanEddieId rid;
     private SocialScreens social;
     private FriendsScreen friends;
     private PassScreen pass;
@@ -149,6 +151,7 @@ public final class Game {
     private int popArt;
     private int popAction, popArg;
     private boolean popConfirm;
+    private String popYes = "YES", popNo = "NO";
     private float popTime;
 
     // Touch controls
@@ -240,6 +243,26 @@ public final class Game {
             }
 
             @Override
+            public void openUrl(String url) {
+                host.openUrl(url);
+            }
+
+            @Override
+            public String httpJson(String method, String url, String bearer, String body) {
+                return host.httpJson(method, url, bearer, body);
+            }
+
+            @Override
+            public String takeDeepLink() {
+                return host.takeDeepLink();
+            }
+
+            @Override
+            public byte[] randomBytes(int n) {
+                return host.randomBytes(n);
+            }
+
+            @Override
             public boolean share(String text) {
                 return host.share(text);
             }
@@ -250,6 +273,13 @@ public final class Game {
         pass = new PassScreen(this);
         maps = new MapScreens(this);
         quests = new QuestScreen(this);
+        rid = new RanEddieId(this);
+        profile.onSave = new Runnable() {
+            @Override
+            public void run() {
+                rid.markDirty();
+            }
+        };
         for (int p = 0; p < netInputs.length; p++) {
             for (int i = 0; i < NET_RING; i++) {
                 netInputs[p][i] = new NetInput();
@@ -260,6 +290,13 @@ public final class Game {
         if (!profile.onboarded) screen = ONBOARD;
         layout();
         startUpdateCheck();
+        rid.pullOnStart();
+    }
+
+    /** The profile was replaced (cloud save loaded): refresh what depends on it. */
+    void applyProfileChange() {
+        if (!Maps.valid(gated, profile.map)) profile.map = Maps.SUNNY;
+        layout();
     }
 
     private void newDemo() {
@@ -574,6 +611,7 @@ public final class Game {
     public void onPause() {
         releaseControls();
         profile.save();
+        rid.flush();
         // Leaving the app in a Wi-Fi match would freeze everyone else: leave the match instead,
         // so the friends carry on with a bot in this player's place
         if (net != null) dropNet("LEFT THE MATCH", "You left the Wi-Fi match when the app went to the background. "
@@ -991,10 +1029,19 @@ public final class Game {
     // ------------------------------------------------------------------ popups
 
     void showInfo(String title, String text, int artType, int art) {
+        popYes = "YES";
+        popNo = "NO";
         openPopup(title, text, artType, art, ACT_NONE, 0, false);
     }
 
     void confirm(String title, String text, int artType, int art, int action, int arg) {
+        confirm(title, text, artType, art, action, arg, "YES", "NO");
+    }
+
+    /** A yes/no popup with its own button labels. */
+    void confirm(String title, String text, int artType, int art, int action, int arg, String yes, String no) {
+        popYes = yes;
+        popNo = no;
         openPopup(title, text, artType, art, action, arg, true);
     }
 
@@ -1021,11 +1068,15 @@ public final class Game {
     private void popupButton(int id) {
         int action = popAction, arg = popArg;
         closePopup();
+        if (id == B_NO && action == ACT_RID_USE_CLOUD) rid.resolveConflict(false);
         if (id == B_YES) {
             if (action == ACT_JOIN_CLUB || action == ACT_LEAVE_CLUB) social.perform(action, arg);
             else if (action == ACT_PASS_PLUS) pass.perform(action);
             else if (action == ACT_DELETE_MAP) maps.deleteMap(arg);
             else if (action == ACT_UPDATE) gated.openStorePage();
+            else if (action == ACT_RID_CONNECT) rid.connect();
+            else if (action == ACT_RID_USE_CLOUD) rid.resolveConflict(true);
+            else if (action == ACT_RID_DISCONNECT) rid.disconnect();
             else meta.perform(action, arg);
         }
     }
@@ -1078,6 +1129,7 @@ public final class Game {
     // ------------------------------------------------------------------ update
 
     private void update(float dt) {
+        rid.update(dt);
         maybeShowUpdate();
         if (forcedUpdate) return;
         if (screen == FRIENDS) friends.update(dt);
@@ -1566,8 +1618,8 @@ public final class Game {
         if (popup) {
             float cx = w / 2, by = h / 2 - 30 * u + 300 * u - 40 * u;
             if (popConfirm) {
-                ui.add(B_NO, cx - 380 * u, by - 110 * u, cx - 30 * u, by, "NO", null, 0xffff5a5a);
-                ui.add(B_YES, cx + 30 * u, by - 110 * u, cx + 380 * u, by, "YES", null, 0xff4ad04a);
+                ui.add(B_NO, cx - 380 * u, by - 110 * u, cx - 30 * u, by, popNo, null, 0xffff5a5a);
+                ui.add(B_YES, cx + 30 * u, by - 110 * u, cx + 380 * u, by, popYes, null, 0xff4ad04a);
             } else {
                 ui.add(B_OK, cx - 200 * u, by - 110 * u, cx + 200 * u, by, "OK", null, 0xff4ad04a);
             }
