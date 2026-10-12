@@ -8,123 +8,113 @@
 <link rel="icon" href="assets/raneddie-logo.png">
 <style>
   :root {
-    --ink: #1b1b1b;
-    --muted: #505050;
-    --line: #e5e5e5;
-    --soft: #f5f5f2;
-    --sky: #e8f2fb;
-    --blue: #0f5fd7;
-    --blue-dark: #0b4db0;
+    --ink: #0e1630;
+    --muted: #5a6382;
+    --line: #e6e9f2;
+    --soft: #f4f6fb;
+    --blue: #1f5fe6;
+    --cyan: #19c2d6;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Segoe UI", "Segoe UI Variable", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: #fff; line-height: 1.5; }
+  body { font-family: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; color: var(--ink); background: #fff; line-height: 1.55; }
   a { color: inherit; text-decoration: none; }
   img { display: block; max-width: 100%; }
-  .wrap { max-width: 1600px; margin: 0 auto; padding: 0 5%; }
-  .btn { display: inline-block; background: var(--blue); color: #fff; font-weight: 600; font-size: 15px; padding: 10px 20px; border-radius: 4px; }
-  .btn:hover { background: var(--blue-dark); }
-  .btn-line { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
-  .btn-line:hover { background: var(--sky); }
-  .link { color: var(--blue); font-weight: 600; }
-  .link:hover { text-decoration: underline; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 28px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; background: var(--ink); color: #fff; font-weight: 700; font-size: 15px; padding: 13px 24px; border-radius: 999px; }
+  .btn:hover { background: var(--blue); }
+  .btn-soft { background: #fff; color: var(--ink); border: 1.5px solid var(--line); }
+  .btn-soft:hover { background: var(--soft); color: var(--ink); }
+  .kicker { display: inline-block; font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--blue); }
 
-  header { border-bottom: 1px solid var(--line); background: #fff; position: sticky; top: 0; z-index: 5; }
-  header .wrap { display: flex; align-items: center; height: 64px; gap: 36px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
-  .brand img { height: 26px; }
-  .menu { display: flex; gap: 26px; font-size: 14px; }
-  .menu a:hover { text-decoration: underline; }
-  .tools { margin-left: auto; display: flex; align-items: center; gap: 22px; font-size: 14px; }
-  .tools svg { width: 20px; height: 20px; }
-  .avatar { display: flex; align-items: center; gap: 8px; }
-  .avatar span:last-child { width: 34px; height: 34px; border-radius: 50%; border: 1px solid #8a8a8a; display: grid; place-items: center; }
+  header .wrap { display: flex; align-items: center; height: 76px; gap: 40px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+  .brand img { height: 30px; }
+  .menu { display: flex; gap: 28px; font-size: 15px; font-weight: 600; color: var(--muted); }
+  .menu a:hover { color: var(--ink); }
+  header .btn { margin-left: auto; padding: 10px 20px; font-size: 14px; }
 
-  .hero { background: var(--soft); }
-  .hero .wrap { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 48px; min-height: 520px; padding-top: 48px; padding-bottom: 56px; }
-  .hero h1 { font-size: 52px; font-weight: 600; line-height: 1.12; letter-spacing: -0.02em; margin-bottom: 14px; }
-  .hero p { font-size: 18px; color: var(--muted); max-width: 520px; margin-bottom: 26px; }
-  .hero-art { position: relative; }
-  .hero-art .shot { border-radius: 14px; box-shadow: 0 24px 50px -24px rgb(0 0 0 / .45); }
-  .hero-art .badge { position: absolute; left: -28px; bottom: -28px; display: flex; align-items: center; gap: 12px; background: #fff; border-radius: 12px; padding: 12px 16px 12px 12px; box-shadow: 0 10px 30px -10px rgb(0 0 0 / .3); }
-  .hero-art .badge img { width: 48px; height: 48px; border-radius: 12px; }
-  .hero-art .badge b { display: block; font-size: 15px; }
-  .hero-art .badge small { color: var(--muted); font-size: 13px; }
+  .hero { padding: 64px 0 40px; }
+  .hero .wrap { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
+  .hero h1 { font-size: 64px; font-weight: 850; line-height: 1.02; letter-spacing: -0.04em; margin: 16px 0 20px; }
+  .hero h1 span { color: var(--blue); }
+  .hero p { font-size: 19px; color: var(--muted); max-width: 500px; margin-bottom: 30px; }
+  .hero .actions { display: flex; gap: 12px; flex-wrap: wrap; }
+  .stack { position: relative; height: 440px; }
+  .stack .tile { position: absolute; border-radius: 26px; overflow: hidden; box-shadow: 0 30px 60px -30px rgb(14 22 48 / .45); }
+  .stack .t1 { inset: 0 60px 70px 0; }
+  .stack .t1 img { width: 100%; height: 100%; object-fit: cover; }
+  .stack .t2 { right: 0; bottom: 0; width: 230px; background: #0b1226; padding: 14px; transform: rotate(3deg); }
+  .stack .t2 img { border-radius: 14px; }
+  .stack .chip { position: absolute; left: -18px; top: 28px; background: #fff; border-radius: 999px; padding: 8px 16px 8px 8px; display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; box-shadow: 0 12px 30px -12px rgb(14 22 48 / .4); }
+  .stack .chip img { width: 34px; height: 34px; border-radius: 10px; }
 
-  .quick .wrap { display: flex; justify-content: center; gap: 80px; padding: 44px 5% 52px; flex-wrap: wrap; }
-  .quick a { display: flex; flex-direction: column; align-items: center; gap: 12px; font-size: 16px; }
-  .quick a span { border-bottom: 1px solid var(--ink); padding-bottom: 2px; }
-  .quick a:hover span { color: var(--blue); border-color: var(--blue); }
-  .quick svg { width: 40px; height: 40px; color: var(--blue); }
+  .strip { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-top: 48px; }
+  .strip .wrap { display: flex; justify-content: space-between; gap: 24px; padding-top: 22px; padding-bottom: 22px; color: var(--muted); font-weight: 600; font-size: 15px; flex-wrap: wrap; }
+  .strip b { color: var(--ink); }
 
-  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; padding-bottom: 72px; }
-  .card { border-radius: 14px; box-shadow: 0 2px 6px rgb(0 0 0 / .08), 0 10px 26px -12px rgb(0 0 0 / .18); padding: 12px; display: flex; flex-direction: column; background: #fff; }
-  .card .img { aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #f1f1f1; display: grid; place-items: center; }
-  .card .img img { width: 100%; height: 100%; object-fit: cover; }
-  .card .body { padding: 20px 12px 12px; flex: 1; display: flex; flex-direction: column; }
-  .card h3 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
-  .card p { color: var(--muted); font-size: 15px; flex: 1; margin-bottom: 22px; }
-  .card .tag { align-self: flex-start; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 3px; background: #ffe9c2; color: #6b4300; margin-bottom: 10px; }
-  .card .btn { align-self: flex-start; }
+  section.block { padding: 88px 0; }
+  .head { display: flex; justify-content: space-between; align-items: end; gap: 24px; margin-bottom: 36px; flex-wrap: wrap; }
+  h2 { font-size: 42px; font-weight: 850; letter-spacing: -0.03em; line-height: 1.08; margin-top: 10px; }
+  .head p { color: var(--muted); max-width: 420px; }
 
-  .ui { width: 82%; height: 74%; background: #fff; border-radius: 8px; box-shadow: 0 8px 20px -8px rgb(0 0 0 / .25); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-  .ui .row { display: flex; gap: 6px; align-items: center; }
-  .ui .dot { width: 6px; height: 6px; border-radius: 50%; background: #d0d0d0; }
-  .ui .bar { height: 7px; border-radius: 4px; background: #e9e9e9; }
-  .ui .bubble { max-width: 70%; padding: 6px 8px; border-radius: 8px; font-size: 10px; line-height: 1.3; }
-  .ui .me { align-self: flex-end; background: var(--blue); color: #fff; }
-  .ui .bot { background: #f0f0f0; color: #333; }
-  .ui .input { margin-top: auto; height: 18px; border: 1px solid #e3e3e3; border-radius: 9px; }
-  .ui .sheet { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; flex: 1; }
-  .ui .sheet i { background: #f3f3f3; border-radius: 2px; }
-  .ui .sheet i.h { background: #dbe8fb; }
-  .ui .chart { display: flex; align-items: flex-end; gap: 4px; height: 36px; }
-  .ui .chart i { flex: 1; background: var(--blue); border-radius: 2px 2px 0 0; opacity: .85; }
-  .bg-chat { background: linear-gradient(135deg, #dfeafa, #f3f7fd); }
-  .bg-office { background: linear-gradient(135deg, #e3f3ea, #f4faf6); }
-  .bg-id { background: #0b1226; }
-  .bg-id img { width: auto !important; height: 92% !important; object-fit: contain !important; }
+  .bento { display: grid; grid-template-columns: 1.3fr 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 20px; }
+  .box { border-radius: 26px; padding: 28px; display: flex; flex-direction: column; position: relative; overflow: hidden; min-height: 250px; }
+  .box h3 { padding-right: 110px; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 6px; }
+  .box p { color: var(--muted); font-size: 15px; max-width: 320px; }
+  .box .go { margin-top: auto; padding-top: 18px; font-weight: 700; font-size: 15px; }
+  .box .go:hover { color: var(--blue); }
+  .soon { position: absolute; top: 22px; right: 22px; font-size: 12px; font-weight: 800; background: #fff; border-radius: 999px; padding: 4px 10px; color: var(--muted); }
+  .b-game { grid-row: span 2; background: #0e1630; color: #fff; padding: 0; }
+  .b-game img { width: 100%; height: 58%; object-fit: cover; object-position: left center; }
+  .b-game .in { padding: 26px 28px 28px; display: flex; flex-direction: column; flex: 1; }
+  .b-game p { color: #b8c2e0; }
+  .b-game .go { color: #fff; }
+  .b-id { background: #e9f0ff; }
+  .b-chat { background: #e6f8fa; }
+  .b-office { background: #eef7ec; grid-column: span 2; }
+  .mini { display: flex; gap: 6px; margin-top: 16px; }
+  .mini i { height: 36px; flex: 1; border-radius: 8px; background: rgb(255 255 255 / .8); }
+  .bars { display: flex; align-items: flex-end; gap: 8px; height: 70px; margin-top: 16px; max-width: 360px; }
+  .bars i { flex: 1; border-radius: 6px 6px 2px 2px; background: #5fae6a; opacity: .8; }
 
-  .feature { padding-bottom: 72px; }
-  .feature .box { display: grid; grid-template-columns: 1.1fr 1fr; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 6px rgb(0 0 0 / .08), 0 10px 26px -12px rgb(0 0 0 / .18); }
-  .feature .pic { background: #0b1226; padding: 36px; display: grid; place-items: center; }
-  .feature .pic img { border-radius: 10px; max-height: 360px; }
-  .feature .txt { padding: 56px; display: flex; flex-direction: column; justify-content: center; }
-  .feature h2 { font-size: 32px; font-weight: 600; line-height: 1.2; margin-bottom: 12px; }
-  .feature p { color: var(--muted); font-size: 17px; margin-bottom: 26px; max-width: 460px; }
-  .feature .txt .btn { align-self: flex-start; }
+  .split { background: var(--soft); border-radius: 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; padding: 56px; }
+  .split ul { list-style: none; margin: 22px 0 30px; display: grid; gap: 12px; }
+  .split li { display: flex; gap: 12px; color: var(--muted); }
+  .split li b { color: var(--ink); }
+  .split li::before { content: ""; flex: none; width: 10px; height: 10px; margin-top: 8px; border-radius: 3px; background: linear-gradient(135deg, var(--blue), var(--cyan)); }
+  .split .shot { background: #0b1226; border-radius: 24px; padding: 28px; display: grid; place-items: center; }
+  .split .shot img { max-height: 340px; border-radius: 14px; }
 
-  .band { background: var(--sky); padding: 64px 0 72px; }
-  .band h2 { font-size: 30px; font-weight: 600; margin-bottom: 28px; }
-  .band .cards { padding-bottom: 0; grid-template-columns: repeat(3, 1fr); }
-  .band .card .img { aspect-ratio: auto; height: 110px; background: #fff; display: flex; align-items: center; justify-content: flex-start; padding: 0 22px; }
-  .band .card svg { width: 44px; height: 44px; color: var(--blue); }
+  .values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .value { border: 1.5px solid var(--line); border-radius: 22px; padding: 26px; }
+  .value b { display: block; font-size: 18px; margin: 12px 0 6px; }
+  .value p { color: var(--muted); font-size: 15px; }
+  .value .num { font-size: 13px; font-weight: 800; color: var(--blue); }
 
-  .follow { text-align: center; padding: 56px 0; }
-  .follow h3 { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
-  .follow .icons { display: flex; justify-content: center; gap: 18px; }
-  .follow .icons a { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; box-shadow: 0 2px 6px rgb(0 0 0 / .15); }
-  .follow svg { width: 22px; height: 22px; }
-  footer { background: #f2f2f2; padding: 40px 0 24px; font-size: 13px; color: #616161; }
-  .cols { display: grid; grid-template-columns: repeat(5, 1fr); gap: 24px; margin-bottom: 36px; }
-  .cols h4 { color: #505050; font-size: 15px; font-weight: 600; margin-bottom: 12px; }
-  .cols a { display: block; margin-bottom: 10px; }
-  .cols a:hover { text-decoration: underline; }
-  .legal { display: flex; flex-wrap: wrap; gap: 22px; justify-content: space-between; font-size: 12px; }
-  .legal div { display: flex; gap: 22px; flex-wrap: wrap; }
+  .cta { background: linear-gradient(120deg, #1f5fe6, #19a9d6); color: #fff; border-radius: 32px; padding: 56px; display: flex; justify-content: space-between; align-items: center; gap: 28px; flex-wrap: wrap; }
+  .cta h2 { color: #fff; margin: 0; font-size: 36px; }
+  .cta p { color: rgb(255 255 255 / .85); margin-top: 8px; }
+  .cta .btn { background: #fff; color: var(--ink); }
 
-  @media (max-width: 1100px) {
-    .cards { grid-template-columns: 1fr 1fr; }
-    .cols { grid-template-columns: repeat(3, 1fr); }
-  }
-  @media (max-width: 760px) {
-    .menu, .hide-sm { display: none !important; }
-    .hero .wrap, .feature .box { grid-template-columns: 1fr; }
-    .hero h1 { font-size: 36px; }
-    .hero-art .badge { left: 12px; bottom: -22px; }
-    .cards, .band .cards { grid-template-columns: 1fr; }
-    .quick .wrap { gap: 32px; }
-    .feature .txt { padding: 32px; }
-    .cols { grid-template-columns: 1fr 1fr; }
+  footer { padding: 64px 0 36px; color: var(--muted); font-size: 14px; }
+  .foot { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 32px; margin-bottom: 40px; }
+  .foot h4 { color: var(--ink); font-size: 14px; margin-bottom: 12px; }
+  .foot a { display: block; margin-bottom: 8px; }
+  .foot a:hover { color: var(--ink); }
+  .foot .about { max-width: 300px; }
+  .bottom { border-top: 1px solid var(--line); padding-top: 22px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 13px; }
+
+  @media (max-width: 900px) {
+    .menu { display: none; }
+    .hero .wrap, .split { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 44px; }
+    .stack { height: 330px; }
+    .bento { grid-template-columns: 1fr; grid-template-rows: none; }
+    .b-game, .b-office { grid-row: auto; grid-column: auto; }
+    .b-game img { height: 220px; }
+    .values, .foot { grid-template-columns: 1fr; }
+    .split, .cta { padding: 32px; }
+    h2 { font-size: 32px; }
   }
 </style>
 </head>
@@ -135,158 +125,126 @@
     <a class="brand" href="#"><img src="assets/raneddie-logo.png" alt="">RanEddie</a>
     <nav class="menu">
       <a href="#products">Products</a>
-      <a href="#games">Games</a>
-      <a href="https://id.raneddie.com">RanEddie ID</a>
-      <a href="#company">Company</a>
-      <a href="#support">Support</a>
+      <a href="#id">RanEddie ID</a>
+      <a href="#about">About</a>
+      <a href="#contact">Contact</a>
     </nav>
-    <div class="tools">
-      <a class="hide-sm" href="#products">All RanEddie ⌄</a>
-      <a href="#" aria-label="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/></svg></a>
-      <a class="avatar" href="https://id.raneddie.com/sign-in"><span class="hide-sm">Sign in</span><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="9" r="3.5"/><path d="M5.5 19c1.3-3 3.8-4.5 6.5-4.5s5.2 1.5 6.5 4.5"/></svg></span></a>
-    </div>
+    <a class="btn" href="https://id.raneddie.com/sign-in">Sign in</a>
   </div>
 </header>
 
 <section class="hero">
   <div class="wrap">
     <div>
-      <h1>Snake Brawl is here</h1>
-      <p>Slither, shoot and survive in our first game. Grow your snake, charge your super and be the last one standing — online or with friends on the same Wi-Fi.</p>
-      <a class="btn" href="https://play.google.com/store/apps/details?id=com.snakebrawl.raneddie">Get it on Google Play</a>
-    </div>
-    <div class="hero-art">
-      <img class="shot" src="assets/snakebrawl-menu.jpg" alt="Snake Brawl main menu">
-      <div class="badge"><img src="assets/snakebrawl-icon.png" alt=""><div><b>Snake Brawl</b><small>Free · Android</small></div></div>
-    </div>
-  </div>
-</section>
-
-<section class="quick">
-  <div class="wrap">
-    <a href="https://play.google.com/store/apps/details?id=com.snakebrawl.raneddie">
-      <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="12" width="30" height="18" rx="9"/><path d="M13 17v8M9 21h8"/><circle cx="26" cy="19" r="1.4" fill="currentColor"/><circle cx="29" cy="23" r="1.4" fill="currentColor"/></svg>
-      <span>Play Snake Brawl</span>
-    </a>
-    <a href="https://id.raneddie.com/sign-up">
-      <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="20" cy="15" r="6"/><path d="M8 33c2-6 7-9 12-9s10 3 12 9"/></svg>
-      <span>Create a RanEddie ID</span>
-    </a>
-    <a href="#support">
-      <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="20" cy="20" r="14"/><path d="M16 16a4 4 0 1 1 5.5 3.7c-1 .4-1.5 1.2-1.5 2.3v1"/><circle cx="20" cy="27.5" r="1.2" fill="currentColor"/></svg>
-      <span>Get help</span>
-    </a>
-  </div>
-</section>
-
-<section id="products">
-  <div class="wrap cards">
-    <article class="card" id="games">
-      <div class="img"><img src="assets/snakebrawl-banner.jpg" alt="Snake Brawl" style="object-position:left center"></div>
-      <div class="body">
-        <h3>Snake Brawl</h3>
-        <p>An action game where snakes battle to be the last one standing. 16 snakes to collect, 3 modes and new maps.</p>
-        <a class="btn" href="https://play.google.com/store/apps/details?id=com.snakebrawl.raneddie">Play now</a>
+      <span class="kicker">RanEddie</span>
+      <h1>Games, apps and tools <span>people love to use.</span></h1>
+      <p>We're a young technology company. We started with games and we're building apps and tools for everyday life — all connected with one account.</p>
+      <div class="actions">
+        <a class="btn" href="#products">See our products</a>
+        <a class="btn btn-soft" href="https://id.raneddie.com/sign-up">Create a RanEddie ID</a>
       </div>
-    </article>
-    <article class="card">
-      <div class="img bg-id"><img src="assets/raneddie-id-form.png" alt="RanEddie ID sign-up"></div>
-      <div class="body">
+    </div>
+    <div class="stack">
+      <div class="tile t1"><img src="assets/snakebrawl-menu.jpg" alt="Snake Brawl"></div>
+      <div class="tile t2"><img src="assets/raneddie-id-form.png" alt="RanEddie ID"></div>
+      <div class="chip"><img src="assets/snakebrawl-icon.png" alt="">Snake Brawl — out now</div>
+    </div>
+  </div>
+  <div class="strip">
+    <div class="wrap">
+      <span><b>1</b> game live</span>
+      <span><b>2</b> products in the works</span>
+      <span><b>1</b> account for everything</span>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="products">
+  <div class="wrap">
+    <div class="head">
+      <div><span class="kicker">Products</span><h2>What we're building</h2></div>
+      <p>Everything works with your RanEddie ID, so your stuff is with you on every device.</p>
+    </div>
+    <div class="bento">
+      <article class="box b-game">
+        <img src="assets/snakebrawl-banner.jpg" alt="Snake Brawl">
+        <div class="in">
+          <h3>Snake Brawl</h3>
+          <p>Snakes battle to be the last one standing. 16 snakes to collect, 3 modes, online and Wi-Fi play with friends.</p>
+          <a class="go" href="https://play.google.com/store/apps/details?id=com.snakebrawl.raneddie">Get it on Google Play →</a>
+        </div>
+      </article>
+      <article class="box b-id">
         <h3>RanEddie ID</h3>
-        <p>One account for everything RanEddie. Your progress and settings follow you to every device.</p>
-        <a class="btn" href="https://id.raneddie.com/sign-up">Create account</a>
-      </div>
-    </article>
-    <article class="card">
-      <div class="img bg-chat">
-        <div class="ui" aria-hidden="true">
-          <div class="row"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
-          <div class="bubble me">Plan my week around exams</div>
-          <div class="bubble bot">Here's a schedule with study blocks and breaks…</div>
-          <div class="bubble me">Add football on Tuesday</div>
-          <div class="input"></div>
-        </div>
-      </div>
-      <div class="body">
-        <span class="tag">Coming soon</span>
+        <p>One account for every RanEddie product. Your progress follows you.</p>
+        <a class="go" href="https://id.raneddie.com/sign-up">Create account →</a>
+      </article>
+      <article class="box b-chat">
+        <span class="soon">Coming soon</span>
         <h3>RanEddie Chat</h3>
-        <p>A smart assistant you can ask anything — write, plan, learn and get answers in seconds.</p>
-        <a class="btn btn-line" href="#support">Get notified</a>
-      </div>
-    </article>
-    <article class="card">
-      <div class="img bg-office">
-        <div class="ui" aria-hidden="true">
-          <div class="row"><i class="bar" style="width:40%"></i><i class="bar" style="width:18%;margin-left:auto"></i></div>
-          <div class="chart"><i style="height:40%"></i><i style="height:65%"></i><i style="height:50%"></i><i style="height:85%"></i><i style="height:70%"></i><i style="height:95%"></i></div>
-          <div class="sheet"><i class="h"></i><i class="h"></i><i class="h"></i><i class="h"></i><i class="h"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        </div>
-      </div>
-      <div class="body">
-        <span class="tag">Coming soon</span>
+        <p>Ask anything — write, plan and learn faster.</p>
+        <div class="mini"><i></i><i style="flex:.6"></i></div>
+      </article>
+      <article class="box b-office">
+        <span class="soon">Coming soon</span>
         <h3>RanEddie Office</h3>
-        <p>Documents, spreadsheets and clear insights from your data — built for school and work.</p>
-        <a class="btn btn-line" href="#support">Get notified</a>
-      </div>
-    </article>
+        <p>Documents, spreadsheets and clear insights from your data — for school and work.</p>
+        <div class="bars"><i style="height:35%"></i><i style="height:55%"></i><i style="height:45%"></i><i style="height:75%"></i><i style="height:62%"></i><i style="height:90%"></i></div>
+      </article>
+    </div>
   </div>
 </section>
 
-<section class="feature">
+<section class="block" id="id" style="padding-top:0">
   <div class="wrap">
-    <div class="box">
-      <div class="pic"><img src="assets/raneddie-id-form.png" alt="RanEddie ID"></div>
-      <div class="txt">
-        <h2>Sign in once, continue anywhere</h2>
-        <p>With a RanEddie ID your game progress, purchases and settings are saved to your account. Got a new phone? Sign in and pick up right where you left off.</p>
+    <div class="split">
+      <div>
+        <span class="kicker">RanEddie ID</span>
+        <h2>Sign in once. Continue anywhere.</h2>
+        <ul>
+          <li><span><b>Your progress is saved</b> — coins, trophies and settings live in your account.</span></li>
+          <li><span><b>New phone, same game</b> — sign in and pick up where you left off.</span></li>
+          <li><span><b>Private by default</b> — passwords are encrypted and we never sell your data.</span></li>
+        </ul>
         <a class="btn" href="https://id.raneddie.com/sign-up">Create your RanEddie ID</a>
       </div>
+      <div class="shot"><img src="assets/raneddie-id-form.png" alt="RanEddie ID sign-up"></div>
     </div>
   </div>
 </section>
 
-<section class="band" id="company">
+<section class="block" id="about" style="padding-top:0">
   <div class="wrap">
-    <h2>About RanEddie</h2>
-    <div class="cards">
-      <article class="card">
-        <div class="img"><svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="6" y="10" width="32" height="24" rx="3"/><path d="M6 16h32M14 24h8M14 28h14"/></svg></div>
-        <div class="body"><h3>Who we are</h3><p>A young technology company building games, apps and tools that are simple to use and fun to come back to.</p><a class="link" href="#support">Learn more ›</a></div>
-      </article>
-      <article class="card">
-        <div class="img"><svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M22 6l13 5v9c0 8-5.5 14.5-13 17-7.5-2.5-13-9-13-17v-9z"/><path d="M16.5 22l4 4 7-8"/></svg></div>
-        <div class="body"><h3>Privacy and safety</h3><p>Your data is yours. We don't sell it, and our games have age-appropriate settings for younger players.</p><a class="link" href="https://id.raneddie.com/privacy">Read our privacy policy ›</a></div>
-      </article>
-      <article class="card">
-        <div class="img"><svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="16" cy="17" r="5"/><circle cx="30" cy="17" r="5"/><path d="M6 34c1.5-5 5.5-8 10-8s8.5 3 10 8M24 27.5c1.8-1 3.8-1.5 6-1.5 4.5 0 8.5 3 10 8"/></svg></div>
-        <div class="body"><h3>Work with us</h3><p>Partnerships, press or ideas for what we should build next — we read every message.</p><a class="link" href="mailto:hello@raneddie.com">Contact us ›</a></div>
-      </article>
+    <div class="head">
+      <div><span class="kicker">About</span><h2>How we work</h2></div>
+      <p>Small team, big plans. We'd rather ship one thing people love than ten they forget.</p>
+    </div>
+    <div class="values">
+      <div class="value"><span class="num">01</span><b>Simple first</b><p>If it needs a manual, we're not done yet.</p></div>
+      <div class="value"><span class="num">02</span><b>Fair and private</b><p>No pay-to-win, no selling data, safe settings for younger players.</p></div>
+      <div class="value"><span class="num">03</span><b>Built with our users</b><p>Updates every few weeks, shaped by what you tell us.</p></div>
     </div>
   </div>
 </section>
 
-<section class="follow" id="support">
-  <h3>Follow RanEddie</h3>
-  <div class="icons">
-    <a href="#" aria-label="YouTube"><svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="4" fill="#e62117"/><path d="M10 9l5 3-5 3z" fill="#fff"/></svg></a>
-    <a href="#" aria-label="TikTok"><svg viewBox="0 0 24 24"><path d="M14 3h3c.3 2 1.6 3.4 3.6 3.6v3c-1.4 0-2.7-.4-3.6-1v6.6A5.8 5.8 0 1 1 11 9.4v3.1a2.8 2.8 0 1 0 3 2.8z" fill="#111"/></svg></a>
-    <a href="#" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="#c13584" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#c13584"/></svg></a>
+<section class="block" id="contact" style="padding-top:0">
+  <div class="wrap">
+    <div class="cta">
+      <div><h2>Have an idea or a question?</h2><p>Partnerships, press, support — we read every message.</p></div>
+      <a class="btn" href="mailto:hello@raneddie.com">hello@raneddie.com</a>
+    </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <div class="cols">
-      <div><h4>Products</h4><a href="#games">Snake Brawl</a><a href="https://id.raneddie.com">RanEddie ID</a><a href="#products">RanEddie Chat</a><a href="#products">RanEddie Office</a></div>
-      <div><h4>Games</h4><a href="#games">Snake Brawl</a><a href="https://play.google.com/store/apps/details?id=com.snakebrawl.raneddie">Google Play</a><a href="#support">Game support</a></div>
+    <div class="foot">
+      <div class="about"><a class="brand" href="#" style="margin-bottom:12px"><img src="assets/raneddie-logo.png" alt="">RanEddie</a><p>Games, apps and tools — connected with one RanEddie ID.</p></div>
+      <div><h4>Products</h4><a href="#products">Snake Brawl</a><a href="#products">RanEddie Chat</a><a href="#products">RanEddie Office</a></div>
       <div><h4>Account</h4><a href="https://id.raneddie.com/sign-in">Sign in</a><a href="https://id.raneddie.com/sign-up">Create account</a><a href="https://id.raneddie.com/forgot-password">Reset password</a></div>
-      <div><h4>Company</h4><a href="#company">About RanEddie</a><a href="#company">Careers</a><a href="#company">Press</a></div>
-      <div><h4>Support</h4><a href="mailto:support@raneddie.com">Contact support</a><a href="https://id.raneddie.com/privacy">Privacy</a><a href="https://id.raneddie.com/terms">Terms of use</a></div>
+      <div><h4>Company</h4><a href="#about">About</a><a href="#contact">Contact</a><a href="https://id.raneddie.com/privacy">Privacy</a><a href="https://id.raneddie.com/terms">Terms</a></div>
     </div>
-    <div class="legal">
-      <span>English (United States)</span>
-      <div><a href="https://id.raneddie.com/privacy">Privacy</a><a href="https://id.raneddie.com/terms">Terms of use</a><a href="mailto:support@raneddie.com">Contact us</a><span>© RanEddie 2026</span></div>
-    </div>
+    <div class="bottom"><span>© RanEddie 2026</span><span>English</span></div>
   </div>
 </footer>
 </body>
