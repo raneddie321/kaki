@@ -19,7 +19,7 @@ final class Ui {
 
     float u = 1f;
     float clock;
-    final Btn[] btns = new Btn[96];
+    final Btn[] btns = new Btn[160];
     int count;
     int pressed = -1;
     private int pressedPtr = -1;

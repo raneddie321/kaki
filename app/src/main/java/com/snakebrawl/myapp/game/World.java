@@ -217,8 +217,8 @@ final class World {
         for (int i = 0; i < orbTarget; i++) spawnNaturalOrb();
         for (int i = 0; i < boxTarget; i++) spawnBox();
         countAlive();
-        if (mode == MODE_SHOWDOWN) banner("SHOWDOWN!");
-        else if (mode == MODE_DUO) banner(ts == 3 ? "TRIO SHOWDOWN!" : "DUO SHOWDOWN!");
+        if (mode == MODE_SHOWDOWN) banner("SURVIVAL!");
+        else if (mode == MODE_DUO) banner(ts == 3 ? "TRIO SURVIVAL!" : "DUO SURVIVAL!");
         else if (mode == MODE_ENDLESS) banner("ENDLESS BRAWL!");
     }
 

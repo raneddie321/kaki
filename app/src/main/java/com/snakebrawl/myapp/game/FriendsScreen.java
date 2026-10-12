@@ -443,7 +443,7 @@ final class FriendsScreen {
             g.color(0xffb8bdf0);
             g.text("To keep younger players safe, playing online with others is turned off.", w / 2, h * 0.45f + 70 * u, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
-            g.text("You can still play Showdown, Duo and Endless against bots!", w / 2, h * 0.45f + 115 * u, 32 * u,
+            g.text("You can still play Survival, Duo and Endless against bots!", w / 2, h * 0.45f + 115 * u, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
             return;
         }

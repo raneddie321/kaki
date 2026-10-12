@@ -105,7 +105,7 @@ final class QuestScreen {
             } else {
                 MetaScreens.drawBox(g, l + cw / 2, iy, 56 * u, type == 2, game.clock, u);
                 g.color(type == 2 ? 0xffd8a0ff : 0xff8ad8ff);
-                g.text(type == 2 ? "MEGA BOX" : "BOX", l + cw / 2, top + ch - 20 * u, 28 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+                g.text(type == 2 ? "MEGA CRATE" : "CRATE", l + cw / 2, top + ch - 20 * u, 28 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
             }
             if (got) {
                 g.color(0x99000000);

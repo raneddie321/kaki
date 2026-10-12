@@ -34,7 +34,9 @@ final class Profile {
     int customClubBadge;
 
     // Snake Pass (see SnakePass): season it belongs to, XP, claimed tiers (bit masks) and Pass+
-    int passSeason, passXp, passFree, passPremium;
+    int passSeason, passXp;
+    /** Claimed Snake Pass rewards, one bit per tier. */
+    long passFree, passPremium;
     boolean passPlus;
 
     /** Arena picked on the menu (see Maps). */
@@ -68,8 +70,8 @@ final class Profile {
         hints = p.loadInt("hints", 0);
         passSeason = p.loadInt("passSeason", -1);
         passXp = Math.max(0, p.loadInt("passXp", 0));
-        passFree = p.loadInt("passFree", 0);
-        passPremium = p.loadInt("passPrem", 0);
+        passFree = (p.loadInt("passFree", 0) & 0xffffffffL) | ((long) p.loadInt("passFreeHi", 0) << 32);
+        passPremium = (p.loadInt("passPrem", 0) & 0xffffffffL) | ((long) p.loadInt("passPremHi", 0) << 32);
         passPlus = p.loadInt("passPlus", 0) == 1;
         SnakePass.checkSeason(this);
         mode = clamp(p.loadInt("mode", 0), 0, 2);
@@ -122,8 +124,10 @@ final class Profile {
         p.saveInt("hints", hints);
         p.saveInt("passSeason", passSeason);
         p.saveInt("passXp", passXp);
-        p.saveInt("passFree", passFree);
-        p.saveInt("passPrem", passPremium);
+        p.saveInt("passFree", (int) passFree);
+        p.saveInt("passFreeHi", (int) (passFree >>> 32));
+        p.saveInt("passPrem", (int) passPremium);
+        p.saveInt("passPremHi", (int) (passPremium >>> 32));
         p.saveInt("passPlus", passPlus ? 1 : 0);
         p.saveInt("mode", mode);
         p.saveInt("skin", skin);
@@ -288,7 +292,8 @@ final class Profile {
         selected = 0;
         for (int i = 0; i < levels.length; i++) levels[i] = 1;
         nextGiftMinute = 0;
-        passXp = passFree = passPremium = 0;
+        passXp = 0;
+        passFree = passPremium = 0;
         passPlus = false;
         club = -1;
         hints = 0;

@@ -11,7 +11,7 @@ final class Quests {
     static final int PLAY = 0, KNOCKOUTS = 1, WIN = 2, LENGTH = 3, CUBES = 4, TOP3 = 5, BRAWLER = 6, TOGETHER = 7;
     private static final int TYPES = 8;
 
-    // Daily calendar: type 0 coins, 1 Brawl Box, 2 Mega Box
+    // Daily calendar: type 0 coins, 1 Snake Crate, 2 Mega Crate
     static final int[] DAILY_TYPE = {0, 0, 1, 0, 0, 1, 2};
     static final int[] DAILY_COINS = {60, 80, 0, 120, 150, 0, 0};
 
@@ -134,13 +134,13 @@ final class Quests {
             case KNOCKOUTS:
                 return "Knock out " + n + " snakes";
             case WIN:
-                return "Win a Showdown or Duo match";
+                return "Win a Survival or Duo match";
             case LENGTH:
                 return "Reach length " + n + " in one match";
             case CUBES:
-                return "Collect " + n + " power cubes";
+                return "Collect " + n + " power orbs";
             case TOP3:
-                return "Finish top 3 in Showdown twice";
+                return "Finish top 3 in Survival twice";
             case BRAWLER:
                 return "Play 2 matches with " + Brawler.ALL[brawler(p, i)].name;
             default:

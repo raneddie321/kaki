@@ -178,7 +178,7 @@ final class SocialScreens {
                             + "snakes, coins and trophies safe and keep playing on any device.", 3, pr.selected,
                             Game.ACT_RID_CONNECT, 0, "CONNECT", "LATER");
                 } else {
-                    game.showInfo("WELCOME, " + pr.nickname.toUpperCase() + "!", "Pick a snake and jump into Showdown. Have fun!",
+                    game.showInfo("WELCOME, " + pr.nickname.toUpperCase() + "!", "Pick a snake and jump into Survival. Have fun!",
                             3, pr.selected);
                 }
                 return;
@@ -194,7 +194,7 @@ final class SocialScreens {
                             pr.save();
                             game.gated.playSound(Platform.SND_POWER, 1f);
                             game.showInfo("CLUB CREATED!", n + " is ready. Your clubmate " + game.partnerName()
-                                    + " will team up with you in Duo Showdown.", 0, 0);
+                                    + " will team up with you in Duo Survival.", 0, 0);
                         } else if (text != null) {
                             game.showInfo("NAME TOO SHORT", "Club names need at least 3 letters.", 0, 0);
                         }

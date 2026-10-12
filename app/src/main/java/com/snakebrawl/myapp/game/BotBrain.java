@@ -22,8 +22,9 @@ final class BotBrain {
     BotBrain(World w, Snake me, int trophies) {
         this.w = w;
         this.me = me;
-        float base = 0.2f + Math.min(0.35f, trophies / 1500f);
-        this.skill = MathUtil.clamp(base + MathUtil.rand(-0.1f, 0.1f), 0.1f, 0.7f);
+        // Bots get better slowly as the player climbs: clumsy at 0 trophies, sharp from about 1400
+        float base = 0.15f + Math.min(0.7f, trophies / 2000f);
+        this.skill = MathUtil.clamp(base + MathUtil.rand(-0.1f, 0.1f), 0.08f, 0.92f);
         this.aggression = MathUtil.rand(0.2f, 1f);
         reset();
     }
@@ -186,7 +187,7 @@ final class BotBrain {
                 d = dd;
             }
         }
-        float err = (1f - skill) * 0.4f + (t.isPlayer ? 0.12f : 0f);
+        float err = (1f - skill) * 0.4f + (t.isPlayer ? 0.16f * (1f - skill) : 0f);
         ang += MathUtil.rand(-err, err);
 
         if (me.superReady()) {

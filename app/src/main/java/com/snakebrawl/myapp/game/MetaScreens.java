@@ -247,12 +247,12 @@ final class MetaScreens {
                 break;
             case B_BOX:
                 if (pr.coins < Profile.BOX_PRICE) notEnough(Profile.BOX_PRICE);
-                else game.confirm("BRAWL BOX", "Open a Brawl Box for " + Profile.BOX_PRICE
+                else game.confirm("SNAKE CRATE", "Open a Snake Crate for " + Profile.BOX_PRICE
                         + " coins? It can hold coins, a skin or a free upgrade.", 4, 0, Game.ACT_BOX, 0);
                 break;
             case B_MEGA:
                 if (pr.coins < Profile.MEGA_BOX_PRICE) notEnough(Profile.MEGA_BOX_PRICE);
-                else game.confirm("MEGA BOX", "Open a Mega Box for " + Profile.MEGA_BOX_PRICE
+                else game.confirm("MEGA CRATE", "Open a Mega Crate for " + Profile.MEGA_BOX_PRICE
                         + " coins? A guaranteed new skin plus bonus coins!", 4, 1, Game.ACT_MEGA_BOX, 0);
                 break;
             case B_DEAL: {
@@ -375,7 +375,7 @@ final class MetaScreens {
                 viewBrawler = arg;
                 pr.save();
                 game.gated.playSound(Platform.SND_VICTORY, 0.8f);
-                game.showInfo(b.name + " UNLOCKED!", b.name + " is ready to brawl! Super: " + b.superName + " - " + b.superDesc, 3, arg);
+                game.showInfo(b.name + " UNLOCKED!", b.name + " is ready to brawl! Ultra: " + b.superName + " - " + b.superDesc, 3, arg);
                 break;
             }
             case Game.ACT_UPGRADE: {
@@ -405,7 +405,6 @@ final class MetaScreens {
     }
 
     void openBox(boolean mega) {
-        game.gated.playSound(Platform.SND_BOX, 1f);
         if (mega) {
             int s = randomUnownedSkin(Integer.MAX_VALUE);
             int coins = 150 + MathUtil.randInt(21) * 10;
@@ -413,11 +412,11 @@ final class MetaScreens {
             if (s > 0) {
                 pr.ownedSkins |= 1 << s;
                 pr.save();
-                game.showInfo("MEGA BOX!", "New skin: " + Skin.ALL[s].name + "! Plus " + coins + " coins. Equip it in the shop.", 2, s);
+                game.box.start(true, "NEW SKIN!", Skin.ALL[s].name + "! Plus " + coins + " coins. Equip it in the shop.", 2, s);
             } else {
                 pr.coins += 400;
                 pr.save();
-                game.showInfo("MEGA BOX!", "You own every skin, so you get " + (coins + 400) + " coins!", 1, 0);
+                game.box.start(true, (coins + 400) + " COINS!", "You own every skin, so you get " + (coins + 400) + " coins!", 1, 0);
             }
             return;
         }
@@ -427,7 +426,7 @@ final class MetaScreens {
             if (s > 0) {
                 pr.ownedSkins |= 1 << s;
                 pr.save();
-                game.showInfo("BRAWL BOX!", "New skin: " + Skin.ALL[s].name + "! Equip it in the shop.", 2, s);
+                game.box.start(false, "NEW SKIN!", Skin.ALL[s].name + "! Equip it in the shop.", 2, s);
                 return;
             }
         } else if (r < 0.45f) {
@@ -439,7 +438,7 @@ final class MetaScreens {
                     if (pr.isUnlocked(i) && pr.levels[i] < Brawler.MAX_LEVEL && pick-- == 0) {
                         pr.levels[i]++;
                         pr.save();
-                        game.showInfo("BRAWL BOX!", "Free upgrade! " + Brawler.ALL[i].name + " is now power level " + pr.levels[i] + ".", 3, i);
+                        game.box.start(false, "FREE UPGRADE!", Brawler.ALL[i].name + " is now power level " + pr.levels[i] + ".", 3, i);
                         return;
                     }
                 }
@@ -448,7 +447,7 @@ final class MetaScreens {
         int coins = 60 + MathUtil.randInt(17) * 10;
         pr.coins += coins;
         pr.save();
-        game.showInfo("BRAWL BOX!", "You found " + coins + " coins!", 1, 0);
+        game.box.start(false, coins + " COINS!", "You found " + coins + " coins in the crate!", 1, 0);
     }
 
     private int randomUnownedSkin(int maxPrice) {
@@ -619,7 +618,7 @@ final class MetaScreens {
         y += 14 * u;
         if (y + 30 * u < limit) {
             g.color(0xffffd23f);
-            g.text("SUPER: " + br.superName, l + 30 * u, y + 20 * u, 28 * u, Gfx.ALIGN_LEFT, 4 * u, Ui.INK);
+            g.text("ULTRA: " + br.superName, l + 30 * u, y + 20 * u, 28 * u, Gfx.ALIGN_LEFT, 4 * u, Ui.INK);
             ui.wrap(g, br.superDesc, l + 30 * u, r - 30 * u, y + 24 * u, 25 * u, 0xffe8eaff, limit);
         }
     }
@@ -683,14 +682,14 @@ final class MetaScreens {
                 price = pr.giftReady() ? "CLAIM" : "WAIT";
                 break;
             case B_BOX:
-                title = "BRAWL BOX";
+                title = "SNAKE CRATE";
                 color = 0xff8a5aff;
                 sub = "Coins, skins or upgrades";
                 price = Integer.toString(Profile.BOX_PRICE);
                 canAfford = pr.coins >= Profile.BOX_PRICE;
                 break;
             case B_MEGA:
-                title = "MEGA BOX";
+                title = "MEGA CRATE";
                 color = 0xffffa62e;
                 sub = "Guaranteed new skin!";
                 price = Integer.toString(Profile.MEGA_BOX_PRICE);
@@ -914,7 +913,7 @@ final class MetaScreens {
                 Ui.fit(g, Brawler.RARITY_NAMES[br.rarity] + " " + br.role.toUpperCase(), 28 * u, (r - l) * 0.9f),
                 Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
         ui.snakeArt(g, br, new int[]{br.color1, br.color2}, (l + r) / 2, t + 230 * u, Math.min(1.05f * u, (r - l) / 330f), game.clock + bi);
-        ui.wrap(g, "SUPER: " + br.superDesc, l + 24 * u, r - 24 * u, t + 320 * u, 26 * u, 0xffe8eaff, b - 110 * u);
+        ui.wrap(g, "ULTRA: " + br.superDesc, l + 24 * u, r - 24 * u, t + 320 * u, 26 * u, 0xffe8eaff, b - 110 * u);
         g.color(Ui.INK);
         g.fillRoundRect(l + 24 * u, b - 96 * u, r - 24 * u, b - 18 * u, 22 * u);
         g.color(owned ? 0xff4ad04a : (pr.coins >= br.price ? 0xffffc928 : 0xff8a6a3a));
@@ -946,7 +945,7 @@ final class MetaScreens {
             ui.button(g, bt);
         }
         g.color(0xff9aa0d0);
-        g.text("Snake Brawl v3.14  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
+        g.text("Snake Brawl v3.15  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
                 w / 2, h - game.padB - 160 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 }

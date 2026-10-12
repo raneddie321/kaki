@@ -1,10 +1,10 @@
 package com.snakebrawl.myapp.game;
 
-/** The Snake Pass screen: a scrolling track of 30 tiers with free and Pass+ rewards. */
+/** The Snake Pass screen: a scrolling track of 50 tiers with free and Pass+ rewards. */
 final class PassScreen {
-    static final int B_FIRST = 700;
-    private static final int B_PLUS = 700, B_CLAIM_ALL = 701, B_REWARD = 710;
-    static final int B_LAST = 710 + SnakePass.TIERS * 2 + 2;
+    static final int B_FIRST = 1000;
+    private static final int B_PLUS = 1000, B_CLAIM_ALL = 1001, B_REWARD = 1010;
+    static final int B_LAST = B_REWARD + SnakePass.TIERS * 2 + 2;
 
     private final Game game;
     private final Ui ui;
@@ -63,7 +63,7 @@ final class PassScreen {
         if (id == B_PLUS) {
             game.confirm("SNAKE PASS+", "Unlock the golden track for this season for " + SnakePass.PLUS_PRICE
                     + " coins? You get the " + Brawler.ALL[SnakePass.BRAWLER_PLUS].name + " snake, the "
-                    + Skin.ALL[SnakePass.SKIN_PLUS].name + " skin, Mega Boxes and lots of coins.", 1, 0, Game.ACT_PASS_PLUS, 0);
+                    + Skin.ALL[SnakePass.SKIN_PLUS].name + " skin, Mega Crates and lots of coins.", 1, 0, Game.ACT_PASS_PLUS, 0);
             return;
         }
         if (id == B_CLAIM_ALL) {
@@ -113,7 +113,7 @@ final class PassScreen {
     }
 
     private void claim(int track, int t, boolean announce) {
-        int bit = 1 << (t - 1);
+        long bit = 1L << (t - 1);
         if (track == SnakePass.TRACK_FREE) pr.passFree |= bit;
         else pr.passPremium |= bit;
         int type = SnakePass.type(track, t), a = SnakePass.amount(track, t);
@@ -148,7 +148,7 @@ final class PassScreen {
                     if (announce) game.showInfo("TIER " + t, "You already have " + Brawler.ALL[a].name + ", so here are 800 coins!", 1, 0);
                 } else {
                     pr.unlocked |= 1 << a;
-                    if (announce) game.showInfo(Brawler.ALL[a].name + " UNLOCKED!", Brawler.ALL[a].name + " joined your team. Super: "
+                    if (announce) game.showInfo(Brawler.ALL[a].name + " UNLOCKED!", Brawler.ALL[a].name + " joined your team. Ultra: "
                             + Brawler.ALL[a].superName + ".", 3, a);
                 }
                 pr.save();
@@ -274,8 +274,8 @@ final class PassScreen {
                 break;
             }
         }
-        String title = type == SnakePass.R_COINS ? a + " COINS" : type == SnakePass.R_BOX ? "BRAWL BOX" : type == SnakePass.R_MEGA
-                ? "MEGA BOX" : type == SnakePass.R_SKIN ? Skin.ALL[a].name.toUpperCase() : Brawler.ALL[a].name;
+        String title = type == SnakePass.R_COINS ? a + " COINS" : type == SnakePass.R_BOX ? "SNAKE CRATE" : type == SnakePass.R_MEGA
+                ? "MEGA CRATE" : type == SnakePass.R_SKIN ? Skin.ALL[a].name.toUpperCase() : Brawler.ALL[a].name;
         g.color(MathUtil.withAlpha(type >= SnakePass.R_SKIN ? 0xffffd23f : 0xffffffff, alpha));
         g.text(title, l + 180 * u, iy - 4 * u, Ui.fit(g, title, 40 * u, r - l - 200 * u), Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
         String sub = type == SnakePass.R_SKIN ? "Exclusive skin" : type == SnakePass.R_BRAWLER ? "New snake!"

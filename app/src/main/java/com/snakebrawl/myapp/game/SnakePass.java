@@ -1,11 +1,11 @@
 package com.snakebrawl.myapp.game;
 
 /**
- * The Snake Pass: a season of 30 tiers. Every match earns pass XP; each tier has a free reward
+ * The Snake Pass: a season of 50 tiers. Every match earns pass XP; each tier has a free reward
  * and a Snake Pass+ reward (Pass+ is bought with coins). Seasons last 30 days and reset the pass.
  */
 final class SnakePass {
-    static final int TIERS = 30;
+    static final int TIERS = 50;
     static final int XP_PER_TIER = 150;
     static final int SEASON_DAYS = 30;
     static final int PLUS_PRICE = 1200;
@@ -57,14 +57,14 @@ final class SnakePass {
     /** Reward type for a tier (1..TIERS) on a track. */
     static int type(int track, int t) {
         if (track == TRACK_FREE) {
-            if (t == 20) return R_SKIN;
-            if (t == TIERS) return R_MEGA;
+            if (t == 35) return R_SKIN;
+            if (t == 25 || t == TIERS) return R_MEGA;
             return t % 5 == 0 ? R_BOX : R_COINS;
         }
         if (t == TIERS) return R_SKIN;
-        if (t == 15) return R_BRAWLER;
-        if (t % 5 == 0) return R_MEGA;
-        return t % 3 == 0 ? R_BOX : R_COINS;
+        if (t == 25) return R_BRAWLER;
+        if (t % 10 == 0) return R_MEGA;
+        return t % 4 == 0 ? R_BOX : R_COINS;
     }
 
     /** Coins for coin rewards, the skin id for skins, the brawler id for brawlers. */
@@ -75,15 +75,15 @@ final class SnakePass {
             case R_BRAWLER:
                 return BRAWLER_PLUS;
             case R_COINS:
-                return track == TRACK_FREE ? 40 + (t * 4 / 10) * 10 : 90 + (t * 8 / 10) * 10;
+                return track == TRACK_FREE ? 20 + (t * 3 / 10) * 10 : 50 + (t * 5 / 10) * 10;
             default:
                 return 0;
         }
     }
 
     static boolean claimed(Profile p, int track, int t) {
-        int mask = track == TRACK_FREE ? p.passFree : p.passPremium;
-        return (mask & (1 << (t - 1))) != 0;
+        long mask = track == TRACK_FREE ? p.passFree : p.passPremium;
+        return (mask & (1L << (t - 1))) != 0;
     }
 
     static boolean canClaim(Profile p, int track, int t) {
@@ -104,15 +104,15 @@ final class SnakePass {
     static int matchXp(int mode, int rank, int kills, boolean win) {
         int xp;
         if (mode == World.MODE_SHOWDOWN) {
-            int[] byRank = {90, 70, 60, 50, 40, 32, 26, 20, 16, 12};
+            int[] byRank = {40, 32, 26, 22, 18, 14, 11, 9, 7, 5};
             xp = byRank[Profile.clamp(rank - 1, 0, byRank.length - 1)];
         } else if (mode == World.MODE_DUO) {
-            int[] byRank = {90, 65, 45, 30, 20};
+            int[] byRank = {40, 28, 20, 12, 8};
             xp = byRank[Profile.clamp(rank - 1, 0, byRank.length - 1)];
         } else {
-            xp = 25;
+            xp = 12;
         }
-        return xp + Math.min(60, kills * 10) + (win ? 20 : 0);
+        return xp + Math.min(15, kills * 3) + (win ? 10 : 0);
     }
 
     static String name(int track, int t) {
@@ -121,9 +121,9 @@ final class SnakePass {
             case R_COINS:
                 return a + " coins";
             case R_BOX:
-                return "Brawl Box";
+                return "Snake Crate";
             case R_MEGA:
-                return "Mega Box";
+                return "Mega Crate";
             case R_SKIN:
                 return Skin.ALL[a].name + " skin";
             default:

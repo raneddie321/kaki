@@ -9,7 +9,7 @@ public final class Game {
     static final int B_PLAY = 1, B_MODE = 2, B_BRAWLERS = 3, B_SHOP = 4, B_SETTINGS = 5, B_BACK = 6,
             B_AGAIN = 7, B_MENU = 8, B_RESUME = 9, B_QUIT = 10, B_CLUB = 11, B_FRIENDS = 12, B_PASS = 13, B_SHOWCASE = 14, B_MAP = 15,
             B_QUESTS = 16, B_PHOTO = 17, B_UPDATE = 18, B_YES = 90, B_NO = 91, B_OK = 92,
-            B_SHEET_BUY = 93, B_SHEET_CANCEL = 94;
+            B_SHEET_BUY = 93, B_SHEET_CANCEL = 94, B_BOX_TAP = 95;
 
     // Popup actions confirmed with YES
     static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
@@ -17,12 +17,14 @@ public final class Game {
             ACT_DELETE_MAP = 11, ACT_UPDATE = 12, ACT_RID_CONNECT = 13, ACT_RID_DISCONNECT = 15;
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
-    private static final int[] RANK_COINS = {50, 40, 32, 26, 20, 15, 11, 8, 5, 3};
+    // Coins are scarce: only the top half of a match earns any, and only a few
+    private static final int[] RANK_COINS = {12, 9, 7, 5, 3, 0, 0, 0, 0, 0};
 
     private final Platform host;
     final Platform gated;
     final Profile profile;
     final Ui ui = new Ui();
+    final BoxReveal box = new BoxReveal(this);
     private final MetaScreens meta;
     /** RanEddie ID: cloud save and sign-in across devices. */
     final RanEddieId rid;
@@ -92,7 +94,7 @@ public final class Game {
     private float tutTime, tutSteer, tutBoost, tutMass0;
     private static final String[] TUT_TEXT = {
             "DRAG ON THE LEFT SIDE TO STEER", "TAP THE RED BUTTON TO SHOOT", "HOLD BOOST TO SPEED UP",
-            "EAT GLOWING ORBS TO GROW", "HIT SNAKES TO CHARGE YOUR SUPER", "BE THE LAST SNAKE STANDING!",
+            "EAT GLOWING ORBS TO GROW", "HIT SNAKES TO CHARGE YOUR ULTRA", "BE THE LAST SNAKE STANDING!",
     };
 
     // Wi-Fi match (lockstep: every phone simulates the same world from the same inputs)
@@ -442,7 +444,7 @@ public final class Game {
         flyCount = FLY;
     }
 
-    /** Opens a Brawl Box (or Mega Box) as a reward. */
+    /** Opens a Snake Crate (or Mega Crate) as a reward. */
     void openRewardBox(boolean mega) {
         meta.openBox(mega);
     }
@@ -629,6 +631,10 @@ public final class Game {
             if (sheetPhase == 0) closeSheet();
             return true;
         }
+        if (box.active) {
+            box.tap();
+            return true;
+        }
         if (popup) {
             closePopup();
             return true;
@@ -728,7 +734,7 @@ public final class Game {
 
     /** Shares an invite to the game (system share sheet). */
     void invite() {
-        String text = "Play Snake Brawl with me! It's like snake.io with super powers. Get it on Google Play: "
+        String text = "Play Snake Brawl with me! Get it on Google Play: "
                 + "https://play.google.com/store/apps/details?id=com.snakebrawl.raneddie";
         if (!gated.share(text)) {
             showInfo("INVITE FRIENDS", "Tell your friends to search for Snake Brawl on Google Play!", 0, 0);
@@ -985,20 +991,22 @@ public final class Game {
         if (world.mode == World.MODE_SHOWDOWN) {
             resRank = win ? 1 : Math.max(1, p.rank);
             resDelta = TROPHY_TABLE[Profile.clamp(resRank - 1, 0, TROPHY_TABLE.length - 1)];
-            resCoins = RANK_COINS[Profile.clamp(resRank - 1, 0, RANK_COINS.length - 1)] + p.kills * 8 + Math.min(30, resLength / 15);
+            resCoins = RANK_COINS[Profile.clamp(resRank - 1, 0, RANK_COINS.length - 1)];
+            if (resCoins > 0) resCoins += Math.min(6, p.kills * 2);
             if (win) profile.wins++;
         } else if (world.mode == World.MODE_DUO) {
             resRank = win ? 1 : Math.max(1, p.rank);
             int[] duoTrophies = {9, 6, 3, 0, -2};
-            int[] duoCoins = {50, 36, 24, 14, 6};
+            int[] duoCoins = {12, 7, 4, 0, 0};
             int ri = Profile.clamp(resRank - 1, 0, 4);
             resDelta = duoTrophies[ri];
-            resCoins = duoCoins[ri] + p.kills * 8 + Math.min(30, resLength / 15);
+            resCoins = duoCoins[ri];
+            if (resCoins > 0) resCoins += Math.min(6, p.kills * 2);
             if (win) profile.wins++;
         } else {
             resRank = 0;
             resDelta = Math.min(5, p.kills);
-            resCoins = p.kills * 8 + Math.min(60, resLength / 12);
+            resCoins = p.kills >= 3 ? Math.min(10, p.kills * 2) : 0;
         }
         int before = profile.trophies;
         profile.trophies = Math.max(0, profile.trophies + resDelta);
@@ -1128,6 +1136,7 @@ public final class Game {
 
     private void update(float dt) {
         rid.update(dt);
+        box.update(dt);
         maybeShowUpdate();
         if (forcedUpdate) return;
         if (screen == FRIENDS) friends.update(dt);
@@ -1472,6 +1481,10 @@ public final class Game {
             sheetButton(id);
             return;
         }
+        if (box.active) {
+            if (id == B_BOX_TAP) box.tap();
+            return;
+        }
         if (popup) {
             popupButton(id);
             return;
@@ -1613,6 +1626,10 @@ public final class Game {
             }
             return;
         }
+        if (box.active) {
+            ui.add(B_BOX_TAP, 0, 0, w, h, null, null, 0);
+            return;
+        }
         if (popup) {
             float cx = w / 2, by = h / 2 - 30 * u + 300 * u - 40 * u;
             if (popConfirm) {
@@ -1628,7 +1645,7 @@ public final class Game {
                 float bw = 400 * u, bh = 150 * u;
                 float r = w - padR - 30 * u, b = h - padB - 30 * u;
                 ui.add(B_PLAY, r - bw, b - bh, r, b, "PLAY", null, 0xffffc928);
-                String[] modeNames = {"SHOWDOWN", "ENDLESS", "DUO SHOWDOWN"};
+                String[] modeNames = {"SURVIVAL", "ENDLESS", "DUO SURVIVAL"};
                 String[] modeSubs = {"Last snake standing", "Grow forever", "You + " + partnerName() + " vs 4 teams"};
                 int[] modeCols = {0xff3fa0ff, 0xffb35cff, 0xffff7a2e};
                 ui.add(B_MODE, r - bw - 30 * u - 430 * u, b - bh, r - bw - 30 * u, b,
@@ -1699,8 +1716,8 @@ public final class Game {
 
     private static final String[] TIPS = {
             "Move fast and stay aware of your surroundings.", "Hide in bushes to surprise other snakes!",
-            "Eat glowing orbs to grow longer and stronger.", "Break boxes to collect power cubes.",
-            "Hit snakes to charge your SUPER.", "Stay out of the poison when it closes in!",
+            "Eat glowing orbs to grow longer and stronger.", "Break crates to collect power orbs.",
+            "Hit snakes to charge your ULTRA.", "Stay out of the poison when it closes in!",
             "Play with up to 3 friends on the same Wi-Fi.", "Build your own arena in the MAP MAKER.",
             "Claim your daily reward every day!", "Hold BOOST to escape, but it costs length.",
     };
@@ -2029,6 +2046,7 @@ public final class Game {
                 break;
         }
         if (popup) renderPopup(g);
+        if (box.active) box.render(g);
         if (sheetPack >= 0) renderSheet(g);
         if (forcedUpdate) renderForcedUpdate(g);
         renderCoinFly(g);
@@ -2402,7 +2420,7 @@ public final class Game {
             g.color(MathUtil.withAlpha(0xffffffff, a));
             g.text(profile.leftHanded ? "Drag RIGHT side to steer  •  Left stick: tap = auto-aim, drag = aim" : "Drag LEFT side to steer  •  Right stick: tap = auto-aim, drag = aim", cx, h * 0.62f, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, MathUtil.withAlpha(0xff14142a, a));
-            g.text("Hold BOOST to sprint  •  Hit snakes to charge your SUPER", cx, h * 0.62f + 44 * u, 32 * u,
+            g.text("Hold BOOST to sprint  •  Hit snakes to charge your ULTRA", cx, h * 0.62f + 44 * u, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, MathUtil.withAlpha(0xff14142a, a));
         }
 
@@ -2412,7 +2430,7 @@ public final class Game {
 
     /** Big hint for the current tutorial step, with an arrow to the control it is about. */
     private void drawTutorial(Gfx g, Snake p) {
-        String text = tutStep == 4 && p.superReady() ? "SUPER READY! TAP THE YELLOW BUTTON" : TUT_TEXT[Math.min(tutStep, TUT_TEXT.length - 1)];
+        String text = tutStep == 4 && p.superReady() ? "ULTRA READY! TAP THE YELLOW BUTTON" : TUT_TEXT[Math.min(tutStep, TUT_TEXT.length - 1)];
         if (tutStep == 0 && profile.leftHanded) text = "DRAG ON THE RIGHT SIDE TO STEER";
         float a = Math.min(1f, tutTime * 3f);
         float cx = w / 2, cy = h * 0.27f;
@@ -2806,7 +2824,7 @@ public final class Game {
         sy += row;
         resultRow(g, "LENGTH", (resNewBest ? "NEW BEST! " : "") + resLength, resNewBest ? 0xffffd23f : 0xffffffff, sx, vx, sy);
         sy += row;
-        resultRow(g, "POWER CUBES", Integer.toString(resCubes), 0xff6dff6d, sx, vx, sy);
+        resultRow(g, "POWER ORBS", Integer.toString(resCubes), 0xff6dff6d, sx, vx, sy);
         sy += row;
         int secs = (int) resTime;
         resultRow(g, "SURVIVED", secs / 60 + ":" + (secs % 60 < 10 ? "0" : "") + secs % 60, 0xffffffff, sx, vx, sy);

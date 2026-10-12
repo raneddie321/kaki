@@ -164,7 +164,7 @@ final class MapScreens {
         g.restore();
         for (int i = 0; i < ui.count; i++) if (!ui.btns[i].scrolls) ui.button(g, ui.btns[i]);
         g.color(0xffb8bdf0);
-        g.text("Tap a map to play on it. Your map is used in Showdown, Duo, Endless and with friends.", w / 2, h - game.padB - 14 * u,
+        g.text("Tap a map to play on it. Your map is used in Survival, Duo, Endless and with friends.", w / 2, h - game.padB - 14 * u,
                 26 * u, Gfx.ALIGN_CENTER, 3 * u, Ui.INK);
     }
 
@@ -323,7 +323,7 @@ final class MapScreens {
         float colW = (r - l - 20 * u) / 2;
         float t = game.padT + 20 * u, bh = 110 * u, gap = 18 * u;
         ui.add(Game.B_BACK, l, t, l + colW, t + bh, "DONE", "Saves the map", 0xffff5a5a);
-        ui.add(B_TEST, l + colW + 20 * u, t, r, t + bh, "TEST PLAY", "Solo Showdown", 0xffffc928);
+        ui.add(B_TEST, l + colW + 20 * u, t, r, t + bh, "TEST PLAY", "Solo Survival", 0xffffc928);
         t += bh + gap + 20 * u;
         float tw = (r - l - 40 * u) / 3;
         int[] cols = {0xff7d8aa8, 0xff3f9b3c, 0xffff7a6a};
