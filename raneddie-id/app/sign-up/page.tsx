@@ -173,8 +173,7 @@ function SignUp() {
       go("verify");
       return;
     }
-    setBusy(false);
-    setError(`Clerk still needs: ${signUp.missingFields.join(", ") || "unknown"}.`);
+    await finishSignUp();
   }
 
   // ---------------------------------------------------------------- step 6: verify email
@@ -182,17 +181,39 @@ function SignUp() {
     e.preventDefault();
     setError(null);
     setBusy(true);
-    const { error } = await signUp.verifications.verifyEmailCode({ code: code.trim() });
-    if (error) {
+    if (signUp.unverifiedFields.includes("email_address")) {
+      const { error } = await signUp.verifications.verifyEmailCode({ code: code.trim() });
+      if (error) {
+        setBusy(false);
+        return setError(clerkError(error).message);
+      }
+    }
+    await finishSignUp();
+  }
+
+  /** The email is verified: fill in whatever else the Clerk settings require, then sign the player in. */
+  async function finishSignUp() {
+    if (signUp.status !== "complete" && signUp.missingFields.includes("legal_accepted")) {
+      // The player accepted the Terms and Privacy Policy on the username step
+      await signUp.update({ legalAccepted: true });
+    }
+    if (signUp.status !== "complete" && signUp.missingFields.includes("username")) {
       setBusy(false);
-      return setError(clerkError(error).message);
+      setFieldError({ username: "Choose a username to finish." });
+      setStep("username");
+      return;
     }
     if (signUp.status === "complete") {
-      await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1")) });
-    } else {
-      setBusy(false);
-      setError("We couldn't finish creating your account. Please try again.");
+      const { error } = await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1")) });
+      if (error) {
+        setBusy(false);
+        setError(clerkError(error).message);
+      }
+      return;
     }
+    setBusy(false);
+    const missing = [...signUp.missingFields, ...signUp.unverifiedFields].join(", ");
+    setError(`Your email is verified, but your account still needs: ${missing || "unknown"}. Please contact support.`);
   }
 
   const stepper = stepIndex >= 0 && <Stepper step={stepIndex + 1} total={STEPS.length} label={STEPS[stepIndex].label} />;
