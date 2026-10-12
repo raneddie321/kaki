@@ -21,7 +21,7 @@ export function AuthShell({ children, wide = false }: { children: ReactNode; wid
         {children}
       </div>
       <footer className="mt-8 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-white/50">
-        <span>© {new Date().getFullYear()} RanEddie</span>
+        <span>© RanEddie</span>
         <Link href="/privacy" className="hover:text-white/80">Privacy</Link>
         <Link href="/terms" className="hover:text-white/80">Terms</Link>
         <span className="flex items-center gap-1">
