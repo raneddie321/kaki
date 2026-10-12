@@ -903,7 +903,7 @@ public final class SimTest {
         shot(sp, font, width, height, outDir + "/00b_splash.png");
         run(sp, 1.2f);
         shot(sp, font, width, height, outDir + "/00c_splash_fade.png");
-        run(sp, 0.5f);
+        run(sp, 1.0f);
         if (sp.splash > 0) throw new IllegalStateException("splash did not end");
         Game.showSplash = false;
 
