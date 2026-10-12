@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RanEddie — Games</title>
-<meta name="description" content="RanEddie makes fast, fun mobile games. Play Snake Brawl on Google Play.">
+<title>RanEddie</title>
+<meta name="description" content="RanEddie builds games, AI tools and apps — all connected by one RanEddie ID.">
 <link rel="icon" href="assets/raneddie-logo.png">
 <style>
   :root {
@@ -84,6 +84,15 @@
   .soon div { border: 1px dashed rgb(255 255 255 / .14); border-radius: 20px; padding: 26px; color: var(--muted); }
   .soon b { display: block; color: var(--text); margin-bottom: 4px; }
 
+  .cats { margin-top: 36px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .cat { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; padding: 26px; }
+  .cat i { font-style: normal; font-size: 28px; display: block; margin-bottom: 14px; }
+  .cat b { display: block; font-size: 18px; margin-bottom: 6px; }
+  .cat span { color: var(--muted); font-size: 15px; }
+  .cat em { position: absolute; top: 20px; right: 20px; font-style: normal; font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 99px; background: rgb(255 255 255 / .07); color: var(--muted); }
+  .cat.live { border-color: rgb(74 163 255 / .4); background: linear-gradient(160deg, rgb(47 123 255 / .18), var(--panel)); }
+  .cat.live em { background: rgb(31 208 224 / .18); color: var(--cyan); }
+
   /* RanEddie ID */
   .id { position: relative; }
   .id-card { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; border-radius: 28px; padding: 48px; background: linear-gradient(135deg, rgb(47 123 255 / .18), rgb(31 208 224 / .08)); border: 1px solid rgb(74 163 255 / .25); }
@@ -120,6 +129,7 @@
     .game .art { min-height: 220px; }
     .game .art::after { background: linear-gradient(180deg, transparent 60%, var(--panel)); }
     .soon { grid-template-columns: 1fr; }
+    .cats { grid-template-columns: 1fr 1fr; }
     .mock { margin: 0 auto; }
     .id-card { padding: 28px; }
     .values { grid-template-columns: 1fr; }
@@ -131,7 +141,7 @@
   <div class="wrap">
     <a class="brand" href="#"><img src="assets/raneddie-logo.png" alt="">RanEddie</a>
     <div class="links">
-      <a href="#games">Games</a>
+      <a href="#products">Products</a>
       <a href="#id">RanEddie ID</a>
       <a href="#about">About</a>
       <a href="#contact">Contact</a>
@@ -143,25 +153,34 @@
 <header class="hero">
   <div class="glow"></div>
   <div class="wrap">
-    <span class="pill">🎮 New: <b>4 crazy snakes</b> in Snake Brawl</span>
-    <h1>Games you <span class="grad">can't put down.</span></h1>
-    <p class="lead">RanEddie is an independent game studio making fast, colorful games for phones — built to be played with friends.</p>
+    <span class="pill">🚀 Now live: <b>Snake Brawl</b> · More products coming soon</span>
+    <h1>Technology for <span class="grad">play, work and everything in between.</span></h1>
+    <p class="lead">RanEddie builds games, AI assistants and everyday apps — all connected by one account.</p>
     <div class="cta">
-      <a class="btn btn-primary" href="#games">▶ Play Snake Brawl</a>
+      <a class="btn btn-primary" href="#products">Explore products</a>
       <a class="btn btn-ghost" href="https://id.raneddie.com/sign-up">Create a RanEddie ID</a>
     </div>
     <div class="stats">
-      <div><b>16</b>snakes to collect</div>
-      <div><b>3</b>game modes</div>
-      <div><b>100%</b>free to play</div>
+      <div><b>Games</b>play together</div>
+      <div><b>AI</b>chat &amp; code</div>
+      <div><b>Apps</b>work smarter</div>
     </div>
   </div>
 </header>
 
-<section id="games">
+<section id="products">
   <div class="wrap">
-    <div class="eyebrow">Our games</div>
-    <h2>Snake Brawl</h2>
+    <div class="eyebrow">Products</div>
+    <h2>Everything RanEddie</h2>
+    <p class="sub">One company, one account, a growing family of products.</p>
+    <div class="cats">
+      <div class="cat live"><i>🎮</i><b>Games</b><span>Fast, colorful games built to play with friends.</span><em>Live</em></div>
+      <div class="cat"><i>💬</i><b>RanEddie Chat</b><span>An AI assistant you can talk to about anything.</span><em>Coming soon</em></div>
+      <div class="cat"><i>⌨️</i><b>RanEddie Code</b><span>An AI coding assistant that builds with you.</span><em>Coming soon</em></div>
+      <div class="cat"><i>📊</i><b>RanEddie Office</b><span>Docs, sheets and smart insights for your work.</span><em>Coming soon</em></div>
+    </div>
+    <div class="eyebrow" style="margin-top:64px">Featured game</div>
+    <h2 style="font-size:36px">Snake Brawl</h2>
     <p class="sub">Slither, shoot and survive. Snake.io meets brawler action — grow your snake, charge your super and be the last one standing.</p>
     <div class="game">
       <div class="art" role="img" aria-label="Snake Brawl gameplay"></div>
@@ -179,8 +198,8 @@
     </div>
     <div class="soon">
       <div><b>More games coming</b>We're already working on the next one.</div>
-      <div><b>One account</b>Your RanEddie ID works in every RanEddie game.</div>
-      <div><b>Made with players</b>Tell us what you want to see next.</div>
+      <div><b>One account</b>Your RanEddie ID works across every RanEddie product.</div>
+      <div><b>Made with you</b>Tell us what you want us to build next.</div>
     </div>
   </div>
 </section>
@@ -190,10 +209,10 @@
     <div class="id-card">
       <div>
         <div class="eyebrow">RanEddie ID</div>
-        <h2>One account for every game</h2>
-        <p class="sub">Keep your progress safe and continue on any device.</p>
+        <h2>One account for everything</h2>
+        <p class="sub">Games, AI tools and apps — sign in once and everything follows you to any device.</p>
         <div class="feats">
-          <div class="feat"><i>☁️</i><div><b>Cloud save</b><span>Snakes, coins and trophies are saved to your account automatically.</span></div></div>
+          <div class="feat"><i>☁️</i><div><b>Synced everywhere</b><span>Game progress, chats and files are saved to your account.</span></div></div>
           <div class="feat"><i>📱</i><div><b>Play anywhere</b><span>New phone? Sign in and pick up right where you left off.</span></div></div>
           <div class="feat"><i>🔒</i><div><b>Secure</b><span>Passwords are encrypted — nobody can read them, not even us.</span></div></div>
         </div>
@@ -218,14 +237,14 @@
   <div class="wrap about">
     <div>
       <div class="eyebrow">About us</div>
-      <h2>A small studio with big games</h2>
-      <p class="sub">RanEddie started with one idea: mobile games should be quick to pick up, fair to play and way more fun with friends. Every game we make is designed, built and tested with our players.</p>
+      <h2>Building what's next</h2>
+      <p class="sub">RanEddie is a young technology company. We started with games and are growing into AI and productivity — products that are simple to use, fair, and respect your privacy.</p>
     </div>
     <div class="values">
-      <div><b>Fair play</b><span>No pay-to-win walls. Skill decides who wins.</span></div>
-      <div><b>Kid safe</b><span>Age-appropriate settings and no chat with strangers.</span></div>
-      <div><b>Always updated</b><span>New snakes, maps and events every few weeks.</span></div>
-      <div><b>Play together</b><span>Online and same-Wi-Fi matches with friends.</span></div>
+      <div><b>Simple</b><span>Powerful products that anyone can pick up.</span></div>
+      <div><b>Private</b><span>Your data is yours. We never sell it.</span></div>
+      <div><b>Fair</b><span>No pay-to-win and no dark patterns.</span></div>
+      <div><b>Always improving</b><span>Regular updates shaped by our users.</span></div>
     </div>
   </div>
 </section>
@@ -235,7 +254,7 @@
     <div class="contact">
       <div class="eyebrow">Contact</div>
       <h2>Say hi 👋</h2>
-      <p class="sub" style="margin:0 auto 28px">Questions, ideas, bugs or business — we read every message.</p>
+      <p class="sub" style="margin:0 auto 28px">Questions, ideas, partnerships or press — we read every message.</p>
       <a class="btn btn-primary" href="mailto:support@raneddie.com">support@raneddie.com</a>
     </div>
   </div>
