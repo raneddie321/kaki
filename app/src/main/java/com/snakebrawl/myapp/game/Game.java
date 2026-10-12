@@ -14,7 +14,7 @@ public final class Game {
     // Popup actions confirmed with YES
     static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
             ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9, ACT_PASS_PLUS = 10,
-            ACT_DELETE_MAP = 11, ACT_UPDATE = 12, ACT_RID_CONNECT = 13, ACT_RID_USE_CLOUD = 14, ACT_RID_DISCONNECT = 15;
+            ACT_DELETE_MAP = 11, ACT_UPDATE = 12, ACT_RID_CONNECT = 13, ACT_RID_DISCONNECT = 15;
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
     private static final int[] RANK_COINS = {50, 40, 32, 26, 20, 15, 11, 8, 5, 3};
@@ -1068,14 +1068,12 @@ public final class Game {
     private void popupButton(int id) {
         int action = popAction, arg = popArg;
         closePopup();
-        if (id == B_NO && action == ACT_RID_USE_CLOUD) rid.resolveConflict(false);
         if (id == B_YES) {
             if (action == ACT_JOIN_CLUB || action == ACT_LEAVE_CLUB) social.perform(action, arg);
             else if (action == ACT_PASS_PLUS) pass.perform(action);
             else if (action == ACT_DELETE_MAP) maps.deleteMap(arg);
             else if (action == ACT_UPDATE) gated.openStorePage();
             else if (action == ACT_RID_CONNECT) rid.connect();
-            else if (action == ACT_RID_USE_CLOUD) rid.resolveConflict(true);
             else if (action == ACT_RID_DISCONNECT) rid.disconnect();
             else meta.perform(action, arg);
         }

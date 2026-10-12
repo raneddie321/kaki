@@ -216,10 +216,8 @@ public final class RidTest {
         gc.rid.connect();
         c.approveInBrowser();
         run(gc, 1);
-        check("WHICH PROGRESS?".equals(popup(gc)), "C is asked which progress to keep");
+        check("WELCOME BACK!".equals(popup(gc)) && gc.profile.trophies == 210, "C gets the RanEddie ID progress without a question (210 trophies)");
         closePopup(gc);
-        gc.rid.resolveConflict(true);
-        check(gc.profile.trophies == 210, "C chose the RanEddie ID progress (210 trophies)");
 
         // Offline: changes wait, then upload when back online
         c.offline = true;

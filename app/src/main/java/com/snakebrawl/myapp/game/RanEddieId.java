@@ -38,9 +38,6 @@ final class RanEddieId {
     // Background work and its result, handed to the game thread
     private volatile boolean busy;
     private volatile Runnable result;
-    /** A cloud save waiting for the player to choose it or this device's progress. */
-    private String conflictSave;
-    private long conflictAt;
 
     RanEddieId(Game game) {
         this.game = game;
@@ -132,13 +129,11 @@ final class RanEddieId {
                             dirtyFor = UPLOAD_DELAY;
                             game.showInfo("RANEDDIE ID CONNECTED!", "Your progress is now saved to " + displayUser()
                                     + ". Sign in with it on any device to keep playing.", 1, 0);
-                        } else if (pr.games == 0 && pr.trophies == 0) {
-                            // Nothing played here yet: continue the cloud progress
+                        } else {
+                            // The RanEddie ID already has progress: it always wins, no question asked
                             useCloud(cloud, cloudAt);
                             game.showInfo("WELCOME BACK!", "Your progress from " + displayUser() + " is loaded. You have "
                                     + pr.trophies + " trophies.", 1, 0);
-                        } else {
-                            askConflict(cloud, cloudAt);
                         }
                     }
                 });
@@ -166,50 +161,12 @@ final class RanEddieId {
         return username.length() > 0 ? username : "your RanEddie ID";
     }
 
-    // ------------------------------------------------------------------ cloud vs device
-
-    private void askConflict(String cloud, long cloudAt) {
-        conflictSave = cloud;
-        conflictAt = cloudAt;
-        int cloudTrophies = cloudInt(cloud, "trophies");
-        game.confirm("WHICH PROGRESS?", displayUser() + " already has progress: " + cloudTrophies + " trophies. This device has "
-                + pr.trophies + " trophies. Keep the RanEddie ID progress? (Choosing THIS DEVICE replaces it.)", 0, 0,
-                Game.ACT_RID_USE_CLOUD, 0, "RANEDDIE ID", "THIS DEVICE");
-    }
-
-    /** The player answered the "which progress" question. */
-    void resolveConflict(boolean keepCloud) {
-        if (conflictSave == null) return;
-        if (keepCloud) {
-            useCloud(conflictSave, conflictAt);
-            game.showInfo("PROGRESS LOADED", "You're playing with your RanEddie ID progress: " + pr.trophies + " trophies.", 1, 0);
-        } else {
-            markDirty();
-            dirtyFor = UPLOAD_DELAY;
-            syncedAt = conflictAt;
-        }
-        conflictSave = null;
-    }
-
-    private void useCloud(String save, long at) {
+        private void useCloud(String save, long at) {
         pr.importText(save);
         game.applyProfileChange();
         dirty = false;
         p.saveInt("rid_dirty", 0);
         setSynced(at);
-    }
-
-    private static int cloudInt(String save, String key) {
-        for (String line : save.split("\n")) {
-            if (line.startsWith("i:" + key + "=")) {
-                try {
-                    return Integer.parseInt(line.substring(key.length() + 3));
-                } catch (NumberFormatException e) {
-                    return 0;
-                }
-            }
-        }
-        return 0;
     }
 
     // ------------------------------------------------------------------ sync
@@ -245,8 +202,7 @@ final class RanEddieId {
                         String user = Json.string(res[1], "username");
                         if (user != null && !user.equals(username)) setLinked(token, user);
                         if (cloud == null || at <= syncedAt) return;
-                        if (!dirty) useCloud(cloud, at); // newer progress from another device
-                        else askConflict(cloud, at);
+                        useCloud(cloud, at); // newer progress from another device: the account always wins
                     }
                 });
             }
@@ -255,7 +211,7 @@ final class RanEddieId {
 
     /** Uploads now if there are unsaved changes (the app is going to the background). */
     void flush() {
-        if (linked() && dirty && conflictSave == null) upload();
+        if (linked() && dirty) upload();
     }
 
     void update(float dt) {
@@ -266,7 +222,7 @@ final class RanEddieId {
         }
         String link = p.takeDeepLink();
         if (link != null) onDeepLink(link);
-        if (linked() && dirty && conflictSave == null && !busy) {
+        if (linked() && dirty && !busy) {
             dirtyFor += dt;
             if (dirtyFor >= UPLOAD_DELAY) upload();
         }

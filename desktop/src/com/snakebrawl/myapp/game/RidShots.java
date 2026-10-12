@@ -42,10 +42,6 @@ public final class RidShots {
         g2.setScreen(Game.SETTINGS);
         shot(g2, font, w, h, 1f, out + "/game-3-settings-connected.png");
 
-        // 4. Which progress?
-        g2.confirm("WHICH PROGRESS?", "RanEddie already has progress: 540 trophies. This device has 120 trophies. Keep the "
-                + "RanEddie ID progress? (Choosing THIS DEVICE replaces it.)", 0, 0, Game.ACT_RID_USE_CLOUD, 0, "RANEDDIE ID", "THIS DEVICE");
-        shot(g2, font, w, h, 1f, out + "/game-4-which-progress.png");
         System.exit(0);
     }
 
