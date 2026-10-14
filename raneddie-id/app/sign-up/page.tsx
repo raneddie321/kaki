@@ -84,9 +84,28 @@ function SignUp() {
   }
 
   // ---------------------------------------------------------------- step 1: email
-  function submitEmail(e: FormEvent) {
+  const [emailTaken, setEmailTaken] = useState(false);
+  async function submitEmail(e: FormEvent) {
     e.preventDefault();
+    setEmailTaken(false);
     if (!isEmail(email)) return setFieldError({ email: "Enter a valid email address." });
+    setBusy(true);
+    try {
+      const res = await fetch("/api/email-taken", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = res.ok ? ((await res.json()) as { taken?: boolean }) : null;
+      if (data?.taken) {
+        setEmailTaken(true);
+        return setFieldError({ email: "This email already has a RanEddie ID." });
+      }
+    } catch {
+      // Offline or the check failed: Clerk still refuses a taken email at the security check
+    } finally {
+      setBusy(false);
+    }
     invalidateHuman();
     go("password");
   }
@@ -232,11 +251,25 @@ function SignUp() {
             inputMode="email"
             placeholder="you@example.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setEmailTaken(false);
+            }}
             error={fieldError.email}
             autoFocus
           />
-          <Button type="submit" className="mt-6">
+          {emailTaken && (
+            <Alert>
+              You already have an account with this email.{" "}
+              <Link
+                href={withRedirect("/sign-in?email=" + encodeURIComponent(email.trim()))}
+                className="font-semibold underline underline-offset-2"
+              >
+                Sign in instead
+              </Link>
+            </Alert>
+          )}
+          <Button type="submit" loading={loading} className="mt-6">
             Next
           </Button>
           <p className="mt-6 text-center text-sm text-muted">

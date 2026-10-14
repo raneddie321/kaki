@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRedirect } from "@/lib/use-redirect";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { useSignIn } from "@clerk/nextjs";
 import { Alert, AuthShell, BackButton, Button, Field, Heading, IdentityChip, MailIcon, PasswordField } from "@/components/ui";
@@ -15,7 +15,8 @@ function SignIn() {
   const router = useRouter();
   const { target, withRedirect } = useRedirect();
   const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState("");
+  const params = useSearchParams();
+  const [email, setEmail] = useState(() => params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);

@@ -37,13 +37,9 @@ export function isEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.trim());
 }
 
-/** Password rules shown while typing (Clerk enforces its own on top). */
+/** Password rule shown while typing (Clerk enforces its own on top); the meter suggests the rest. */
 export function passwordChecks(pw: string) {
-  return [
-    { ok: pw.length >= 8, label: "At least 8 characters" },
-    { ok: /[a-z]/.test(pw) && /[A-Z]/.test(pw), label: "Upper & lowercase letters" },
-    { ok: /\d/.test(pw), label: "A number" },
-  ];
+  return [{ ok: pw.length >= 8, label: "At least 8 characters" }];
 }
 
 export function passwordStrength(pw: string): { score: number; label: string } {
