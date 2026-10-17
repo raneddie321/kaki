@@ -1360,6 +1360,9 @@ public final class Game {
             if (d < dead * 0.6f) return; // dragged back to the middle: cancel
             ang = (float) Math.atan2(dy, dx);
             dist = Math.min(1f, d / rad) * range;
+        } else if (world.mode == World.MODE_BALL && world.ballOwner == p) {
+            ang = world.goalAngle(p); // a tap with the ball shoots at the goal
+            dist = range;
         } else if (profile.autoAim && world.findAim(p, Math.max(range, p.type.range), p.type.projSpeed)) {
             ang = world.aimOutAng;
             dist = world.aimOutDist;
@@ -2816,6 +2819,10 @@ public final class Game {
             g.text(Integer.toString(theirs), cx + 170 * u, padT + 72 * u, 58 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
             g.color(left <= 10 ? 0xffff7a6a : 0xffffffff);
             g.text(clockText, cx, padT + 66 * u, 44 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+            if (p.alive && wd.ballOwner == p) {
+                g.color(MathUtil.withAlpha(0xffffd23f, 0.75f + 0.25f * MathUtil.sin(clock * 6f)));
+                g.text("YOU HAVE THE BALL! TAP ATTACK TO SHOOT AT THE GOAL", cx, padT + 172 * u, 30 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+            }
             g.color(0xffd8dcff);
             g.text("YOU   •   FIRST TO " + World.GOALS_TO_WIN + "   •   THEM", cx, padT + 132 * u, 24 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
         } else {

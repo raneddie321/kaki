@@ -538,6 +538,12 @@ final class World {
     float goalPause;
     int lastGoalTeam = -1;
     private Snake lastTouch;
+    /** The snake running with the ball (Brawl Ball style), or null when the ball is loose. */
+    Snake ballOwner;
+    /** Who kicked last, and how long before they may pick the ball up again. */
+    private Snake lastKicker;
+    private float kickerBlock;
+    static final float KICK_SPEED = 1250f, SUPER_KICK_SPEED = 1900f, KICK_RANGE = 1100f;
 
     final float[] eggX = new float[MAX_EGGS], eggY = new float[MAX_EGGS], eggAge = new float[MAX_EGGS];
     int eggCount;
@@ -594,6 +600,45 @@ final class World {
         ballY = size / 2;
         ballVX = ballVY = 0;
         lastTouch = null;
+        ballOwner = null;
+        lastKicker = null;
+    }
+
+    /** Where the ball sits while a snake carries it: just in front of its head. */
+    private void holdBall(Snake s) {
+        float d = s.radius + BALL_R - 6f;
+        ballX = s.hx() + MathUtil.cos(s.ang) * d;
+        ballY = s.hy() + MathUtil.sin(s.ang) * d;
+        float sp = s.speed();
+        ballVX = MathUtil.cos(s.ang) * sp;
+        ballVY = MathUtil.sin(s.ang) * sp;
+    }
+
+    /** The carrier shoots the ball (attack) or blasts it (Ultra). */
+    void kickBall(Snake s, float ang, boolean ultra) {
+        if (ballOwner != s) return;
+        ballOwner = null;
+        lastKicker = s;
+        kickerBlock = 0.45f;
+        lastTouch = s;
+        float d = s.radius + BALL_R + 4f, v = ultra ? SUPER_KICK_SPEED : KICK_SPEED;
+        float cx = MathUtil.cos(ang), cy = MathUtil.sin(ang);
+        ballX = s.hx() + cx * d;
+        ballY = s.hy() + cy * d;
+        if (solidCircle(ballX, ballY, BALL_R)) {
+            ballX = s.hx();
+            ballY = s.hy();
+        }
+        ballVX = cx * v;
+        ballVY = cy * v;
+        fx.burst(ballX, ballY, ultra ? 18 : 8, ultra ? 0xffffd23f : 0xffffffff, ultra ? 520 : 320, 7, 0.4f);
+        if (ultra) fx.ring(ballX, ballY, 160, 0xffffd23f, 0.35f);
+        sound(ultra ? Platform.SND_SUPER : Platform.SND_THROW, ballX, ballY, 0.9f);
+    }
+
+    /** Direction from a snake's head to the middle of the goal it attacks. */
+    float goalAngle(Snake s) {
+        return MathUtil.angleTo(s.hx(), s.hy(), s.team == 0 ? size : 0, size / 2);
     }
 
     /** After a goal: ball in the middle, every snake back to its starting spot. */
@@ -678,30 +723,38 @@ final class World {
         if (!inMouth && ballX < edge) ballVX += (edge - ballX) * 3.2f * dt;
         else if (!inMouth && ballX > size - edge) ballVX -= (ballX - (size - edge)) * 3.2f * dt;
 
+        if (kickerBlock > 0) kickerBlock -= dt;
+        if (ballOwner != null && !ballOwner.alive) {
+            // Knocked out: the ball pops loose where it was
+            ballOwner = null;
+            ballVX *= 0.3f;
+            ballVY *= 0.3f;
+        }
+        // Grab a loose ball, or steal it from an enemy carrier by touching it with your head
+        for (int i = 0; i < snakeCount; i++) {
+            Snake s = snakes[i];
+            if (!s.alive || s == ballOwner || (ballOwner != null && sameTeam(s, ballOwner))) continue;
+            if (s == lastKicker && kickerBlock > 0) continue;
+            float min = s.radius + BALL_R;
+            if (MathUtil.dist2(ballX, ballY, s.hx(), s.hy()) > min * min) continue;
+            boolean steal = ballOwner != null;
+            ballOwner = s;
+            lastTouch = s;
+            lastKicker = null;
+            fx.burst(ballX, ballY, steal ? 14 : 6, s.team == 0 ? TEAM_BLUE[0] : TEAM_RED[0], 300, 7, 0.35f);
+            if (steal && (s == player || player != null && sameTeam(s, player))) fx.text(s.hx(), s.hy() - s.radius - 60, "STOLEN!", 0xffffd23f, 40);
+            sound(Platform.SND_HIT, ballX, ballY, 0.5f);
+            break;
+        }
+        if (ballOwner != null) {
+            holdBall(ballOwner);
+            ballSpin += ballOwner.speed() * dt / BALL_R;
+            checkGoal();
+            return;
+        }
         for (int i = 0; i < snakeCount; i++) {
             Snake s = snakes[i];
             if (!s.alive) continue;
-            // Head: kicks the ball the way the snake is moving (harder when boosting)
-            float dx = ballX - s.hx(), dy = ballY - s.hy();
-            float min = s.radius + BALL_R, d2 = dx * dx + dy * dy;
-            if (d2 < min * min) {
-                float d = Math.max(0.01f, MathUtil.sqrt(d2)), nx = dx / d, ny = dy / d;
-                ballX = s.hx() + nx * min;
-                ballY = s.hy() + ny * min;
-                // Dribbling: the ball goes partly where the snake is heading, so it can be steered
-                float kx = nx + MathUtil.cos(s.ang) * 0.8f, ky = ny + MathUtil.sin(s.ang) * 0.8f;
-                float kl = Math.max(0.01f, MathUtil.sqrt(kx * kx + ky * ky));
-                nx = kx / kl;
-                ny = ky / kl;
-                float kick = s.speed() * (s.boosting ? 2.1f : 1.6f) + 150f;
-                float vn = ballVX * nx + ballVY * ny;
-                if (vn < kick) {
-                    if (kick - vn > 380f) sound(Platform.SND_HIT, ballX, ballY, 0.5f);
-                    ballVX += nx * (kick - vn);
-                    ballVY += ny * (kick - vn);
-                }
-                lastTouch = s;
-            }
             // Body: the ball bounces off it
             for (int j = 3; j < s.segs; j += 2) {
                 float bx = ballX - s.sx[j], by = ballY - s.sy[j];
@@ -746,6 +799,10 @@ final class World {
             else ballY = ny;
         }
         ballSpin += sp * dt / BALL_R;
+        checkGoal();
+    }
+
+    private void checkGoal() {
         if (ballY > goalTop() + BALL_R * 0.3f && ballY < goalBottom() - BALL_R * 0.3f) {
             if (ballX > size - goalLine()) scoreGoal(0);
             else if (ballX < goalLine()) scoreGoal(1);
@@ -753,6 +810,7 @@ final class World {
     }
 
     private void scoreGoal(int team) {
+        ballOwner = null;
         goals[team]++;
         lastGoalTeam = team;
         goalPause = 2.6f;
@@ -2857,9 +2915,9 @@ final class World {
         drawCubes(g, l, t, r, b, tt);
         if (mode == MODE_EGGS) drawEggs(g, l, t, r, b, tt);
         drawWallsAndBoxes(g, l, t, r, b, tt);
-        if (mode == MODE_BALL) drawBall(g);
         boolean hidePlayer = playerInBush();
         drawSnakes(g, l, t, r, b, tt, hidePlayer);
+        if (mode == MODE_BALL) drawBall(g);
         if (mode == MODE_EGGS) drawCarriedEggs(g, l, t, r, b, hidePlayer);
         drawProjectiles(g, l, t, r, b, tt);
         drawBushes(g, l, t, r, b, tt, hidePlayer);
@@ -2916,6 +2974,11 @@ final class World {
 
     private void drawBall(Gfx g) {
         float x = ballX, y = ballY, r = BALL_R;
+        if (ballOwner != null) {
+            int col = ballOwner.team == 0 ? TEAM_BLUE[0] : TEAM_RED[0];
+            g.color(MathUtil.withAlpha(col, 0.55f));
+            g.fillCircle(x, y, r + 16);
+        }
         g.color(0x44000000);
         g.fillCircle(x + 8, y + 12, r);
         g.color(0xff14142a);
@@ -4097,6 +4160,10 @@ final class World {
         int edge = aimSuper ? 0xccffd23f : 0xaaffffff;
         float ca = MathUtil.cos(aimAng), sa = MathUtil.sin(aimAng);
         float range = aimSuper ? s.type.superRange : s.type.range;
+        if (mode == MODE_BALL && ballOwner == s) {
+            drawAimLane(g, hx, hy, ca, sa, aimSuper ? KICK_RANGE * 1.5f : KICK_RANGE, BALL_R, col, edge);
+            return;
+        }
         switch (s.type.id) {
             case Brawler.JOKER:
             case Brawler.REAPER:

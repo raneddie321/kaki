@@ -242,6 +242,14 @@ final class Snake {
     }
 
     boolean tryAttack(World w, float aimAng, float aimDist) {
+        if (alive && w.mode == World.MODE_BALL && w.ballOwner == this) {
+            // Carrying the ball: attacking shoots it instead of firing
+            if (fireCooldown > 0) return false;
+            fireCooldown = 0.3f;
+            sinceAttack = 0;
+            w.kickBall(this, aimAng, false);
+            return true;
+        }
         if (!alive || ammo < 1f || fireCooldown > 0 || burstLeft > 0 || dashTime > 0) return false;
         ammo -= 1f;
         fireCooldown = 0.32f;
@@ -253,6 +261,13 @@ final class Snake {
     }
 
     boolean trySuper(World w, float aimAng, float aimDist) {
+        if (alive && superReady() && w.mode == World.MODE_BALL && w.ballOwner == this) {
+            superCharge = 0;
+            superWasReady = false;
+            sinceAttack = 0;
+            w.kickBall(this, aimAng, true);
+            return true;
+        }
         if (!alive || !superReady() || burstLeft > 0 || dashTime > 0) return false;
         superCharge = 0;
         superWasReady = false;
