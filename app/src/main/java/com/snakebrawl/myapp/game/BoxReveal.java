@@ -16,6 +16,8 @@ final class BoxReveal {
     private int taps;
     private String title, text;
     private int artType, art;
+    /** Crates waiting to be opened after this one (true = Mega). */
+    final java.util.ArrayDeque<Boolean> queue = new java.util.ArrayDeque<Boolean>();
 
     BoxReveal(Game game) {
         this.game = game;
@@ -59,7 +61,8 @@ final class BoxReveal {
             if (taps >= TAPS) burst();
         } else if (phase == 2 && t > 0.5f) {
             active = false;
-            game.layout();
+            if (!queue.isEmpty()) game.openRewardBox(queue.poll());
+            else game.layout();
         }
     }
 

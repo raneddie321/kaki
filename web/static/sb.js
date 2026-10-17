@@ -5,6 +5,7 @@
   var canvas, ctx, dpr = 1, handler = null;
   var fillStyle = '#000', curFont = '', curSize = -1;
   var colorCache = new Map();
+  var images = {};
   var gradCache = new Map();
   var audio = null, buffers = [], soundsLoading = false;
   var SOUNDS = ['shoot', 'shotgun', 'bolt', 'throw', 'explode', 'flame', 'hit', 'eat', 'power',
@@ -266,6 +267,16 @@
       src.connect(g);
       g.connect(audio.destination);
       src.start(0);
+    },
+    image: function (name, l, t, r, b) {
+      var im = images[name];
+      if (!im) {
+        im = images[name] = new Image();
+        im.src = name;
+      }
+      if (!im.complete || !im.naturalWidth) return false;
+      ctx.drawImage(im, l, t, r - l, b - t);
+      return true;
     },
     vibrate: function (ms) { if (navigator.vibrate) navigator.vibrate(ms); },
     load: function (k) {

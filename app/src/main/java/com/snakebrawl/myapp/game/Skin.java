@@ -65,5 +65,14 @@ final class Skin {
             new Skin("Diamond", 2800, 4, 0xffe8ffff, 0xff8ae8ff, 0xffc8f4ff),
             new Skin("Speedster", 2500, 4, 0xff2f72ff, 0xff2f72ff, 0xff1d48c8, style(STYLE_SPIKES)),
             new Skin("Sea Sponge", 2500, 4, 0xfffff05a, 0xffffe640, 0xfff0d238, style(STYLE_SPONGE)),
+            // Snake Pass MAX exclusives (never sold, never in crates): one per season, in turn
+            new Skin("Max Inferno", 0, 4, 0xffff3a1a, 0xffff9a1a, 0xffffe04a, 0xff7a0a0a, style(STYLE_SPIKES)),
+            new Skin("Max Aurora", 0, 4, 0xff3affc8, 0xff3a9aff, 0xffb35cff, 0xffe8fff8),
+            new Skin("Max Royal", 0, 4, 0xff6a2bd1, 0xffffd23f, 0xff3a1680, style(STYLE_SPIKES)),
+            new Skin("Max Phantom", 0, 4, 0xff0e0e18, 0xff27f0ff, 0xff1a1a2a, 0xff27f0ff),
     };
+
+    /** Skins sold in the shop and found in crates are ALL[1 .. SHOP-1]; the rest are Snake Pass MAX exclusives. */
+    static final int SHOP = 23;
+    static final int[] MAX_SKINS = {23, 24, 25, 26};
 }

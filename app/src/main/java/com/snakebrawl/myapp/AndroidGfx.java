@@ -22,7 +22,13 @@ final class AndroidGfx implements Gfx {
     private final RectF rect = new RectF();
     private final Path path = new Path();
 
-    AndroidGfx(Typeface font) {
+    private final android.content.res.AssetManager assets;
+    private final java.util.HashMap<String, android.graphics.Bitmap> images = new java.util.HashMap<String, android.graphics.Bitmap>();
+    private final android.graphics.Rect srcRect = new android.graphics.Rect();
+    private final Paint imagePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+
+    AndroidGfx(Typeface font, android.content.res.AssetManager assets) {
+        this.assets = assets;
         fill.setStyle(Paint.Style.FILL);
         stroke.setStyle(Paint.Style.STROKE);
         stroke.setStrokeCap(Paint.Cap.ROUND);
@@ -202,5 +208,23 @@ final class AndroidGfx implements Gfx {
     @Override
     public void rotate(float degrees) {
         c.rotate(degrees);
+    }
+
+    @Override
+    public boolean image(String asset, float l, float t, float r, float b) {
+        android.graphics.Bitmap bm = images.get(asset);
+        if (bm == null && !images.containsKey(asset)) {
+            try (java.io.InputStream in = assets.open(asset)) {
+                bm = android.graphics.BitmapFactory.decodeStream(in);
+            } catch (Exception e) {
+                bm = null;
+            }
+            images.put(asset, bm);
+        }
+        if (bm == null) return false;
+        srcRect.set(0, 0, bm.getWidth(), bm.getHeight());
+        rect.set(l, t, r, b);
+        c.drawBitmap(bm, srcRect, rect, imagePaint);
+        return true;
     }
 }

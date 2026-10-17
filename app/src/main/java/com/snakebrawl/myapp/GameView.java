@@ -18,7 +18,7 @@ final class GameView extends View {
     GameView(Context context, Game game, Typeface font) {
         super(context);
         this.game = game;
-        this.gfx = new AndroidGfx(font);
+        this.gfx = new AndroidGfx(font, context.getAssets());
         setFocusable(true);
         setKeepScreenOn(true);
     }

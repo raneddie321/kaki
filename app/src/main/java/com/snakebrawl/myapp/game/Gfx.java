@@ -43,4 +43,12 @@ public interface Gfx {
     void translate(float dx, float dy);
     void scale(float s);
     void rotate(float degrees);
+
+    /**
+     * Draws a bundled picture (from the app's assets) stretched over the rectangle. Returns false
+     * when this platform can't, or the picture isn't loaded yet; callers then draw something else.
+     */
+    default boolean image(String asset, float l, float t, float r, float b) {
+        return false;
+    }
 }

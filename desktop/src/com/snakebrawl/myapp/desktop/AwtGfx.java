@@ -179,4 +179,23 @@ public final class AwtGfx implements Gfx {
     public void rotate(float degrees) {
         g.rotate(Math.toRadians(degrees));
     }
+
+    private final java.util.HashMap<String, BufferedImage> images = new java.util.HashMap<>();
+
+    @Override
+    public boolean image(String asset, float l, float t, float r, float b) {
+        BufferedImage im = images.get(asset);
+        if (im == null && !images.containsKey(asset)) {
+            try {
+                im = javax.imageio.ImageIO.read(new java.io.File("app/src/main/assets/" + asset));
+            } catch (Exception e) {
+                im = null;
+            }
+            images.put(asset, im);
+        }
+        if (im == null) return false;
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(im, Math.round(l), Math.round(t), Math.round(r - l), Math.round(b - t), null);
+        return true;
+    }
 }

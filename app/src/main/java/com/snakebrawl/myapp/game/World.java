@@ -249,7 +249,7 @@ final class World {
     /** Bots get fancier skins and higher power levels as the player's trophies grow. */
     private void dressBot(Snake s, int i) {
         float fancy = 0.15f + Math.min(0.6f, botTrophies / 800f);
-        if (MathUtil.rand() < fancy) s.setColors(Skin.ALL[1 + MathUtil.randInt(Skin.ALL.length - 1)].palette);
+        if (MathUtil.rand() < fancy) s.setColors(Skin.ALL[1 + MathUtil.randInt(Skin.SHOP - 1)].palette);
         else s.setColors(Brawler.BOT_SKINS[(i + MathUtil.randInt(Brawler.BOT_SKINS.length)) % Brawler.BOT_SKINS.length]);
         int lvl = 1 + botTrophies / 250 + (MathUtil.rand() < 0.3f ? 1 : 0) - (MathUtil.rand() < 0.4f ? 1 : 0);
         s.level = Math.max(1, Math.min(Brawler.MAX_LEVEL, lvl));

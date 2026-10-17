@@ -3,7 +3,8 @@ package com.snakebrawl.myapp.game;
 /** The Snake Pass screen: a scrolling track of 50 tiers with free and Pass+ rewards. */
 final class PassScreen {
     static final int B_FIRST = 1000;
-    private static final int B_PLUS = 1000, B_CLAIM_ALL = 1001, B_REWARD = 1010;
+    private static final int B_PLUS = 1000, B_CLAIM_ALL = 1001, B_MAX = 1002, B_REWARD = 1010;
+    static final int MAX_COLOR = 0xffb35cff;
     static final int B_LAST = B_REWARD + SnakePass.TIERS * 2 + 2;
 
     private final Game game;
@@ -36,6 +37,10 @@ final class PassScreen {
         float u = game.u, w = game.w, h = game.h;
         ui.add(Game.B_BACK, game.padL + 10 * u, game.padT + 10 * u, game.padL + 230 * u, game.padT + 110 * u, "BACK", null, 0xffff5a5a);
         float r = w - game.padR - 20 * u;
+        if (!pr.passMax) {
+            float ml = game.padL + 250 * u;
+            ui.add(B_MAX, ml, game.padT + 10 * u, ml + 340 * u, game.padT + 130 * u, "PASS MAX", SnakePass.maxPrice + " • x2 rewards", MAX_COLOR);
+        }
         if (!pr.passPlus) {
             ui.add(B_PLUS, r - 320 * u, game.padT + 10 * u, r, game.padT + 130 * u, "GET PASS+", SnakePass.PLUS_PRICE + " coins",
                     0xffffc928);
@@ -60,6 +65,12 @@ final class PassScreen {
     // ------------------------------------------------------------------ input
 
     void onButton(int id) {
+        if (id == B_MAX) {
+            game.confirm("SNAKE PASS MAX", "Get everything in the Snake Pass, but doubled, plus the exclusive "
+                    + Skin.ALL[SnakePass.maxSkin(pr.passSeason)].name + " skin for this season. " + SnakePass.maxPrice
+                    + " for this season (buy it again next season).", 2, SnakePass.maxSkin(pr.passSeason), Game.ACT_PASS_MAX, 0, "BUY", "NOT NOW");
+            return;
+        }
         if (id == B_PLUS) {
             game.confirm("SNAKE PASS+", "Unlock the golden track for this season for " + SnakePass.PLUS_PRICE
                     + " coins? You get the " + Brawler.ALL[SnakePass.BRAWLER_PLUS].name + " snake, the "
@@ -98,7 +109,26 @@ final class PassScreen {
         game.layout();
     }
 
+    /** Snake Pass MAX was paid for: Pass+ track, doubled rewards and the season's exclusive skin. */
+    void grantMax() {
+        SnakePass.checkSeason(pr);
+        int skin = SnakePass.maxSkin(pr.passSeason);
+        pr.passPlus = true;
+        pr.passMax = true;
+        pr.ownedSkins |= 1 << skin;
+        pr.skin = skin;
+        pr.save();
+        game.gated.playSound(Platform.SND_VICTORY, 1f);
+        game.showInfo("SNAKE PASS MAX!", "Every reward in the Snake Pass is doubled this season, and the exclusive "
+                + Skin.ALL[skin].name + " skin is yours and equipped. Claim what you've already reached!", 2, skin);
+        game.layout();
+    }
+
     void perform(int action) {
+        if (action == Game.ACT_PASS_MAX) {
+            if (!pr.passMax) game.buyPassMax();
+            return;
+        }
         if (action == Game.ACT_PASS_PLUS) {
             if (pr.passPlus || !pr.spend(SnakePass.PLUS_PRICE)) {
                 if (!pr.passPlus) game.showInfo("NOT ENOUGH COINS", "Snake Pass+ costs " + SnakePass.PLUS_PRICE + " coins.", 1, 0);
@@ -117,8 +147,10 @@ final class PassScreen {
         if (track == SnakePass.TRACK_FREE) pr.passFree |= bit;
         else pr.passPremium |= bit;
         int type = SnakePass.type(track, t), a = SnakePass.amount(track, t);
+        int x = pr.passMax ? 2 : 1; // Snake Pass MAX doubles every reward
         switch (type) {
             case SnakePass.R_COINS:
+                a *= x;
                 pr.coins += a;
                 pr.save();
                 game.gated.playSound(Platform.SND_KILL, 0.8f);
@@ -127,27 +159,32 @@ final class PassScreen {
             case SnakePass.R_BOX:
             case SnakePass.R_MEGA:
                 pr.save();
-                if (announce) game.openRewardBox(type == SnakePass.R_MEGA);
-                else pr.coins += type == SnakePass.R_MEGA ? 400 : 120;
+                for (int k = 0; k < x; k++) {
+                    if (announce) game.openRewardBox(type == SnakePass.R_MEGA);
+                    else pr.coins += type == SnakePass.R_MEGA ? 400 : 120;
+                }
                 break;
             case SnakePass.R_SKIN:
                 if (pr.ownsSkin(a)) {
-                    pr.coins += 600;
-                    if (announce) game.showInfo("TIER " + t, "You already own " + Skin.ALL[a].name + ", so here are 600 coins!", 1, 0);
+                    pr.coins += 600 * x;
+                    if (announce) game.showInfo("TIER " + t, "You already own " + Skin.ALL[a].name + ", so here are " + 600 * x + " coins!", 1, 0);
                 } else {
                     pr.ownedSkins |= 1 << a;
                     pr.skin = a;
-                    if (announce) game.showInfo("NEW SKIN!", Skin.ALL[a].name + " is yours and equipped on all your snakes.", 2, a);
+                    if (x > 1) pr.coins += 600; // MAX: the second copy comes as coins
+                    if (announce) game.showInfo("NEW SKIN!", Skin.ALL[a].name + " is yours and equipped on all your snakes."
+                            + (x > 1 ? " MAX bonus: +600 coins!" : ""), 2, a);
                 }
                 pr.save();
                 game.gated.playSound(Platform.SND_VICTORY, 0.8f);
                 break;
             default:
                 if (pr.isUnlocked(a)) {
-                    pr.coins += 800;
-                    if (announce) game.showInfo("TIER " + t, "You already have " + Brawler.ALL[a].name + ", so here are 800 coins!", 1, 0);
+                    pr.coins += 800 * x;
+                    if (announce) game.showInfo("TIER " + t, "You already have " + Brawler.ALL[a].name + ", so here are " + 800 * x + " coins!", 1, 0);
                 } else {
                     pr.unlocked |= 1 << a;
+                    if (x > 1) pr.coins += 800; // MAX: the second copy comes as coins
                     if (announce) game.showInfo(Brawler.ALL[a].name + " UNLOCKED!", Brawler.ALL[a].name + " joined your team. Ultra: "
                             + Brawler.ALL[a].superName + ".", 3, a);
                 }
@@ -163,8 +200,9 @@ final class PassScreen {
         float u = game.u, w = game.w, h = game.h, cx = w / 2;
         g.vertical(0, 0, w, h, 0xee1a1450, 0xf00a0c24);
         if (!pr.lowGraphics) g.radial(cx, game.padT + 120 * u, 700 * u, 0x44ffc94a, 0x00ffc94a);
-        g.color(0xffffd23f);
-        g.text("SNAKE PASS", cx, game.padT + 88 * u, 84 * u, Gfx.ALIGN_CENTER, 9 * u, Ui.INK);
+        if (pr.passMax && !pr.lowGraphics) g.radial(cx, game.padT + 80 * u, 520 * u, 0x55b35cff, 0x00b35cff);
+        g.color(pr.passMax ? 0xffe0b8ff : 0xffffd23f);
+        g.text(pr.passMax ? "SNAKE PASS MAX" : "SNAKE PASS", cx, game.padT + 88 * u, 84 * u, Gfx.ALIGN_CENTER, 9 * u, Ui.INK);
         g.color(0xffd8dcff);
         g.text("SEASON " + pr.passSeason + "  •  ENDS IN " + SnakePass.daysLeft() + " DAYS", cx, game.padT + 136 * u, 30 * u,
                 Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
@@ -190,7 +228,7 @@ final class PassScreen {
         g.color(0xffb8f0ff);
         g.text("FREE", cx - 110 * u - 280 * u, hy, 36 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
         g.color(0xffffd23f);
-        g.text(pr.passPlus ? "SNAKE PASS+" : "SNAKE PASS+  (LOCKED)", cx + 110 * u + 280 * u, hy, 36 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+        g.text(pr.passMax ? "SNAKE PASS+  x2" : pr.passPlus ? "SNAKE PASS+" : "SNAKE PASS+  (LOCKED)", cx + 110 * u + 280 * u, hy, 36 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
 
         // The scrolling track
         g.save();
@@ -274,7 +312,9 @@ final class PassScreen {
                 break;
             }
         }
-        String title = type == SnakePass.R_COINS ? a + " COINS" : type == SnakePass.R_BOX ? "SNAKE CRATE" : type == SnakePass.R_MEGA
+        int x = pr.passMax ? 2 : 1;
+        String title = type == SnakePass.R_COINS ? a * x + " COINS" : x > 1 && type == SnakePass.R_BOX ? "2 SNAKE CRATES"
+                : x > 1 && type == SnakePass.R_MEGA ? "2 MEGA CRATES" : type == SnakePass.R_BOX ? "SNAKE CRATE" : type == SnakePass.R_MEGA
                 ? "MEGA CRATE" : type == SnakePass.R_SKIN ? Skin.ALL[a].name.toUpperCase() : Brawler.ALL[a].name;
         g.color(MathUtil.withAlpha(type >= SnakePass.R_SKIN ? 0xffffd23f : 0xffffffff, alpha));
         g.text(title, l + 180 * u, iy - 4 * u, Ui.fit(g, title, 40 * u, r - l - 200 * u), Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
@@ -282,6 +322,16 @@ final class PassScreen {
                 : type == SnakePass.R_COINS ? "Coins" : "Open for prizes";
         g.color(MathUtil.withAlpha(0xffb8bdf0, alpha));
         g.text(sub, l + 180 * u, iy + 38 * u, 26 * u, Gfx.ALIGN_LEFT, 3 * u, Ui.INK);
+        if (x > 1 && !claimed) {
+            // MAX badge: rewards are doubled
+            float bx = l + 40 * u, by = tp + 30 * u;
+            g.color(Ui.INK);
+            g.fillRoundRect(bx - 32 * u, by - 20 * u, bx + 32 * u, by + 20 * u, 14 * u);
+            g.color(MAX_COLOR);
+            g.fillRoundRect(bx - 28 * u, by - 16 * u, bx + 28 * u, by + 16 * u, 11 * u);
+            g.color(0xffffffff);
+            g.text("x2", bx, by + 10 * u, 28 * u, Gfx.ALIGN_CENTER, 3 * u, Ui.INK);
+        }
         if (claimed) {
             g.color(0xff9cff8a);
             g.text("CLAIMED", r - 24 * u, tp + 44 * u, 26 * u, Gfx.ALIGN_RIGHT, 3 * u, Ui.INK);

@@ -4,7 +4,7 @@ package com.snakebrawl.myapp.game;
 final class MetaScreens {
     private static final int B_TILE = 100, B_SELECT = 150, B_UPGRADE = 151, B_UNLOCK = 152;
     private static final int B_SKIN = 200;
-    private static final int B_TAB = 300, B_GIFT = 310, B_BOX = 311, B_MEGA = 312, B_DEAL = 313, B_SHOP_BRAWLER = 330;
+    private static final int B_TAB = 300, B_GIFT = 310, B_BOX = 311, B_MEGA = 312, B_DEAL = 313, B_FEATURED = 314, B_SHOP_BRAWLER = 330;
     private static final int B_PACK = 350;
     private static final int B_SETTING = 400, B_RESET = 420, B_PRIVACY = 421, B_REDEEM = 422, B_RID = 423;
 
@@ -83,22 +83,30 @@ final class MetaScreens {
                 float top = tabT + 120 * u, bottom = h - padB - 20 * u;
                 float l = padL + 20 * u, r = w - padR - 20 * u;
                 if (shopTab == 0) {
+                    // Featured Snake Pass MAX on the left, the four everyday offers in a 2 x 2 grid
                     ui.setScrollArea(l, top, r, bottom, 0);
-                    float gap = 26 * u, cw = (r - l - gap * 3) / 4f;
+                    float gap = 26 * u, fw = Math.min(760 * u, (r - l) * 0.36f);
+                    ui.add(B_FEATURED, l, top + 10 * u, l + fw, bottom - 10 * u, null, null, 0);
+                    float gl = l + fw + gap, cw = (r - gl - gap) / 2f, ch = (bottom - top - 20 * u - gap) / 2f;
                     int[] ids = {B_GIFT, B_BOX, B_MEGA, B_DEAL};
                     for (int i = 0; i < 4; i++) {
-                        float cl = l + i * (cw + gap);
-                        ui.add(ids[i], cl, top + 10 * u, cl + cw, bottom - 10 * u, null, null, 0);
+                        float cl = gl + (i % 2) * (cw + gap), ct = top + 10 * u + (i / 2) * (ch + gap);
+                        ui.add(ids[i], cl, ct, cl + cw, ct + ch, null, null, 0);
                     }
                 } else if (shopTab == 1) {
                     int cols = 5;
                     float gap = 22 * u, cw = (r - l - gap * (cols - 1)) / cols, ch = 330 * u;
-                    int n = Skin.ALL.length;
+                    // Shop skins, then the Snake Pass MAX skins the player owns (to equip them)
+                    int n = 0;
+                    for (int s = 0; s < Skin.ALL.length; s++) if (s < Skin.SHOP || pr.ownsSkin(s)) n++;
                     int rows = (n + cols - 1) / cols;
                     ui.setScrollArea(l - 10 * u, top, r + 10 * u, bottom, rows * (ch + gap) + 20 * u);
-                    for (int i = 0; i < n; i++) {
+                    int i = 0;
+                    for (int s = 0; s < Skin.ALL.length; s++) {
+                        if (s >= Skin.SHOP && !pr.ownsSkin(s)) continue;
                         float cl = l + (i % cols) * (cw + gap), ct = top + 10 * u + (i / cols) * (ch + gap);
-                        ui.addScroll(B_SKIN + i, cl, ct, cl + cw, ct + ch, null, null, 0);
+                        ui.addScroll(B_SKIN + s, cl, ct, cl + cw, ct + ch, null, null, 0);
+                        i++;
                     }
                 } else if (shopTab == 2) {
                     // Every brawler that is not free, four per row; scrolls when there are more
@@ -179,6 +187,7 @@ final class MetaScreens {
         if (id >= B_SKIN && id < B_SKIN + Skin.ALL.length) {
             int s = id - B_SKIN;
             Skin sk = Skin.ALL[s];
+            if (s >= Skin.SHOP && !pr.ownsSkin(s)) return; // Snake Pass MAX only
             if (pr.ownsSkin(s)) {
                 pr.skin = s;
                 pr.save();
@@ -233,6 +242,13 @@ final class MetaScreens {
                         + ": +6% health and damage. Costs " + cost + " coins.", 3, vb.id, Game.ACT_UPGRADE, vb.id);
                 break;
             }
+            case B_FEATURED:
+                if (pr.passMax) game.setScreen(Game.PASS);
+                else game.confirm("SNAKE PASS MAX", "Get everything in the Snake Pass, but doubled, plus the exclusive "
+                        + Skin.ALL[SnakePass.maxSkin(pr.passSeason)].name + " skin for this season. " + SnakePass.maxPrice
+                        + " for this season (buy it again next season).", 2, SnakePass.maxSkin(pr.passSeason), Game.ACT_PASS_MAX, 0,
+                        "BUY", "NOT NOW");
+                break;
             case B_GIFT:
                 if (pr.giftReady()) {
                     int amount = 80 + MathUtil.randInt(9) * 10;
@@ -452,16 +468,16 @@ final class MetaScreens {
 
     private int randomUnownedSkin(int maxPrice) {
         int count = 0;
-        for (int i = 1; i < Skin.ALL.length; i++) if (!pr.ownsSkin(i) && Skin.ALL[i].price <= maxPrice) count++;
+        for (int i = 1; i < Skin.SHOP; i++) if (!pr.ownsSkin(i) && Skin.ALL[i].price <= maxPrice) count++;
         if (count == 0) return -1;
         int pick = MathUtil.randInt(count);
-        for (int i = 1; i < Skin.ALL.length; i++) if (!pr.ownsSkin(i) && Skin.ALL[i].price <= maxPrice && pick-- == 0) return i;
+        for (int i = 1; i < Skin.SHOP; i++) if (!pr.ownsSkin(i) && Skin.ALL[i].price <= maxPrice && pick-- == 0) return i;
         return -1;
     }
 
     private static int dealSkin() {
         int day = Profile.nowMinute() / 1440;
-        return 1 + (day * 7 + 3) % (Skin.ALL.length - 1);
+        return 1 + (day * 7 + 3) % (Skin.SHOP - 1);
     }
 
     private static int dealPrice(int s) {
@@ -479,6 +495,7 @@ final class MetaScreens {
         float u = game.u, w = game.w, h = game.h;
         g.color(0xcc0d1030);
         g.fillRect(0, 0, w, h);
+        if (game.screen == Game.SHOP) drawShopBackdrop(g);
         String title = game.screen == Game.BRAWLERS ? "SNAKES" : (game.screen == Game.SHOP ? "SHOP" : "SETTINGS");
         g.color(0xffffd23f);
         g.text(title, w / 2, game.padT + 92 * u, 84 * u, Gfx.ALIGN_CENTER, 9 * u, Ui.INK);
@@ -623,16 +640,172 @@ final class MetaScreens {
         }
     }
 
+    /** Shop backdrop: deep purple with slow light rays and drifting sparkles. */
+    private void drawShopBackdrop(Gfx g) {
+        float u = game.u, w = game.w, h = game.h, cx = w / 2;
+        g.vertical(0, 0, w, h, 0xff241a5c, 0xff0b0d26);
+        if (pr.lowGraphics) return;
+        float[] xy = new float[6];
+        float rot = game.clock * 0.05f, len = Math.max(w, h) * 1.2f;
+        g.color(0x0effffff);
+        for (int i = 0; i < 16; i++) {
+            float a = rot + i * MathUtil.TAU / 16f;
+            xy[0] = cx;
+            xy[1] = -h * 0.15f;
+            xy[2] = cx + MathUtil.cos(a - 0.08f) * len;
+            xy[3] = -h * 0.15f + MathUtil.sin(a - 0.08f) * len;
+            xy[4] = cx + MathUtil.cos(a + 0.08f) * len;
+            xy[5] = -h * 0.15f + MathUtil.sin(a + 0.08f) * len;
+            g.fillPoly(xy, 3);
+        }
+        g.radial(cx, game.padT + 60 * u, 700 * u, 0x40ffd23f, 0x00ffd23f);
+        for (int k = 0; k < 26; k++) {
+            float x = (k * 0.6180339f % 1f) * w, y = ((k * 0.381966f + game.clock * 0.02f * (1 + k % 3)) % 1f) * h;
+            float tw = 0.5f + 0.5f * MathUtil.sin(game.clock * 2f + k);
+            g.color(MathUtil.withAlpha(k % 3 == 0 ? 0xffffd23f : 0xffffffff, 0.15f + 0.35f * tw));
+            g.fillCircle(x, h - y, (2 + k % 3) * u);
+        }
+    }
+
+    /** The shop tabs as one segmented bar; the open tab is gold. */
+    private void drawTabs(Gfx g) {
+        float u = game.u;
+        Ui.Btn first = ui.find(B_TAB), last = ui.find(B_TAB + tabCount() - 1);
+        if (first == null || last == null) return;
+        g.color(Ui.INK);
+        g.fillRoundRect(first.l - 12 * u, first.t - 8 * u, last.r + 12 * u, first.b + 8 * u, (first.b - first.t) / 2 + 8 * u);
+        g.color(0xff2c2f66);
+        g.fillRoundRect(first.l - 6 * u, first.t - 2 * u, last.r + 6 * u, first.b + 2 * u, (first.b - first.t) / 2 + 2 * u);
+        for (int i = 0; i < tabCount(); i++) {
+            Ui.Btn bt = ui.find(B_TAB + i);
+            boolean on = i == shopTab;
+            float d = press(bt) * 0.5f;
+            float l = bt.l + d, t = bt.t + d, r = bt.r - d, b = bt.b - d, cy = (t + b) / 2;
+            if (on) {
+                g.color(0xffb07a10);
+                g.fillRoundRect(l, t + 4 * u, r, b, (b - t) / 2);
+                g.vertical(l, t, r, b - 6 * u, 0xffffe066, 0xffffb81f);
+                g.color(0x66ffffff);
+                g.fillRoundRect(l + 24 * u, t + 8 * u, r - 24 * u, t + 22 * u, 7 * u);
+            }
+            float ix = l + 46 * u;
+            switch (i) {
+                case 0: // star
+                    float[] st = new float[20];
+                    for (int k = 0; k < 10; k++) {
+                        float a = -MathUtil.PI / 2 + k * MathUtil.PI / 5, rr = k % 2 == 0 ? 20 * u : 9 * u;
+                        st[k * 2] = ix + MathUtil.cos(a) * rr;
+                        st[k * 2 + 1] = cy + MathUtil.sin(a) * rr;
+                    }
+                    g.color(on ? 0xffffffff : 0xffffd23f);
+                    g.fillPoly(st, 10);
+                    break;
+                case 1: // paint drop
+                    g.color(on ? 0xffffffff : 0xffff5ab5);
+                    g.fillCircle(ix, cy + 4 * u, 13 * u);
+                    poly3(g, ix - 12 * u, cy, ix + 12 * u, cy, ix, cy - 20 * u);
+                    break;
+                case 2: // snake head
+                    g.color(on ? 0xffffffff : 0xff4ad04a);
+                    g.fillCircle(ix, cy, 17 * u);
+                    g.color(Ui.INK);
+                    g.fillCircle(ix - 6 * u, cy - 3 * u, 4 * u);
+                    g.fillCircle(ix + 6 * u, cy - 3 * u, 4 * u);
+                    break;
+                default:
+                    ui.coin(g, ix, cy, 40 * u);
+                    break;
+            }
+            g.color(on ? 0xffffffff : 0xffc8ccf0);
+            g.text(TABS[i], (l + r) / 2 + 22 * u, cy + 14 * u, Ui.fit(g, TABS[i], 38 * u, r - l - 100 * u), Gfx.ALIGN_CENTER,
+                    on ? 5 * u : 3 * u, Ui.INK);
+        }
+    }
+
+    private static final float[] TRI = new float[6];
+
+    private static void poly3(Gfx g, float x0, float y0, float x1, float y1, float x2, float y2) {
+        TRI[0] = x0;
+        TRI[1] = y0;
+        TRI[2] = x1;
+        TRI[3] = y1;
+        TRI[4] = x2;
+        TRI[5] = y2;
+        g.fillPoly(TRI, 3);
+    }
+
+    /** Snake Pass MAX promo: this season's exclusive skin, x2 rewards and the Google Play price. */
+    private void drawFeatured(Gfx g, Ui.Btn bt) {
+        float u = game.u, d = press(bt);
+        float l = bt.l + d, t = bt.t + d, r = bt.r - d, b = bt.b - d, cx = (l + r) / 2;
+        int skin = SnakePass.maxSkin(pr.passSeason);
+        ui.panel(g, l, t, r, b, 0xff3a1f7a);
+        g.save();
+        g.clip(l + 6 * u, t + 6 * u, r - 6 * u, b - 6 * u);
+        g.vertical(l, t, r, b, 0xff7a3aff, 0xff2a1460);
+        float[] xy = new float[6];
+        float acx = cx, acy = t + (b - t) * 0.45f, len = (b - t);
+        g.color(0x1cffffff);
+        for (int i = 0; i < 12; i++) {
+            float a = game.clock * 0.3f + i * MathUtil.TAU / 12f;
+            xy[0] = acx;
+            xy[1] = acy;
+            xy[2] = acx + MathUtil.cos(a - 0.12f) * len;
+            xy[3] = acy + MathUtil.sin(a - 0.12f) * len;
+            xy[4] = acx + MathUtil.cos(a + 0.12f) * len;
+            xy[5] = acy + MathUtil.sin(a + 0.12f) * len;
+            g.fillPoly(xy, 3);
+        }
+        g.radial(acx, acy, (r - l) * 0.5f, 0x88ffd23f, 0x00ffd23f);
+        // Light sweeping across the card
+        float sweep = (game.clock * 0.35f) % 1.6f - 0.3f;
+        float sx = l + (r - l) * sweep;
+        g.color(0x22ffffff);
+        poly3(g, sx - 60 * u, b, sx + 20 * u, b, sx + 160 * u, t);
+        poly3(g, sx - 60 * u, b, sx + 160 * u, t, sx + 80 * u, t);
+        g.restore();
+        // Ribbon
+        g.color(0xffffd23f);
+        g.fillRoundRect(l + 30 * u, t + 26 * u, l + 250 * u, t + 76 * u, 25 * u);
+        g.color(Ui.INK);
+        g.text(pr.passMax ? "ACTIVE" : "THIS SEASON", l + 140 * u, t + 62 * u, Ui.fit(g, "THIS SEASON", 30 * u, 200 * u),
+                Gfx.ALIGN_CENTER, 0, 0);
+        g.color(0xffffffff);
+        g.text("SNAKE PASS", cx, t + 140 * u, 54 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
+        g.color(0xffffd23f);
+        g.text("MAX", cx, t + 230 * u, 100 * u, Gfx.ALIGN_CENTER, 11 * u, Ui.INK);
+        Brawler br = Brawler.ALL[pr.selected];
+        float sy = t + (b - t) * 0.56f;
+        ui.snakeArt(g, br, Skin.ALL[skin].paletteFor(br), cx, sy, Math.min(1.3f * u, (r - l) / 300f), game.clock);
+        g.color(0xffffe066);
+        g.text(Skin.ALL[skin].name.toUpperCase() + " SKIN", cx, sy + 110 * u, 34 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+        g.color(0xffe8dcff);
+        g.text("x2 every Snake Pass reward", cx, sy + 156 * u, Ui.fit(g, "x2 every Snake Pass reward", 30 * u, r - l - 60 * u),
+                Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        // Price button
+        String price = pr.passMax ? "OPEN PASS" : SnakePass.maxPrice;
+        g.color(Ui.INK);
+        g.fillRoundRect(l + 40 * u, b - 120 * u, r - 40 * u, b - 24 * u, 30 * u);
+        g.color(pr.passMax ? 0xff3ac04a : 0xff2fcf6a);
+        g.fillRoundRect(l + 46 * u, b - 114 * u, r - 46 * u, b - 30 * u, 26 * u);
+        g.color(0x55ffffff);
+        g.fillRoundRect(l + 70 * u, b - 108 * u, r - 70 * u, b - 94 * u, 7 * u);
+        g.color(0xffffffff);
+        g.text(price, cx, b - 56 * u, 48 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
+    }
+
     private void renderShop(Gfx g) {
         float u = game.u;
         for (int i = 0; i < ui.count; i++) {
             Ui.Btn bt = ui.btns[i];
-            if (bt.id == Game.B_BACK || bt.id == B_REDEEM || (bt.id >= B_TAB && bt.id < B_TAB + tabCount())) ui.button(g, bt);
+            if (bt.id == Game.B_BACK || bt.id == B_REDEEM) ui.button(g, bt);
         }
+        drawTabs(g);
         if (shopTab == 0) {
             for (int i = 0; i < ui.count; i++) {
                 Ui.Btn bt = ui.btns[i];
                 if (bt.id >= B_GIFT && bt.id <= B_DEAL) drawOffer(g, bt);
+                else if (bt.id == B_FEATURED) drawFeatured(g, bt);
             }
         } else if (shopTab == 3) {
             for (int i = 0; i < ui.count; i++) {
@@ -705,48 +878,74 @@ final class MetaScreens {
                 break;
             }
         }
+        // Card: tinted glass, coloured header strip, picture on the left, words and price on the right
         ui.panel(g, l, t, r, b, 0xff262a54);
+        g.save();
+        g.clip(l + 6 * u, t + 6 * u, r - 6 * u, b - 6 * u);
+        g.vertical(l, t, r, b, MathUtil.withAlpha(color, 0.38f), 0x00262a54);
+        g.restore();
+        float hh = Math.min(76 * u, (b - t) * 0.22f);
         g.color(MathUtil.darker(color, 0.3f));
-        g.fillRoundRect(l, t, r, t + 90 * u, 26 * u);
+        g.fillRoundRect(l, t, r, t + hh + 8 * u, 26 * u);
         g.color(color);
-        g.fillRoundRect(l, t, r, t + 80 * u, 26 * u);
+        g.fillRoundRect(l, t, r, t + hh, 26 * u);
+        g.color(0x55ffffff);
+        g.fillRoundRect(l + 24 * u, t + 8 * u, r - 24 * u, t + 20 * u, 6 * u);
         g.color(0xffffffff);
-        g.text(title, cx, t + 58 * u, Ui.fit(g, title, 46 * u, (r - l) * 0.9f), Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
-        float artY = t + (b - t) * 0.45f;
+        g.text(title, cx, t + hh * 0.72f, Ui.fit(g, title, hh * 0.6f, (r - l) * 0.9f), Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
+        float bodyT = t + hh + 10 * u, bodyB = b - 14 * u;
+        float artS = Math.min(bodyB - bodyT, (r - l) * 0.42f);
+        float ax = l + 30 * u + artS / 2, ay = (bodyT + bodyB) / 2;
         float glow = 0.5f + 0.5f * MathUtil.sin(game.clock * 3f + bt.id);
-        g.color(MathUtil.withAlpha(color, 0.18f + 0.12f * glow));
-        g.fillCircle(cx, artY, Math.min(r - l, b - t) * 0.33f);
+        if (!pr.lowGraphics) g.radial(ax, ay, artS * 0.62f, MathUtil.withAlpha(color, 0.35f + 0.15f * glow), MathUtil.withAlpha(color, 0f));
         switch (bt.id) {
             case B_GIFT:
-                drawGift(g, cx, artY, (r - l) * 0.42f, pr.giftReady());
+                drawGift(g, ax, ay, artS * 0.62f, pr.giftReady());
                 break;
             case B_BOX:
             case B_MEGA:
-                drawBox(g, cx, artY, (r - l) * 0.45f, bt.id == B_MEGA, game.clock, u);
+                drawBox(g, ax, ay + MathUtil.sin(game.clock * 2.5f + bt.id) * 5 * u, artS * 0.7f, bt.id == B_MEGA, game.clock, u);
                 break;
             default: {
                 int s = dealSkin();
                 Brawler br = Brawler.ALL[pr.selected];
-                ui.snakeArt(g, br, Skin.ALL[s].paletteFor(br), cx, artY, Math.min(1.1f * u, (r - l) / 330f), game.clock);
+                ui.snakeArt(g, br, Skin.ALL[s].paletteFor(br), ax, ay, Math.min(0.9f * u, artS / 330f), game.clock);
                 break;
             }
         }
+        float tl = l + 50 * u + artS, tr = r - 26 * u, tcx = (tl + tr) / 2;
         g.color(0xffd8dcff);
-        g.text(sub, cx, b - 130 * u, Ui.fit(g, sub, 30 * u, (r - l) * 0.9f), Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        float subY = bodyT + (bodyB - bodyT) * 0.36f;
+        g.text(sub, tcx, subY, Ui.fit(g, sub, 32 * u, tr - tl), Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        // Corner tag
+        String tag = bt.id == B_GIFT ? "FREE" : bt.id == B_MEGA ? "BEST" : bt.id == B_DEAL ? "-40%" : null;
+        if (tag != null) {
+            float tx = r - 70 * u, ty = t + hh + 34 * u;
+            g.color(Ui.INK);
+            g.fillRoundRect(tx - 54 * u, ty - 22 * u, tx + 54 * u, ty + 22 * u, 20 * u);
+            g.color(bt.id == B_DEAL ? 0xffff4a6a : 0xffffd23f);
+            g.fillRoundRect(tx - 50 * u, ty - 18 * u, tx + 50 * u, ty + 18 * u, 17 * u);
+            g.color(bt.id == B_DEAL ? 0xffffffff : Ui.INK);
+            g.text(tag, tx, ty + 10 * u, 26 * u, Gfx.ALIGN_CENTER, 0, 0);
+        }
         // Price plate
         int plate = bt.id == B_GIFT ? (pr.giftReady() ? 0xff4ad04a : 0xff6a6a7a) : (canAfford ? 0xffffc928 : 0xff8a6a3a);
+        float pt = bodyB - Math.min(92 * u, (bodyB - bodyT) * 0.42f), pb = bodyB - 6 * u;
         g.color(Ui.INK);
-        g.fillRoundRect(l + 24 * u, b - 96 * u, r - 24 * u, b - 18 * u, 22 * u);
+        g.fillRoundRect(tl - 6 * u, pt - 6 * u, tr + 6 * u, pb + 6 * u, 24 * u);
         g.color(plate);
-        g.fillRoundRect(l + 30 * u, b - 90 * u, r - 30 * u, b - 24 * u, 18 * u);
+        g.fillRoundRect(tl, pt, tr, pb, 20 * u);
+        g.color(0x55ffffff);
+        g.fillRoundRect(tl + 18 * u, pt + 6 * u, tr - 18 * u, pt + 16 * u, 5 * u);
         boolean numeric = price.length() > 0 && Character.isDigit(price.charAt(0));
+        float ps = Math.min(44 * u, (pb - pt) * 0.6f), py = (pt + pb) / 2 + ps * 0.36f;
         g.color(0xffffffff);
         if (numeric) {
-            float tw = g.measureText(price, 44 * u);
-            ui.coin(g, cx - tw / 2 - 18 * u, b - 57 * u, 44 * u);
-            g.text(price, cx - tw / 2 + 10 * u, b - 41 * u, 44 * u, Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
+            float tw = g.measureText(price, ps);
+            ui.coin(g, tcx - tw / 2 - 18 * u, (pt + pb) / 2, ps);
+            g.text(price, tcx - tw / 2 + 10 * u, py, ps, Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
         } else {
-            g.text(price, cx, b - 41 * u, 44 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+            g.text(price, tcx, py, ps, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
         }
     }
 
@@ -945,7 +1144,7 @@ final class MetaScreens {
             ui.button(g, bt);
         }
         g.color(0xff9aa0d0);
-        g.text("Snake Brawl v3.19  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
+        g.text("Snake Brawl v3.20  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
                 w / 2, h - game.padB - 160 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 }

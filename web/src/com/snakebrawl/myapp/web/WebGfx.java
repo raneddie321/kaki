@@ -183,4 +183,12 @@ final class WebGfx implements Gfx {
     public void rotate(float degrees) {
         jsRotate(degrees);
     }
+
+    @JSBody(params = {"n", "l", "t", "r", "b"}, script = "return SB.image(n, l, t, r, b);")
+    private static native boolean jsImage(String n, float l, float t, float r, float b);
+
+    @Override
+    public boolean image(String asset, float l, float t, float r, float b) {
+        return jsImage(asset, l, t, r, b);
+    }
 }

@@ -9,6 +9,15 @@ final class SnakePass {
     static final int XP_PER_TIER = 150;
     static final int SEASON_DAYS = 30;
     static final int PLUS_PRICE = 1200;
+    /** Snake Pass MAX: a Google Play purchase, consumed so it can be bought again next season. */
+    static final String MAX_PRODUCT = "snakepass_max";
+    /** Price shown until Google Play reports the local one. */
+    static String maxPrice = "₪23.90";
+
+    /** This season's Snake Pass MAX skin. */
+    static int maxSkin(int season) {
+        return Skin.MAX_SKINS[Math.max(0, season - 1) % Skin.MAX_SKINS.length];
+    }
     /** Day number (since 1970) when season 1 started: 2026-01-01. */
     private static final long FIRST_DAY = 20454;
 
@@ -43,6 +52,7 @@ final class SnakePass {
         p.passFree = 0;
         p.passPremium = 0;
         p.passPlus = false;
+        p.passMax = false;
     }
 
     static int tier(Profile p) {

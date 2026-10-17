@@ -13,7 +13,7 @@ public final class Game {
 
     // Popup actions confirmed with YES
     static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
-            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9, ACT_PASS_PLUS = 10,
+            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9, ACT_PASS_PLUS = 10, ACT_PASS_MAX = 16,
             ACT_DELETE_MAP = 11, ACT_UPDATE = 12, ACT_RID_CONNECT = 13, ACT_RID_DISCONNECT = 15;
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
@@ -384,8 +384,11 @@ public final class Game {
     static boolean testCheckout = false;
 
     /** Product ids of the coin packs, for the host's billing setup. */
+    /** Everything sold through Google Play: the coin packs and Snake Pass MAX. */
     public String[] coinProductIds() {
-        return CoinStore.PRODUCT_IDS.clone();
+        String[] ids = java.util.Arrays.copyOf(CoinStore.PRODUCT_IDS, CoinStore.PRODUCT_IDS.length + 1);
+        ids[ids.length - 1] = SnakePass.MAX_PRODUCT;
+        return ids;
     }
 
     /** Called by the host when Google Play Billing is (or stops being) ready. */
@@ -396,6 +399,7 @@ public final class Game {
 
     /** Called by the host with Google Play's localized price for a coin pack. */
     public void setPrice(String productId, String price) {
+        if (SnakePass.MAX_PRODUCT.equals(productId) && price != null && price.length() > 0) SnakePass.maxPrice = price;
         int i = CoinStore.indexOf(productId);
         if (i >= 0 && price != null && price.length() > 0) CoinStore.PRICES[i] = price;
     }
@@ -429,6 +433,10 @@ public final class Game {
     }
 
     public void onPurchaseResult(String productId, boolean success) {
+        if (success && SnakePass.MAX_PRODUCT.equals(productId)) {
+            pass.grantMax();
+            return;
+        }
         int pack = CoinStore.indexOf(productId);
         if (!success || pack < 0) return;
         profile.coins += CoinStore.COINS[pack];
@@ -454,9 +462,20 @@ public final class Game {
         flyCount = FLY;
     }
 
-    /** Opens a Snake Crate (or Mega Crate) as a reward. */
+    /** Opens a Snake Crate (or Mega Crate) as a reward; if one is already opening, it waits its turn. */
     void openRewardBox(boolean mega) {
-        meta.openBox(mega);
+        if (box.active) box.queue.add(mega);
+        else meta.openBox(mega);
+    }
+
+    /** Buys Snake Pass MAX through Google Play (granted in {@link #onPurchaseResult}). */
+    void buyPassMax() {
+        if (host.launchPurchase(SnakePass.MAX_PRODUCT)) return;
+        if (testCheckout) {
+            onPurchaseResult(SnakePass.MAX_PRODUCT, true); // desktop tests: no store
+            return;
+        }
+        showInfo("STORE UNAVAILABLE", "Google Play isn't ready right now. Please try again in a moment.", 0, 0);
     }
 
     private void updateSheet(float dt) {
@@ -1144,7 +1163,7 @@ public final class Game {
         closePopup();
         if (id == B_YES) {
             if (action == ACT_JOIN_CLUB || action == ACT_LEAVE_CLUB) social.perform(action, arg);
-            else if (action == ACT_PASS_PLUS) pass.perform(action);
+            else if (action == ACT_PASS_PLUS || action == ACT_PASS_MAX) pass.perform(action);
             else if (action == ACT_DELETE_MAP) maps.deleteMap(arg);
             else if (action == ACT_UPDATE) gated.openStorePage();
             else if (action == ACT_RID_CONNECT) rid.connect();
@@ -1810,10 +1829,20 @@ public final class Game {
     private final int tipIndex = (int) ((System.currentTimeMillis() / 1000) % TIPS.length);
 
     /** Loading screen: a bright arena, cartoon snakes, the logo, a loading bar and a tip. */
+    /** Loading-screen picture (assets/splash.jpg, 2520 x 1080): the artwork is 16:9 in the middle, scaled by {@link #ART_K}, with soft blurred sides for wide phones. */
+    private static final float ART_W = 2520f, ART_H = 1080f, ART_X = 300f, ART_K = 1080f / 941f;
+
     private void renderSplash(Gfx g) {
         float t = SPLASH_TIME - splash;
         float alpha = MathUtil.clamp(splash / 0.4f, 0, 1);
         float cx = w / 2;
+        // The artwork fills the screen (cropped at the sides when needed, never stretched)
+        float asc = Math.max(w / ART_W, h / ART_H);
+        float aox = (w - ART_W * asc) / 2, aoy = (h - ART_H * asc) / 2;
+        if (g.image("splash.jpg", aox, aoy, aox + ART_W * asc, aoy + ART_H * asc)) {
+            renderSplashArt(g, t, alpha, aox, aoy, asc);
+            return;
+        }
         // Sky and the warm arena floor
         g.vertical(0, 0, w, h * 0.5f, 0xff7ec8ff, 0xffd8c8ff);
         g.vertical(0, h * 0.5f, w, h, 0xfff2b08a, 0xffd9785a);
@@ -1979,6 +2008,49 @@ public final class Game {
         g.color(0xddffffff);
         g.text("A L L   G A M E S .   O N E   P L A T F O R M .", cx, sy + 56 * u, 22 * u, Gfx.ALIGN_CENTER, 3 * u, Ui.INK);
         // Fade out at the end
+        if (alpha < 1) {
+            g.color(MathUtil.withAlpha(0xff05060f, 1f - alpha));
+            g.fillRect(0, 0, w, h);
+        }
+    }
+
+    /** Live loading bar and tip, drawn exactly over the ones in the artwork (artwork pixel coordinates). */
+    private void renderSplashArt(Gfx g, float t, float alpha, float ox, float oy, float sc) {
+        float k = ART_K * sc;
+        float prog = MathUtil.clamp(t / (SPLASH_TIME - 0.45f), 0, 1);
+        prog = 1f - (1f - prog) * (1f - prog);
+        // Bar: outline 514..1160 x 704..754 in the artwork
+        float bl = ox + (ART_X + 514 * ART_K) * sc, br = ox + (ART_X + 1160 * ART_K) * sc;
+        float bt = oy + 704 * k, bb = oy + 754 * k;
+        g.color(0xff14142a);
+        g.fillRoundRect(bl, bt, br, bb, (bb - bt) / 2);
+        float il = bl + 6 * k, ir = br - 6 * k, it = bt + 6 * k, ib = bb - 6 * k;
+        g.color(0xff22264a);
+        g.fillRoundRect(il, it, ir, ib, (ib - it) / 2);
+        float fill = (ir - il - 110 * k) * prog;
+        if (fill > ib - it) {
+            g.vertical(il, it, il + fill, ib, 0xff6ae0ff, 0xff1a8ae0);
+            g.color(0x77ffffff);
+            g.fillRoundRect(il + 8 * k, it + 5 * k, il + fill - 8 * k, it + 12 * k, 4 * k);
+        }
+        g.color(0xffffffff);
+        g.text((int) (prog * 100) + "%", ir - 14 * k, ib - 10 * k, 30 * k, Gfx.ALIGN_RIGHT, 4 * k, Ui.INK);
+        // Tip box: 552..1122 x 767..836 in the artwork
+        float tl = ox + (ART_X + 552 * ART_K) * sc, tr = ox + (ART_X + 1122 * ART_K) * sc;
+        float tt = oy + 767 * k, tb = oy + 836 * k;
+        g.color(0xff1c1b2e);
+        g.fillRoundRect(tl, tt, tr, tb, 12 * k);
+        float bx = tl + 46 * k, bcy = tt + 30 * k;
+        g.radial(bx, bcy, 30 * k, 0x66ffd23f, 0x00ffd23f);
+        g.color(0xffffd23f);
+        g.fillCircle(bx, bcy, 14 * k);
+        g.color(0xff8a8aa0);
+        g.fillRoundRect(bx - 6 * k, bcy + 11 * k, bx + 6 * k, bcy + 21 * k, 3 * k);
+        g.color(0xffffd23f);
+        g.text("Tip:", tl + 88 * k, tt + 28 * k, 24 * k, Gfx.ALIGN_LEFT, 3 * k, Ui.INK);
+        g.color(0xffffffff);
+        String tip = TIPS[tipIndex];
+        g.text(tip, tl + 88 * k, tt + 56 * k, Ui.fit(g, tip, 21 * k, tr - tl - 110 * k), Gfx.ALIGN_LEFT, 2 * k, Ui.INK);
         if (alpha < 1) {
             g.color(MathUtil.withAlpha(0xff05060f, 1f - alpha));
             g.fillRect(0, 0, w, h);

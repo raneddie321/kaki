@@ -38,6 +38,8 @@ final class Profile {
     /** Claimed Snake Pass rewards, one bit per tier. */
     long passFree, passPremium;
     boolean passPlus;
+    /** Snake Pass MAX bought for this season (Google Play, snakepass_max): Pass+ with doubled rewards. */
+    boolean passMax;
 
     /** Arena picked on the menu (see Maps). */
     int map;
@@ -73,6 +75,7 @@ final class Profile {
         passFree = (p.loadInt("passFree", 0) & 0xffffffffL) | ((long) p.loadInt("passFreeHi", 0) << 32);
         passPremium = (p.loadInt("passPrem", 0) & 0xffffffffL) | ((long) p.loadInt("passPremHi", 0) << 32);
         passPlus = p.loadInt("passPlus", 0) == 1;
+        passMax = p.loadInt("passMax", 0) == 1;
         SnakePass.checkSeason(this);
         mode = clamp(p.loadInt("mode", 0), 0, 4);
         skin = clamp(p.loadInt("skin", 0), 0, Skin.ALL.length - 1);
@@ -129,6 +132,7 @@ final class Profile {
         p.saveInt("passPrem", (int) passPremium);
         p.saveInt("passPremHi", (int) (passPremium >>> 32));
         p.saveInt("passPlus", passPlus ? 1 : 0);
+        p.saveInt("passMax", passMax ? 1 : 0);
         p.saveInt("mode", mode);
         p.saveInt("skin", skin);
         p.saveInt("ownedSkins", ownedSkins);
@@ -232,11 +236,13 @@ final class Profile {
             passFree = c.passFree;
             passPremium = c.passPremium;
             passPlus = c.passPlus;
+            passMax = c.passMax;
         } else if (c.passSeason == passSeason) {
             passXp = Math.max(passXp, c.passXp);
             passFree |= c.passFree;
             passPremium |= c.passPremium;
             passPlus |= c.passPlus;
+            passMax |= c.passMax;
         }
         if (c.dailyDay > dailyDay || (c.dailyDay == dailyDay && c.dailyIndex > dailyIndex)) {
             dailyDay = c.dailyDay;
@@ -362,6 +368,7 @@ final class Profile {
         passXp = 0;
         passFree = passPremium = 0;
         passPlus = false;
+        passMax = false;
         club = -1;
         hints = 0;
         dailyDay = dailyIndex = -1;
