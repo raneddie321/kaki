@@ -522,7 +522,7 @@ public final class SimTest {
         tapBtn(host, Game.B_FRIENDS);
         if (shotDir != null) shot(host, font, (int) W, (int) H, shotDir + "/f0_friends.png");
         tapBtn(host, 600); // host
-        if (lobbyMode == 1) tapBtn(host, 602); // versus
+        for (int k = 0; k < lobbyMode; k++) tapBtn(host, 602); // mode button cycles TOGETHER, VERSUS, BALL TEAM, BALL VS, EGGS
         tapBtn(guest, Game.B_FRIENDS);
         tapBtn(guest, 601); // join
         gp.nextText = "127.0.0.1";
@@ -585,6 +585,8 @@ public final class SimTest {
             }
         }
         World hw = host.currentWorld();
+        System.out.println("world mode=" + hw.mode + " goals=" + hw.goals[0] + "-" + hw.goals[1] + " teams=" + hw.snakes[0].team + "," + hw.snakes[1].team
+                + " banked=" + hw.snakes[0].banked + "," + hw.snakes[1].banked + " over=" + hw.over);
         System.out.println("net mode=" + lobbyMode + " ticks=" + host.netTick + " checked=" + checked + " in sync, host alive="
                 + hw.snakes[0].alive + " guest alive=" + hw.snakes[1].alive + " aliveCount=" + hw.aliveCount
                 + " host screen=" + host.screenId() + " guest screen=" + guest.screenId()
@@ -630,7 +632,7 @@ public final class SimTest {
         if (shotDir != null) new File(shotDir).mkdirs();
         tapBtn(host, Game.B_FRIENDS);
         tapBtn(host, 600); // host
-        if (lobbyMode == 1) tapBtn(host, 602); // versus
+        for (int k = 0; k < lobbyMode; k++) tapBtn(host, 602); // mode button cycles TOGETHER, VERSUS, BALL TEAM, BALL VS, EGGS
         Thread.sleep(300);
         for (Game g : new Game[]{ga, gb}) {
             tapBtn(g, Game.B_FRIENDS);
@@ -791,6 +793,8 @@ public final class SimTest {
         shot(g, font, sw, sh, out + "/b4_maps_with_custom.png");
         Maps.Custom saved = Maps.load(pf, 0);
         System.out.println("saved custom map: " + (saved != null ? saved.name + " walls=" + saved.count(Maps.WALL) + " theme=" + saved.theme : "none"));
+        g.ui.scrollY = g.ui.scrollMax; // the player's maps come after the seven built-in ones
+        g.layout();
         tapBtn(g, 855); // share slot 0
         System.out.println("share text: " + pf.shared);
         // Import it on another phone
@@ -805,6 +809,8 @@ public final class SimTest {
                 + " popup=" + g2.popTitleForTest() + " selected map=" + g2.profile.map);
 
         // Play the custom map from the map maker
+        g.ui.scrollY = g.ui.scrollMax; // the player's maps come after the seven built-in ones
+        g.layout();
         tapBtn(g, 845); // edit slot 0
         tapBtn(g, 879); // test play
         Pilot pil = new Pilot(g);
@@ -984,14 +990,14 @@ public final class SimTest {
         tapBtn(game, Game.B_PASS);
         run(game, 0.4f);
         shot(game, font, width, height, outDir + "/1p_pass.png");
-        tapBtn(game, 710); // tier 1 free reward
+        tapBtn(game, 1010); // tier 1 free reward
         run(game, 0.3f);
-        tapBtn(game, 700); // Pass+
+        tapBtn(game, 1000); // Pass+
         shot(game, font, width, height, outDir + "/1q_pass_plus_confirm.png");
         tapBtn(game, Game.B_YES);
         tapBtn(game, Game.B_OK);
         if (pf.loadInt("passPlus", 0) != 1) throw new IllegalStateException("pass+ not bought");
-        tapBtn(game, 701); // claim all
+        tapBtn(game, 1001); // claim all
         run(game, 0.3f);
         shot(game, font, width, height, outDir + "/1r_pass_claimed.png");
         tapBtn(game, Game.B_OK);
@@ -1003,44 +1009,7 @@ public final class SimTest {
         run(game, 0.6f);
         shot(game, font, width, height, outDir + "/1t_menu_after_pass.png");
 
-        // Clubs
-        tapBtn(game, Game.B_CLUB);
-        run(game, 0.3f);
-        shot(game, font, width, height, outDir + "/1b_club_list.png");
-        tapBtn(game, 525); // needs 200 trophies
-        shot(game, font, width, height, outDir + "/1c_club_locked.png");
-        tapBtn(game, Game.B_OK);
-        tapBtn(game, 520);
-        tapBtn(game, Game.B_YES);
-        tapBtn(game, Game.B_OK);
-        if (pf.loadInt("club", -1) != 0) throw new IllegalStateException("club not joined");
-        run(game, 0.3f);
-        shot(game, font, width, height, outDir + "/1d_club_mine.png");
-        tapBtn(game, 542);
-        tapBtn(game, Game.B_YES);
-        pf.nextText = "Noodle Ninjas";
-        tapBtn(game, 540);
-        tapBtn(game, Game.B_OK);
-        tapBtn(game, 543);
-        run(game, 0.3f);
-        shot(game, font, width, height, outDir + "/1e_club_custom.png");
-        tapBtn(game, Game.B_BACK);
-        run(game, 0.5f);
-        shot(game, font, width, height, outDir + "/1f_menu_club.png");
-        {
-            Game duo = new Game(pf);
-            duo.resize(width, height);
-            tapBtn(duo, Game.B_CLUB);
-            tapBtn(duo, 541);
-            if (duo.screenId() != Game.PLAY || duo.currentWorld().mode != World.MODE_DUO) throw new IllegalStateException("duo did not start");
-            Pilot dp = new Pilot(duo);
-            for (float t = 0; t < 16 && duo.screenId() == Game.PLAY; t += DT) {
-                dp.step(DT);
-                duo.tick(DT);
-            }
-            shot(duo, font, width, height, outDir + "/1g_duo.png");
-            pf.prefs.put("mode", 0);
-        }
+        // (Clubs are hidden in the menu for now, so they are not shot here)
 
         tapBtn(game, Game.B_BRAWLERS);
         tapBtn(game, 100 + 6); // view TOXIN (locked)
@@ -1058,11 +1027,17 @@ public final class SimTest {
         tapBtn(game, Game.B_SHOP);
         run(game, 0.5f);
         shot(game, font, width, height, outDir + "/3_shop_offers.png");
-        tapBtn(game, 311); // brawl box
+        tapBtn(game, 311); // snake crate
         tapBtn(game, Game.B_YES);
-        run(game, 0.5f);
+        run(game, 0.6f);
+        for (int i = 0; i < 3; i++) { // tap the crate open
+            tapBtn(game, Game.B_BOX_TAP);
+            run(game, 0.2f);
+        }
+        run(game, 1.4f);
         shot(game, font, width, height, outDir + "/3b_box_reward.png");
-        tapBtn(game, Game.B_OK);
+        tapBtn(game, Game.B_BOX_TAP);
+        if (game.box.active) throw new IllegalStateException("crate reveal did not close");
         tapBtn(game, 301); // skins tab
         run(game, 0.5f);
         shot(game, font, width, height, outDir + "/4_shop_skins.png");

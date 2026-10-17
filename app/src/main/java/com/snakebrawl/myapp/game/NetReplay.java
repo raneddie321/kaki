@@ -8,12 +8,20 @@ package com.snakebrawl.myapp.game;
 public final class NetReplay {
     private NetReplay() {}
 
+    /** Duo, then Snake Ball and Egg Heist (on two of the newer maps), joined with " | ". */
     public static String run(Platform platform, long seed, int ticks) {
+        return run(platform, seed, ticks, World.MODE_DUO, Maps.SUNNY) + " | " + run(platform, seed, ticks, World.MODE_BALL, Maps.CANDY)
+                + " | " + run(platform, seed, ticks, World.MODE_EGGS, Maps.JUNGLE);
+    }
+
+    private static String run(Platform platform, long seed, int ticks, int mode, int map) {
         Rng prev = MathUtil.RNG;
         World w;
         MathUtil.RNG = new Rng(seed);
         try {
-            w = new World(platform, World.MODE_DUO, Brawler.ALL[1], null, 3, Brawler.ALL[2], null, 2, 0, 8, 120);
+            if (mode == World.MODE_DUO) w = new World(platform, World.MODE_DUO, Brawler.ALL[1], null, 3, Brawler.ALL[2], null, 2, 0, 8, 120);
+            else w = new World(platform, mode, new Brawler[]{Brawler.ALL[1], Brawler.ALL[2]}, new int[2][], new int[]{3, 2}, 0,
+                    mode == World.MODE_BALL ? 4 : 6, 120, 2, map, null);
         } finally {
             MathUtil.RNG = prev;
         }

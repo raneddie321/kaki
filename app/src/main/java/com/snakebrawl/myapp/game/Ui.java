@@ -305,6 +305,30 @@ final class Ui {
     }
 
     /** Draws word-wrapped text; returns the y below the last line. */
+    /** Biggest font size up to {@code size} at which the wrapped text fits in {@code height}. */
+    float fitWrap(Gfx g, String text, float width, float height, float size) {
+        for (float s = size; s > 16 * u; s -= 2 * u) if (wrapLines(g, text, width, s) * s * 1.25f <= height) return s;
+        return 16 * u;
+    }
+
+    private static int wrapLines(Gfx g, String text, float width, float size) {
+        int lines = 1;
+        String[] words = text.split(" ");
+        StringBuilder line = new StringBuilder();
+        for (String word : words) {
+            String test = line.length() == 0 ? word : line + " " + word;
+            if (g.measureText(test, size) > width && line.length() > 0) {
+                lines++;
+                line.setLength(0);
+                line.append(word);
+            } else {
+                line.setLength(0);
+                line.append(test);
+            }
+        }
+        return lines;
+    }
+
     float wrap(Gfx g, String text, float l, float r, float y, float size, int color, float limitY) {
         g.color(color);
         String[] words = text.split(" ");

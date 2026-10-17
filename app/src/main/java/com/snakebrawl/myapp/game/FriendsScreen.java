@@ -13,8 +13,16 @@ final class FriendsScreen {
     static final int B_LAST = 640;
 
     static final int HOME = 0, HOSTING = 1, SEARCHING = 2, GUEST_LOBBY = 3;
-    /** Lobby modes: play on the same team, or against each other. */
-    static final int TOGETHER = 0, VERSUS = 1;
+    /**
+     * Lobby modes: Survival on the same team or against each other, Snake Ball with friends on one
+     * team or on opposite teams, and Egg Heist (everyone for themselves).
+     */
+    static final int TOGETHER = 0, VERSUS = 1, BALL_TEAM = 2, BALL_VS = 3, EGGS = 4, MODES = 5;
+
+    /** Friends are on the same side in this lobby mode. */
+    static boolean teamMode(int mode) {
+        return mode == TOGETHER || mode == BALL_TEAM;
+    }
 
     private final Game game;
     private final Ui ui;
@@ -209,12 +217,12 @@ final class FriendsScreen {
                     game.layout();
                     break;
                 case NetSession.M_MODE:
-                    mode = m.mode == VERSUS ? VERSUS : TOGETHER;
+                    mode = Profile.clamp(m.mode, 0, MODES - 1);
                     mapName = m.name == null ? "" : m.name;
                     break;
                 case NetSession.M_START:
                     if (net.host || !hostOk || roster[0] == null) break;
-                    mode = m.mode == VERSUS ? VERSUS : TOGETHER;
+                    mode = Profile.clamp(m.mode, 0, MODES - 1);
                     begin(m.seed, m.mapId, m.mapData);
                     return; // leave the following messages (inputs) for the match
                 default:
@@ -288,7 +296,7 @@ final class FriendsScreen {
                 cancel();
                 break;
             case B_MODE:
-                mode = mode == TOGETHER ? VERSUS : TOGETHER;
+                mode = (mode + 1) % MODES;
                 if (net != null) net.sendBytes(modeMsg());
                 break;
             case B_MAP:
@@ -372,8 +380,8 @@ final class FriendsScreen {
                 break;
             }
             case HOSTING: {
-                ui.add(B_MODE, cx - 690 * u, bottom - 290 * u, cx - 30 * u, bottom - 170 * u,
-                        mode == TOGETHER ? "TOGETHER" : "VERSUS", modeSub(), mode == TOGETHER ? 0xffff7a2e : 0xff3fa0ff);
+                int[] cols = {0xffff7a2e, 0xff3fa0ff, 0xff2fbf6a, 0xff1f9a8a, 0xffe8b030};
+                ui.add(B_MODE, cx - 690 * u, bottom - 290 * u, cx - 30 * u, bottom - 170 * u, modeName(), modeSub(), cols[mode]);
                 int map = hostMap();
                 ui.add(B_MAP, cx + 30 * u, bottom - 290 * u, cx + 690 * u, bottom - 170 * u, "MAP: " + Maps.name(game.gated, map),
                         "Tap to change", 0xff3fb6a8);
@@ -400,10 +408,35 @@ final class FriendsScreen {
         }
     }
 
+    private String modeName() {
+        switch (mode) {
+            case VERSUS:
+                return "VERSUS";
+            case BALL_TEAM:
+                return "SNAKE BALL: TEAM";
+            case BALL_VS:
+                return "SNAKE BALL: VS";
+            case EGGS:
+                return "EGG HEIST";
+            default:
+                return "TOGETHER";
+        }
+    }
+
     private String modeSub() {
         int n = Math.max(2, playerCount());
-        if (mode == VERSUS) return "Fight each other + " + (10 - n) + " bots";
-        return n >= 3 ? "Trio vs 3 bot teams" : "Team up vs 4 bot teams";
+        switch (mode) {
+            case VERSUS:
+                return "Fight each other + " + (10 - n) + " bots";
+            case BALL_TEAM:
+                return "Friends + bots vs 3 bots, football";
+            case BALL_VS:
+                return "Opposite teams, football";
+            case EGGS:
+                return "Steal eggs + " + (8 - n) + " bots";
+            default:
+                return n >= 3 ? "Trio vs 3 bot teams" : "Team up vs 4 bot teams";
+        }
     }
 
     // ------------------------------------------------------------------ render
@@ -524,9 +557,8 @@ final class FriendsScreen {
         float top = game.padT + 170 * u;
         drawPlayers(g, top);
         int n = playerCount();
-        String m = mode == TOGETHER ? (n >= 3 ? "TOGETHER: trio vs 3 bot teams" : "TOGETHER: team up vs 4 bot teams")
-                : "VERSUS: fight each other + " + (10 - Math.max(2, n)) + " bots";
-        g.color(mode == TOGETHER ? 0xffffa35a : 0xff8ac8ff);
+        String m = modeName() + ": " + modeSub().toLowerCase();
+        g.color(teamMode(mode) ? 0xffffa35a : 0xff8ac8ff);
         g.text(m, cx, top + 320 * u, 44 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
         if (mapName.length() > 0) {
             g.color(0xff8af0e0);
@@ -556,7 +588,7 @@ final class FriendsScreen {
             NetSession.Msg p = roster[order[i]];
             if (i > 0) {
                 g.color(0xffffd23f);
-                g.text(mode == TOGETHER ? "+" : "VS", l - gap / 2, top + ch / 2 + 22 * u, (seats >= 3 ? 50 : 70) * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
+                g.text(teamMode(mode) ? "+" : "VS", l - gap / 2, top + ch / 2 + 22 * u, (seats >= 3 ? 50 : 70) * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
             }
             if (p == null) {
                 int dots = (int) (game.clock * 2) % 4;

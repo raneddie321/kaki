@@ -562,9 +562,30 @@ final class World {
         return T * 1.5f;
     }
 
+    /** Snake Ball: every human in team 0 (blue), bots fill both teams to three; everyone back to kick-off. */
+    void friendsOneTeam() {
+        int perTeam = (snakeCount + 1) / 2;
+        for (int i = 0; i < snakeCount; i++) snakes[i].team = i < humans || countTeam(0, i) < perTeam ? 0 : 1;
+        for (int i = humans; i < snakeCount; i++) snakes[i].setColors(snakes[i].team == 0 ? TEAM_BLUE : TEAM_RED);
+        for (int i = 0; i < snakeCount; i++) {
+            Snake s = snakes[i];
+            float[] k = kickoffSpot(i);
+            int kills = s.kills;
+            s.spawn(s.type, k[0], k[1], k[2], s.mass);
+            s.kills = kills;
+        }
+    }
+
+    /** Snakes before index {@code before} that are in {@code team}. */
+    private int countTeam(int team, int before) {
+        int c = 0;
+        for (int i = 0; i < before; i++) if (snakes[i].team == team) c++;
+        return c;
+    }
+
     /** Snake Ball start positions: one striker and two wingers per team, facing the other goal. */
     private float[] kickoffSpot(int i) {
-        int team = i % 2, slot = (i / 2) % 3;
+        int team = snakes[i].team, slot = countTeam(team, i) % 3;
         float fx = slot == 0 ? 0.36f : 0.22f;
         float y = size / 2 + (slot == 1 ? -380f : slot == 2 ? 380f : 0f);
         float x = team == 0 ? size * fx : size * (1f - fx);
@@ -1330,6 +1351,7 @@ final class World {
     /** Cheap fingerprint of the simulation, compared between phones to detect desyncs. */
     int stateHash() {
         int h = orbCount * 31 + projCountForHash();
+        h = h * 31 + Float.floatToIntBits(ballX) + eggCount * 17 + goals[0] * 7 + goals[1];
         for (int i = 0; i < snakeCount; i++) {
             Snake s = snakes[i];
             h = h * 31 + (s.alive ? 1 : 0);

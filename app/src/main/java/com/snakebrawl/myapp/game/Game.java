@@ -819,9 +819,27 @@ public final class Game {
                 names[i] = pl.name;
             }
         }
-        boolean versus = lobbyMode == FriendsScreen.VERSUS;
-        int wm = versus ? World.MODE_SHOWDOWN : World.MODE_DUO;
-        int bots = versus ? 10 - np : (np >= 3 ? 9 : 8);
+        boolean versus = !FriendsScreen.teamMode(lobbyMode);
+        int wm, bots;
+        switch (lobbyMode) {
+            case FriendsScreen.BALL_TEAM:
+            case FriendsScreen.BALL_VS:
+                wm = World.MODE_BALL;
+                bots = 6 - np;
+                break;
+            case FriendsScreen.EGGS:
+                wm = World.MODE_EGGS;
+                bots = 8 - np;
+                break;
+            case FriendsScreen.VERSUS:
+                wm = World.MODE_SHOWDOWN;
+                bots = 10 - np;
+                break;
+            default:
+                wm = World.MODE_DUO;
+                bots = np >= 3 ? 9 : 8;
+                break;
+        }
         // The host's trophies set the bots' strength, the same on every phone
         int trophies = netMe == 0 ? profile.trophies : roster[netSlot[0]].trophies;
         Maps.Custom custom = mapData != null && mapData.length > 0 ? Maps.decode(mapData) : null;
@@ -830,6 +848,8 @@ public final class Game {
         MathUtil.RNG = new Rng(seed);
         try {
             world = new World(gated, wm, types, pals, lvls, netMe, bots, trophies, np, map, custom);
+            // Snake Ball with friends on one team: put all of them in blue
+            if (lobbyMode == FriendsScreen.BALL_TEAM) world.friendsOneTeam();
         } finally {
             MathUtil.RNG = prev;
         }
@@ -1172,7 +1192,9 @@ public final class Game {
         }
         float ty = popArtType == 0 ? top + 140 * u : top + 300 * u;
         g.save();
-        ui.wrap(g, popText, l + 60 * u, l + pw - 60 * u, ty, 36 * u, 0xffffffff, top + ph - 150 * u);
+        float limit = top + ph - 160 * u;
+        float size = ui.fitWrap(g, popText, pw - 120 * u, limit - ty, 36 * u);
+        ui.wrap(g, popText, l + 60 * u, l + pw - 60 * u, ty, size, 0xffffffff, limit + size * 0.3f);
         g.restore();
         g.restore();
         for (int i = 0; i < ui.count; i++) ui.button(g, ui.btns[i]);
