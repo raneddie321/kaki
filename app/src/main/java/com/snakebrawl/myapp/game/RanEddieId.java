@@ -10,8 +10,10 @@ package com.snakebrawl.myapp.game;
  * a game token (kept on the phone), then reconciles its progress with the cloud save.
  *
  * Syncing: every profile save marks the progress dirty; it is uploaded a few seconds later (and
- * when the app goes to the background). On start the game downloads the cloud save, so playing on
- * another device carries over.
+ * when the app goes to the background). The game downloads the cloud save on start, when it comes
+ * back to the foreground and every so often on the menus, so playing on another device carries
+ * over. Uploads say which cloud save they build on; if another device saved in between, the
+ * server refuses (409) and the two are merged (see {@link Profile#mergeText}) and uploaded again.
  *
  * Network calls run on background threads; their results are applied on the game thread in
  * {@link #update(float)}.
@@ -23,6 +25,8 @@ final class RanEddieId {
     static final int MIN_AGE = 13;
 
     private static final float UPLOAD_DELAY = 8f;
+    /** How often the menus check for progress made on another device, in seconds. */
+    private static final float PULL_EVERY = 45f;
 
     private final Game game;
     private final Platform p;
@@ -34,6 +38,10 @@ final class RanEddieId {
     /** Progress changed here since the last upload. */
     private boolean dirty;
     private float dirtyFor;
+    /** Coins and trophies in the cloud save at {@link #syncedAt}, to merge changes from two devices. */
+    private int baseCoins, baseTrophies;
+    private float sincePull;
+    private volatile boolean pullSoon;
 
     // Background work and its result, handed to the game thread
     private volatile boolean busy;
@@ -47,6 +55,8 @@ final class RanEddieId {
         username = p.loadString("rid_user", "");
         syncedAt = parseLong(p.loadString("rid_synced", "0"));
         dirty = p.loadInt("rid_dirty", 0) == 1;
+        baseCoins = p.loadInt("rid_baseCoins", pr.coins);
+        baseTrophies = p.loadInt("rid_baseTrophies", pr.trophies);
     }
 
     boolean linked() {
@@ -161,12 +171,29 @@ final class RanEddieId {
         return username.length() > 0 ? username : "your RanEddie ID";
     }
 
-        private void useCloud(String save, long at) {
+    private void useCloud(String save, long at) {
         pr.importText(save);
         game.applyProfileChange();
         dirty = false;
         p.saveInt("rid_dirty", 0);
-        setSynced(at);
+        setSynced(at, save);
+    }
+
+    /**
+     * Newer progress arrived from another device. With nothing new here it simply replaces this
+     * device's progress; if this device changed things too, the two are merged and the result is
+     * uploaded, so nothing bought or earned on either device is lost.
+     */
+    private void takeCloud(String save, long at) {
+        if (!dirty) {
+            useCloud(save, at);
+            return;
+        }
+        pr.mergeText(save, baseCoins, baseTrophies);
+        game.applyProfileChange();
+        setSynced(at, save);
+        markDirty();
+        dirtyFor = UPLOAD_DELAY; // upload the merged progress right away
     }
 
     // ------------------------------------------------------------------ sync
@@ -180,9 +207,19 @@ final class RanEddieId {
         dirtyFor = 0;
     }
 
+    /** Checks the cloud soon (the app came back to the foreground). Safe to call from any thread. */
+    void requestPull() {
+        pullSoon = true;
+    }
+
     /** On start: download the cloud save in case progress was made on another device. */
     void pullOnStart() {
-        if (!linked()) return;
+        pull();
+    }
+
+    private void pull() {
+        if (!linked() || busy) return;
+        sincePull = 0;
         final String tok = token;
         run(new Runnable() {
             @Override
@@ -191,7 +228,7 @@ final class RanEddieId {
                 post(new Runnable() {
                     @Override
                     public void run() {
-                        if (res == null) return; // offline: try again next time
+                        if (res == null || !tok.equals(token)) return; // offline: try again later
                         if (res[0].equals("401")) {
                             signedOutByServer();
                             return;
@@ -201,8 +238,8 @@ final class RanEddieId {
                         long at = Json.number(res[1], "updatedAt");
                         String user = Json.string(res[1], "username");
                         if (user != null && !user.equals(username)) setLinked(token, user);
-                        if (cloud == null || at <= syncedAt) return;
-                        useCloud(cloud, at); // newer progress from another device: the account always wins
+                        if (cloud == null || cloud.length() == 0 || at <= syncedAt) return;
+                        takeCloud(cloud, at);
                     }
                 });
             }
@@ -222,9 +259,18 @@ final class RanEddieId {
         }
         String link = p.takeDeepLink();
         if (link != null) onDeepLink(link);
-        if (linked() && dirty && !busy) {
+        if (!linked() || busy) return;
+        if (dirty) {
             dirtyFor += dt;
             if (dirtyFor >= UPLOAD_DELAY) upload();
+            return;
+        }
+        // Look for progress made on another device: when the app comes back, and now and then
+        // while the player is on the menus (never in the middle of a match)
+        sincePull += dt;
+        if (pullSoon || (sincePull >= PULL_EVERY && !game.inMatch())) {
+            pullSoon = false;
+            pull();
         }
     }
 
@@ -232,7 +278,7 @@ final class RanEddieId {
         if (busy) return;
         final String tok = token;
         final String save = pr.exportText();
-        final String body = "{\"save\":" + Json.quote(save) + ",\"summary\":{\"nickname\":" + Json.quote(pr.displayName())
+        final String body = "{\"save\":" + Json.quote(save) + ",\"baseAt\":" + syncedAt + ",\"summary\":{\"nickname\":" + Json.quote(pr.displayName())
                 + ",\"trophies\":" + pr.trophies + ",\"bestTrophies\":" + pr.bestTrophies + ",\"coins\":" + pr.coins
                 + ",\"wins\":" + pr.wins + ",\"games\":" + pr.games + ",\"snakes\":" + Integer.bitCount(pr.unlocked) + "}}";
         dirty = false;
@@ -244,9 +290,16 @@ final class RanEddieId {
                 post(new Runnable() {
                     @Override
                     public void run() {
+                        if (!tok.equals(token)) return;
                         if (res != null && res[0].equals("200")) {
                             if (!dirty) p.saveInt("rid_dirty", 0);
-                            setSynced(Json.number(res[1], "updatedAt"));
+                            setSynced(Json.number(res[1], "updatedAt"), save);
+                        } else if (res != null && res[0].equals("409")) {
+                            // Another device saved first: merge its progress with ours, then upload again
+                            dirty = true;
+                            String cloud = Json.string(res[1], "save");
+                            long at = Json.number(res[1], "updatedAt");
+                            if (cloud != null && cloud.length() > 0) takeCloud(cloud, at);
                         } else {
                             dirty = true; // try again later
                             if (res != null && res[0].equals("401")) signedOutByServer();
@@ -257,9 +310,15 @@ final class RanEddieId {
         });
     }
 
-    private void setSynced(long at) {
+    /** Remembers the cloud save this device now matches (its time, and its coins and trophies for merging). */
+    private void setSynced(long at, String save) {
         syncedAt = at;
+        int[] ct = Profile.coinsAndTrophies(save);
+        baseCoins = ct[0];
+        baseTrophies = ct[1];
         p.saveString("rid_synced", Long.toString(at));
+        p.saveInt("rid_baseCoins", baseCoins);
+        p.saveInt("rid_baseTrophies", baseTrophies);
     }
 
     /** The token was revoked (signed out everywhere, or the account was removed). */

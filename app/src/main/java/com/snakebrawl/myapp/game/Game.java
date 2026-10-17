@@ -609,6 +609,16 @@ public final class Game {
         update(dt);
     }
 
+    /** Called when the app comes back to the foreground. */
+    public void onResume() {
+        rid.requestPull();
+    }
+
+    /** In a match right now (cloud progress is not swapped in then). */
+    boolean inMatch() {
+        return screen == PLAY;
+    }
+
     /** Called when the app goes to the background. */
     public void onPause() {
         releaseControls();

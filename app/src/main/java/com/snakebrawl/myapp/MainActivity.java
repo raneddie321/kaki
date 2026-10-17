@@ -237,6 +237,7 @@ public final class MainActivity extends Activity implements Platform {
         hideSystemUi();
         if (pool != null) pool.autoResume();
         view.resume();
+        game.onResume();
     }
 
     @Override

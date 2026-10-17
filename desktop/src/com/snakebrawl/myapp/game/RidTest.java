@@ -20,7 +20,7 @@ public final class RidTest {
         final Map<String, String> codes = new HashMap<>(); // code -> challenge
         String save;
         long savedAt;
-        int uploads;
+        int uploads, conflicts;
         String summary;
 
         String approve(String challenge) {
@@ -42,6 +42,10 @@ public final class RidTest {
                         + ",\"updatedAt\":" + savedAt + "}";
             }
             if (path.equals("/api/game/save") && method.equals("PUT")) {
+                if (body.contains("\"baseAt\"") && save != null && savedAt > RanEddieId.Json.number(body, "baseAt")) {
+                    conflicts++;
+                    return "409\n{\"error\":\"conflict\",\"save\":" + RanEddieId.Json.quote(save) + ",\"updatedAt\":" + savedAt + "}";
+                }
                 save = RanEddieId.Json.string(body, "save");
                 summary = body.substring(body.indexOf("\"summary\""));
                 savedAt = Math.max(savedAt + 1, System.currentTimeMillis());
@@ -228,6 +232,56 @@ public final class RidTest {
         c.offline = false;
         run(gc, 10);
         check(site.save.contains("i:trophies=222"), "back online: uploaded");
+
+        // Bug report: bought a snake on the phone; the tablet (app left open) still had the old
+        // coins and no snake. Now the tablet picks it up when it comes back, and when both
+        // devices changed things the progress is merged instead of overwritten.
+        FakeSite s2 = new FakeSite();
+        Phone phone = new Phone(s2, 20), tablet = new Phone(s2, 20);
+        Game gp = new Game(phone), gt = new Game(tablet);
+        gp.resize(1920, 1080);
+        gt.resize(1920, 1080);
+        run(gp, 4);
+        run(gt, 4);
+        gp.profile.coins = 1000;
+        gp.profile.save();
+        gp.rid.connect();
+        phone.approveInBrowser();
+        run(gp, 1);
+        closePopup(gp);
+        run(gp, 10);
+        gt.rid.connect();
+        tablet.approveInBrowser();
+        run(gt, 1);
+        closePopup(gt);
+        check(gt.profile.coins == 1000, "tablet connected with the phone's 1000 coins");
+        int snake = 0;
+        while ((gp.profile.unlocked & (1 << snake)) != 0) snake++;
+        gp.profile.unlocked |= 1 << snake;
+        gp.profile.coins -= 300;
+        gp.profile.save();
+        run(gp, 10);
+        gt.onPause();
+        gt.onResume();
+        run(gt, 2);
+        check(gt.profile.coins == 700 && (gt.profile.unlocked & (1 << snake)) != 0,
+                "tablet back from the background has the snake bought on the phone (" + gt.profile.coins + " coins)");
+        // Both change things before syncing: phone spends 200, tablet wins 50 coins and 8 trophies
+        int trophies = gt.profile.trophies;
+        gp.profile.coins -= 200;
+        gp.profile.ownedSkins |= 1 << 3;
+        gp.profile.save();
+        gt.profile.coins += 50;
+        gt.profile.trophies += 8;
+        gt.profile.save();
+        run(gp, 10);
+        run(gt, 12);
+        check(s2.conflicts > 0, "the tablet's upload was refused because the phone saved first");
+        run(gp, 50); // phone's menu check picks up the merged save
+        check(gt.profile.coins == 550 && gt.profile.trophies == trophies + 8 && (gt.profile.ownedSkins & (1 << 3)) != 0,
+                "tablet merged both: 550 coins, +8 trophies, phone's skin (" + gt.profile.coins + ")");
+        check(gp.profile.coins == 550 && gp.profile.trophies == trophies + 8 && (gp.profile.unlocked & (1 << snake)) != 0,
+                "phone has the same merged progress (" + gp.profile.coins + ")");
 
         // Under 13: not offered
         Phone kid = new Phone(site, 11);

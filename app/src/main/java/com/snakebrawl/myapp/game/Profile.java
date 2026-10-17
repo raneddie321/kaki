@@ -196,6 +196,73 @@ final class Profile {
         }
     }
 
+    /** Coins and trophies held in a cloud save (the starting point for {@link #mergeText}). */
+    static int[] coinsAndTrophies(String text) {
+        Recorder r = Recorder.parse(text);
+        return new int[]{r.loadInt("coins", START_COINS), Math.max(0, r.loadInt("trophies", 0))};
+    }
+
+    /**
+     * Both this device and another one changed the progress since they last synced: combines the
+     * cloud save with this device's progress instead of letting one overwrite the other. Coins and
+     * trophies add up what each side earned or spent since the last sync ({@code baseCoins} and
+     * {@code baseTrophies} were the values then); things bought or unlocked are kept from both.
+     * Settings and the picked snake stay as they are on this device.
+     */
+    void mergeText(String text, int baseCoins, int baseTrophies) {
+        Recorder r = Recorder.parse(text);
+        Platform real = p;
+        Profile c = new Profile(r);
+        coins = Math.max(0, c.coins + coins - baseCoins);
+        trophies = Math.max(0, c.trophies + trophies - baseTrophies);
+        bestTrophies = Math.max(Math.max(bestTrophies, c.bestTrophies), trophies);
+        wins = Math.max(wins, c.wins);
+        games = Math.max(games, c.games);
+        bestLen = Math.max(bestLen, c.bestLen);
+        totalKills = Math.max(totalKills, c.totalKills);
+        hints = Math.max(hints, c.hints);
+        ownedSkins |= c.ownedSkins;
+        unlocked |= c.unlocked;
+        for (int i = 0; i < levels.length; i++) levels[i] = Math.max(levels[i], c.levels[i]);
+        nextGiftMinute = Math.max(nextGiftMinute, c.nextGiftMinute);
+        tutorial = Math.max(tutorial, c.tutorial);
+        if (c.passSeason > passSeason) {
+            passSeason = c.passSeason;
+            passXp = c.passXp;
+            passFree = c.passFree;
+            passPremium = c.passPremium;
+            passPlus = c.passPlus;
+        } else if (c.passSeason == passSeason) {
+            passXp = Math.max(passXp, c.passXp);
+            passFree |= c.passFree;
+            passPremium |= c.passPremium;
+            passPlus |= c.passPlus;
+        }
+        if (c.dailyDay > dailyDay || (c.dailyDay == dailyDay && c.dailyIndex > dailyIndex)) {
+            dailyDay = c.dailyDay;
+            dailyIndex = c.dailyIndex;
+        }
+        if (c.questDay > questDay) {
+            questDay = c.questDay;
+            questClaimed = c.questClaimed;
+            System.arraycopy(c.questProgress, 0, questProgress, 0, questProgress.length);
+        } else if (c.questDay == questDay) {
+            questClaimed |= c.questClaimed;
+            for (int i = 0; i < questProgress.length; i++) questProgress[i] = Math.max(questProgress[i], c.questProgress[i]);
+        }
+        if (!ownsSkin(skin)) skin = 0;
+        save();
+        // Redeem codes used on either device stay used
+        String mine = real.loadString("codesUsed", ""), theirs = r.loadString("codesUsed", "");
+        if (theirs != null && theirs.length() > 0) {
+            StringBuilder all = new StringBuilder(mine);
+            for (String k : theirs.split(",")) {
+                if (k.length() > 0 && !("," + mine + ",").contains("," + k + ",")) all.append(all.length() == 0 ? "" : ",").append(k);
+            }
+            real.saveString("codesUsed", all.toString());
+        }
+    }
+
     /** A Platform that only stores saved values, so save()/load() can write or read a cloud save. */
     private static final class Recorder implements Platform {
         private final java.util.LinkedHashMap<String, String> values = new java.util.LinkedHashMap<String, String>();

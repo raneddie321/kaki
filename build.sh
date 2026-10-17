@@ -11,8 +11,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION_CODE=${VERSION_CODE:-29}
-VERSION_NAME=${VERSION_NAME:-3.15}
+VERSION_CODE=${VERSION_CODE:-30}
+VERSION_NAME=${VERSION_NAME:-3.16}
 MIN_SDK=24
 TARGET_SDK=36
 # Package name on Google Play. (The Java code keeps its com.snakebrawl.myapp package.)

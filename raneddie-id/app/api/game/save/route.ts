@@ -19,12 +19,18 @@ type Summary = { nickname?: string; trophies?: number; bestTrophies?: number; co
 export async function PUT(req: Request) {
   const g = await gameUser(req);
   if (!g) return json({ error: "unauthorized" }, 401);
-  const body = (await req.json().catch(() => null)) as { save?: string; summary?: Summary } | null;
+  const body = (await req.json().catch(() => null)) as { save?: string; baseAt?: number; summary?: Summary } | null;
   if (typeof body?.save !== "string" || body.save.length === 0 || body.save.length > MAX_SAVE)
     return json({ error: "bad_save" }, 400);
+  // The game says which cloud save its progress builds on. If another device saved since then,
+  // refuse and hand back the newer save so the game can merge both instead of overwriting.
+  // (Games before 3.16 send no baseAt and keep the old behaviour.)
+  const cloudAt = g.meta.snakeBrawlSaveAt ?? 0;
+  if (typeof body.baseAt === "number" && cloudAt > body.baseAt && g.meta.snakeBrawlSave)
+    return json({ error: "conflict", save: g.meta.snakeBrawlSave, updatedAt: cloudAt }, 409);
   const s = body.summary ?? {};
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
-  const updatedAt = Date.now();
+  const updatedAt = Math.max(Date.now(), cloudAt + 1);
   await g.client.users.updateUserMetadata(g.user.id, {
     privateMetadata: { snakeBrawlSave: body.save, snakeBrawlSaveAt: updatedAt },
     publicMetadata: {
