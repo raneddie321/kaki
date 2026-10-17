@@ -164,7 +164,7 @@ final class MapScreens {
         g.restore();
         for (int i = 0; i < ui.count; i++) if (!ui.btns[i].scrolls) ui.button(g, ui.btns[i]);
         g.color(0xffb8bdf0);
-        g.text("Tap a map to play on it. Your map is used in Survival, Duo, Endless and with friends.", w / 2, h - game.padB - 14 * u,
+        g.text("Tap a map to play on it. Your map is used in Survival, Duo, Endless, Egg Heist and with friends.", w / 2, h - game.padB - 14 * u,
                 26 * u, Gfx.ALIGN_CENTER, 3 * u, Ui.INK);
     }
 

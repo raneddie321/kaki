@@ -134,7 +134,7 @@ final class Quests {
             case KNOCKOUTS:
                 return "Knock out " + n + " snakes";
             case WIN:
-                return "Win a Survival or Duo match";
+                return "Win a match (any mode but Endless)";
             case LENGTH:
                 return "Reach length " + n + " in one match";
             case CUBES:

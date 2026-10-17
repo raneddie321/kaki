@@ -1,15 +1,17 @@
 package com.snakebrawl.myapp.game;
 
 /**
- * Arenas: three built-in maps and up to {@link #SLOTS} maps the player draws in the map maker.
+ * Arenas: seven built-in maps and up to {@link #SLOTS} maps the player draws in the map maker.
  * A player-made map is a {@link #G} x {@link #G} grid of walls and bushes that is stretched over
  * the arena, so the same map works in every mode. Maps are saved and shared as short text codes.
  */
 final class Maps {
     private Maps() {}
 
-    static final int SUNNY = 0, FROST = 1, LAVA = 2, BUILT_IN = 3;
-    static final String[] SUBS = {"A new island every match", "Mirror-symmetric ice fortress", "Rock canyon around a hot plaza"};
+    static final int SUNNY = 0, FROST = 1, LAVA = 2, DUNES = 3, CANDY = 4, NEON = 5, JUNGLE = 6, BUILT_IN = 7;
+    static final String[] SUBS = {"A new island every match", "Mirror-symmetric ice fortress", "Rock canyon around a hot plaza",
+            "Winding sand ridges and cacti", "Lollipop forest, cotton-candy bushes", "City blocks under neon lights",
+            "Overgrown temple deep in the jungle"};
 
     /** Map ids of player maps are CUSTOM + slot. */
     static final int CUSTOM = 100, SLOTS = 6;

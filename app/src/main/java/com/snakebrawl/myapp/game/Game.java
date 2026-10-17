@@ -18,6 +18,14 @@ public final class Game {
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
     // Coins are scarce: only the top half of a match earns any, and only a few
+    /** Order of the menu's mode button: Survival, Duo, Snake Ball, Egg Heist, Endless (profile mode ids). */
+    private static final int[] MODE_ORDER = {0, 2, 3, 4, 1};
+
+    private static int modeSlot(int mode) {
+        for (int i = 0; i < MODE_ORDER.length; i++) if (MODE_ORDER[i] == mode) return i;
+        return 0;
+    }
+
     private static final int[] RANK_COINS = {12, 9, 7, 5, 3, 0, 0, 0, 0, 0};
 
     private final Platform host;
@@ -143,6 +151,8 @@ public final class Game {
     private float endTimer = -1;
     private boolean endIsWin;
     private int resRank, resKills, resLength, resDelta, resCubes, resCoins;
+    /** Result title instead of RANK #n (Snake Ball draw/defeat), or null. */
+    private String resTitle;
     private boolean resWin, resNewBest;
     private float resTime;
 
@@ -706,7 +716,18 @@ public final class Game {
     }
 
     static int worldMode(int profileMode) {
-        return profileMode == 0 ? World.MODE_SHOWDOWN : (profileMode == 2 ? World.MODE_DUO : World.MODE_ENDLESS);
+        switch (profileMode) {
+            case 0:
+                return World.MODE_SHOWDOWN;
+            case 2:
+                return World.MODE_DUO;
+            case 3:
+                return World.MODE_BALL;
+            case 4:
+                return World.MODE_EGGS;
+            default:
+                return World.MODE_ENDLESS;
+        }
     }
 
     /** Your Duo partner: a member of your club, or a friendly bot if you have no club. */
@@ -720,7 +741,7 @@ public final class Game {
         Maps.Custom custom = Maps.isCustom(profile.map) ? Maps.load(gated, profile.map - Maps.CUSTOM) : null;
         int mapId = custom == null && profile.map >= 0 && profile.map < Maps.BUILT_IN ? profile.map : Maps.SUNNY;
         world = new World(gated, wm, new Brawler[]{b}, new int[][]{profile.palette()}, new int[]{profile.levels[b.id]}, 0,
-                wm == World.MODE_ENDLESS ? 11 : 9, profile.trophies, 2, mapId, custom);
+                wm == World.MODE_ENDLESS ? 11 : wm == World.MODE_BALL ? 5 : wm == World.MODE_EGGS ? 7 : 9, profile.trophies, 2, mapId, custom);
         world.player.name = profile.displayName();
         if (wm == World.MODE_DUO) {
             Snake mate = world.mateOf(world.player);
@@ -993,6 +1014,7 @@ public final class Game {
     private void finishGame(boolean win) {
         Snake p = world.player;
         resNet = net != null || world.humans > 1;
+        resTitle = null;
         resWin = win;
         resKills = p.kills;
         resLength = (int) p.mass;
@@ -1012,6 +1034,20 @@ public final class Game {
             resDelta = duoTrophies[ri];
             resCoins = duoCoins[ri];
             if (resCoins > 0) resCoins += Math.min(6, p.kills * 2);
+            if (win) profile.wins++;
+        } else if (world.mode == World.MODE_BALL) {
+            int r = world.ballResult();
+            resRank = r > 0 ? 1 : 2;
+            resDelta = r > 0 ? 8 : r == 0 ? 1 : -3;
+            resCoins = r > 0 ? 10 + Math.min(4, p.banked * 2) : r == 0 ? 4 : 0;
+            resTitle = r > 0 ? null : r == 0 ? "DRAW" : "DEFEAT";
+            if (win) profile.wins++;
+        } else if (world.mode == World.MODE_EGGS) {
+            resRank = world.eggRank(p);
+            int[] eggTrophies = {10, 7, 5, 3, 1, 0, -1, -2};
+            resDelta = eggTrophies[Profile.clamp(resRank - 1, 0, eggTrophies.length - 1)];
+            resCoins = RANK_COINS[Profile.clamp(resRank - 1, 0, RANK_COINS.length - 1)];
+            if (resCoins > 0) resCoins += Math.min(4, p.banked / 5);
             if (win) profile.wins++;
         } else {
             resRank = 0;
@@ -1233,7 +1269,21 @@ public final class Game {
             Snake mate = world.mateOf(p);
             boolean teamAlive = p.alive || (mate != null && mate.alive);
             if (!p.alive && movePtr >= 0) releaseControls();
-            if (endTimer < 0) {
+            if (endTimer < 0 && (world.mode == World.MODE_BALL || world.mode == World.MODE_EGGS)) {
+                // Objective modes end on the clock (or 3 goals), never because you were knocked out
+                if (world.over) {
+                    endTimer = 2.2f;
+                    if (world.mode == World.MODE_BALL) {
+                        int r = world.ballResult();
+                        endIsWin = r > 0;
+                        world.banner(r > 0 ? "VICTORY!" : r == 0 ? "DRAW!" : "DEFEAT");
+                    } else {
+                        endIsWin = world.eggRank(p) == 1;
+                        world.banner(endIsWin ? "VICTORY!" : "TIME'S UP!");
+                    }
+                    releaseControls();
+                }
+            } else if (endTimer < 0) {
                 if (!teamAlive) {
                     endTimer = 1.8f;
                     endIsWin = false;
@@ -1512,7 +1562,7 @@ public final class Game {
                 }
                 break;
             case B_MODE:
-                profile.mode = profile.mode == 0 ? 2 : (profile.mode == 2 ? 1 : 0);
+                profile.mode = MODE_ORDER[(modeSlot(profile.mode) + 1) % MODE_ORDER.length];
                 profile.save();
                 layout();
                 break;
@@ -1655,9 +1705,10 @@ public final class Game {
                 float bw = 400 * u, bh = 150 * u;
                 float r = w - padR - 30 * u, b = h - padB - 30 * u;
                 ui.add(B_PLAY, r - bw, b - bh, r, b, "PLAY", null, 0xffffc928);
-                String[] modeNames = {"SURVIVAL", "ENDLESS", "DUO SURVIVAL"};
-                String[] modeSubs = {"Last snake standing", "Grow forever", "You + " + partnerName() + " vs 4 teams"};
-                int[] modeCols = {0xff3fa0ff, 0xffb35cff, 0xffff7a2e};
+                String[] modeNames = {"SURVIVAL", "ENDLESS", "DUO SURVIVAL", "SNAKE BALL", "EGG HEIST"};
+                String[] modeSubs = {"Last snake standing", "Grow forever", "You + " + partnerName() + " vs 4 teams",
+                        "3 v 3 football, first to 3", "Steal eggs, bring them home"};
+                int[] modeCols = {0xff3fa0ff, 0xffb35cff, 0xffff7a2e, 0xff2fbf6a, 0xffe8b030};
                 ui.add(B_MODE, r - bw - 30 * u - 430 * u, b - bh, r - bw - 30 * u, b,
                         modeNames[profile.mode], modeSubs[profile.mode], modeCols[profile.mode]);
                 float pl = padL + 30 * u;
@@ -2381,6 +2432,8 @@ public final class Game {
                 g.color(MathUtil.withAlpha(0xffff5a5a, 0.6f + 0.4f * MathUtil.sin(clock * 10f)));
                 g.text("GET OUT OF THE POISON!", cx, padT + 135 * u, 40 * u, Gfx.ALIGN_CENTER, 6 * u, 0xff14142a);
             }
+        } else if (wd.mode == World.MODE_BALL || wd.mode == World.MODE_EGGS) {
+            drawObjectiveHud(g, wd, p, cx);
         } else {
             g.color(0xcc0e1024);
             g.fillRoundRect(cx - 170 * u, padT, cx + 170 * u, padT + 92 * u, 28 * u);
@@ -2743,6 +2796,76 @@ public final class Game {
     private final Snake[] board = new Snake[32];
     private final Snake[] mates = new Snake[2];
 
+    /** Snake Ball scoreboard or Egg Heist standings, the match clock, and the respawn countdown. */
+    private void drawObjectiveHud(Gfx g, World wd, Snake p, float cx) {
+        boolean ball = wd.mode == World.MODE_BALL;
+        int left = (int) Math.ceil(Math.max(0, (ball ? World.BALL_TIME : World.EGG_TIME) - wd.matchTime));
+        String clockText = left / 60 + ":" + (left % 60 < 10 ? "0" : "") + left % 60;
+        g.color(0xcc0e1024);
+        g.fillRoundRect(cx - 260 * u, padT, cx + 260 * u, padT + 100 * u, 28 * u);
+        if (ball) {
+            int mineTeam = p.team, mine = wd.goals[mineTeam], theirs = wd.goals[1 - mineTeam];
+            int myCol = mineTeam == 0 ? World.TEAM_BLUE[0] : World.TEAM_RED[0];
+            int theirCol = mineTeam == 0 ? World.TEAM_RED[0] : World.TEAM_BLUE[0];
+            g.color(myCol);
+            g.fillRoundRect(cx - 245 * u, padT + 14 * u, cx - 95 * u, padT + 86 * u, 20 * u);
+            g.color(theirCol);
+            g.fillRoundRect(cx + 95 * u, padT + 14 * u, cx + 245 * u, padT + 86 * u, 20 * u);
+            g.color(0xffffffff);
+            g.text(Integer.toString(mine), cx - 170 * u, padT + 72 * u, 58 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
+            g.text(Integer.toString(theirs), cx + 170 * u, padT + 72 * u, 58 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
+            g.color(left <= 10 ? 0xffff7a6a : 0xffffffff);
+            g.text(clockText, cx, padT + 66 * u, 44 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+            g.color(0xffd8dcff);
+            g.text("YOU   •   FIRST TO " + World.GOALS_TO_WIN + "   •   THEM", cx, padT + 132 * u, 24 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        } else {
+            g.color(0xffffd23f);
+            g.text("EGGS " + p.banked, cx - 120 * u, padT + 66 * u, 44 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+            g.color(left <= 10 ? 0xffff7a6a : 0xffffffff);
+            g.text(clockText, cx + 150 * u, padT + 66 * u, 44 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+            if (p.alive && p.eggs > 0) {
+                g.color(MathUtil.withAlpha(0xfffff4d8, 0.75f + 0.25f * MathUtil.sin(clock * 6f)));
+                g.text("CARRYING " + p.eggs + (p.eggs >= World.EGG_CAP ? " (FULL)" : "") + " - BRING THEM TO THE NEST!", cx,
+                        padT + 136 * u, 30 * u, Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+            }
+            drawEggBoard(g, wd);
+        }
+        if (!p.alive && !wd.over) {
+            int secs = (int) Math.ceil(Math.max(0, World.ARENA_RESPAWN - p.deadTime));
+            g.color(0xffffffff);
+            g.text("BACK IN " + Math.max(1, secs) + "...", cx, h * 0.62f, 64 * u, Gfx.ALIGN_CENTER, 8 * u, Ui.INK);
+        }
+    }
+
+    /** Egg Heist standings under the minimap: eggs delivered. */
+    private void drawEggBoard(Gfx g, World wd) {
+        int n = 0;
+        for (int i = 0; i < wd.snakeCount; i++) board[n++] = wd.snakes[i];
+        for (int i = 1; i < n; i++) {
+            Snake s = board[i];
+            int j = i - 1;
+            while (j >= 0 && board[j].banked < s.banked) {
+                board[j + 1] = board[j];
+                j--;
+            }
+            board[j + 1] = s;
+        }
+        float x0 = mapX, y0 = mapY + mapS + 24 * u, bw = mapS;
+        int rows = Math.min(5, n);
+        g.color(0xaa0e1024);
+        g.fillRoundRect(x0 - 6 * u, y0 - 6 * u, x0 + bw + 6 * u, y0 + 44 * u + rows * 36 * u, 14 * u);
+        g.color(0xffffd23f);
+        g.text("EGGS", x0 + bw / 2, y0 + 30 * u, 28 * u, Gfx.ALIGN_CENTER, 4 * u, 0xff14142a);
+        for (int i = 0; i < rows; i++) {
+            Snake s = board[i];
+            float y = y0 + 70 * u + i * 36 * u;
+            g.color(s.isPlayer ? 0xff9cff8a : 0xffffffff);
+            String nm = s.name.length() > 10 ? s.name.substring(0, 10) : s.name;
+            g.text((i + 1) + ". " + nm, x0 + 6 * u, y, 24 * u, Gfx.ALIGN_LEFT, 3 * u, 0xff14142a);
+            g.text(Integer.toString(s.banked), x0 + bw - 4 * u, y, 24 * u, Gfx.ALIGN_RIGHT, 3 * u, 0xff14142a);
+        }
+    }
+
     private void drawLeaderboard(Gfx g) {
         World wd = world;
         int n = 0;
@@ -2806,6 +2929,9 @@ public final class Game {
         if (resWin) {
             title = "VICTORY!";
             tc = 0xffffd23f;
+        } else if (resTitle != null) {
+            title = resTitle;
+            tc = resTitle.equals("DRAW") ? 0xffd8dcff : 0xffff7a6a;
         } else if (resRank > 0) {
             title = "RANK #" + resRank;
             tc = resRank <= 4 ? 0xff9cff8a : 0xffff7a6a;
@@ -2834,10 +2960,17 @@ public final class Game {
         sy += row;
         resultRow(g, "LENGTH", (resNewBest ? "NEW BEST! " : "") + resLength, resNewBest ? 0xffffd23f : 0xffffffff, sx, vx, sy);
         sy += row;
-        resultRow(g, "POWER ORBS", Integer.toString(resCubes), 0xff6dff6d, sx, vx, sy);
+        if (world.mode == World.MODE_BALL) {
+            int mine = world.goals[player.team], theirs = world.goals[1 - player.team];
+            resultRow(g, "SCORE", mine + " - " + theirs, 0xff6dff6d, sx, vx, sy);
+        } else if (world.mode == World.MODE_EGGS) {
+            resultRow(g, "EGGS DELIVERED", Integer.toString(player.banked), 0xffffd23f, sx, vx, sy);
+        } else {
+            resultRow(g, "POWER ORBS", Integer.toString(resCubes), 0xff6dff6d, sx, vx, sy);
+        }
         sy += row;
         int secs = (int) resTime;
-        resultRow(g, "SURVIVED", secs / 60 + ":" + (secs % 60 < 10 ? "0" : "") + secs % 60, 0xffffffff, sx, vx, sy);
+        resultRow(g, world.mode == World.MODE_BALL || world.mode == World.MODE_EGGS ? "MATCH TIME" : "SURVIVED", secs / 60 + ":" + (secs % 60 < 10 ? "0" : "") + secs % 60, 0xffffffff, sx, vx, sy);
         sy += row;
         ui.coin(g, sx + 24 * u, sy - 14 * u, 48 * u);
         g.color(0xffffe066);

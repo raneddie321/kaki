@@ -109,6 +109,11 @@ final class SnakePass {
         } else if (mode == World.MODE_DUO) {
             int[] byRank = {40, 28, 20, 12, 8};
             xp = byRank[Profile.clamp(rank - 1, 0, byRank.length - 1)];
+        } else if (mode == World.MODE_BALL) {
+            xp = rank == 1 ? 35 : 15;
+        } else if (mode == World.MODE_EGGS) {
+            int[] byRank = {40, 30, 24, 18, 14, 10, 8, 6};
+            xp = byRank[Profile.clamp(rank - 1, 0, byRank.length - 1)];
         } else {
             xp = 12;
         }

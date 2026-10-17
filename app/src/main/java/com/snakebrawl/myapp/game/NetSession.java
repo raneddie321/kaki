@@ -13,7 +13,7 @@ import java.util.List;
  */
 abstract class NetSession {
     /** Version 5: longer input delay (4: the four new brawlers; 3: up to three players, slots, rosters, maps). */
-    static final int PROTOCOL = 6;
+    static final int PROTOCOL = 7;
     static final int MAX_PLAYERS = 3;
 
     static final int ST_WAITING = 0, ST_CONNECTING = 1, ST_CONNECTED = 2, ST_CLOSED = 3;

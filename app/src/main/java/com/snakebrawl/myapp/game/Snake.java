@@ -57,6 +57,8 @@ final class Snake {
     int rank;
     /** Team index in Duo Showdown, -1 when everyone is on their own. */
     int team = -1;
+    /** Egg Heist: eggs carried on the tail right now, and eggs delivered to the nest (the score). */
+    int eggs, banked;
     Snake lastAttacker;
     float lastAttackerTime;
     BotBrain brain;
@@ -83,6 +85,7 @@ final class Snake {
         this.deadTime = 0;
         this.mass = mass;
         this.cubes = 0;
+        this.eggs = 0;
         this.superCharge = 0;
         this.ammo = 3;
         this.fireCooldown = 0;
@@ -163,6 +166,7 @@ final class Snake {
         if (dashTime > 0) s *= DASH_MULT;
         else if (boosting) s *= BOOST_MULT;
         if (slowTime > 0) s *= slowFactor;
+        if (eggs > 0) s *= 1f - 0.025f * eggs; // a full load of eggs slows you down: greedy carriers are easy prey
         return s;
     }
 

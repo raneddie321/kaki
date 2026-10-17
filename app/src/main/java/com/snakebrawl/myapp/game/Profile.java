@@ -74,7 +74,7 @@ final class Profile {
         passPremium = (p.loadInt("passPrem", 0) & 0xffffffffL) | ((long) p.loadInt("passPremHi", 0) << 32);
         passPlus = p.loadInt("passPlus", 0) == 1;
         SnakePass.checkSeason(this);
-        mode = clamp(p.loadInt("mode", 0), 0, 2);
+        mode = clamp(p.loadInt("mode", 0), 0, 4);
         skin = clamp(p.loadInt("skin", 0), 0, Skin.ALL.length - 1);
         ownedSkins = p.loadInt("ownedSkins", 1) | 1;
         // The four original brawlers are always free

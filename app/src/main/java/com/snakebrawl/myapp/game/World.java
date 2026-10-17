@@ -7,6 +7,10 @@ final class World {
     static final int MODE_DEMO = 2;
     /** Duo Showdown: teams of two, last team standing. */
     static final int MODE_DUO = 3;
+    /** Snake Ball: 3 v 3 football. Push the ball into the other team's goal with your head. */
+    static final int MODE_BALL = 4;
+    /** Egg Heist: grab eggs, carry them on your tail, bring them to the nest in the middle. */
+    static final int MODE_EGGS = 5;
 
     static final float T = 64f;
     static final byte EMPTY = 0, WALL = 1, BOX = 2;
@@ -142,13 +146,13 @@ final class World {
         this.mapId = custom != null ? Maps.CUSTOM : mapId;
         this.theme = Theme.get(custom != null ? custom.theme : mapId);
         boolean br = mode == MODE_SHOWDOWN || mode == MODE_DUO;
-        this.n = br ? 66 : (mode == MODE_ENDLESS ? 80 : 56);
+        this.n = br ? 66 : mode == MODE_ENDLESS ? 80 : mode == MODE_BALL ? 40 : 56;
         this.size = n * T;
         this.tiles = new byte[n * n];
         this.bush = new boolean[n * n];
         this.grid = new SegGrid(size);
-        this.orbTarget = br ? 480 : (mode == MODE_ENDLESS ? 760 : 420);
-        this.boxTarget = br ? 14 : (mode == MODE_ENDLESS ? 18 : 8);
+        this.orbTarget = br ? 480 : mode == MODE_ENDLESS ? 760 : mode == MODE_BALL ? 150 : mode == MODE_EGGS ? 380 : 420;
+        this.boxTarget = br ? 14 : mode == MODE_ENDLESS ? 18 : mode == MODE_BALL ? 0 : mode == MODE_EGGS ? 6 : 8;
         for (int i = 0; i < proj.length; i++) proj[i] = new Projectile();
 
         humans = types.length;
@@ -177,10 +181,24 @@ final class World {
             spA[i] = a + MathUtil.PI;
             snakes[i].team = duo ? gi : -1;
         }
-        if (custom != null) applyCustom(custom, spX, spY);
+        if (mode == MODE_BALL) {
+            for (int i = 0; i < snakeCount; i++) {
+                snakes[i].team = i % 2;
+                float[] k = kickoffSpot(i);
+                spX[i] = k[0];
+                spY[i] = k[1];
+                spA[i] = k[2];
+            }
+            generateField();
+        } else if (custom != null) applyCustom(custom, spX, spY);
         else if (mapId == Maps.FROST) generateFrost(spX, spY);
         else if (mapId == Maps.LAVA) generateLava(spX, spY);
+        else if (mapId == Maps.DUNES) generateDunes(spX, spY);
+        else if (mapId == Maps.CANDY) generateCandy(spX, spY);
+        else if (mapId == Maps.NEON) generateNeon(spX, spY);
+        else if (mapId == Maps.JUNGLE) generateJungle(spX, spY);
         else generateMap(spX, spY);
+        if (mode == MODE_EGGS) clearNest();
 
         zoneL = 0;
         zoneT = 0;
@@ -188,7 +206,8 @@ final class World {
         zoneB = size;
 
         String[] names = shuffledNames();
-        float startMass = br ? 40f : 45f;
+        boolean arena = mode == MODE_BALL || mode == MODE_EGGS;
+        float startMass = br ? 40f : mode == MODE_BALL ? 70f : 45f;
         for (int i = 0; i < snakeCount; i++) {
             Snake s = snakes[i];
             if (i < humans) {
@@ -204,7 +223,8 @@ final class World {
                 s.name = names[i % names.length];
                 dressBot(s, i);
                 Brawler b = Brawler.ALL[MathUtil.randInt(Brawler.ALL.length)];
-                float m = br ? startMass : MathUtil.rand(45, 260);
+                float m = br || arena ? startMass : MathUtil.rand(45, 260);
+                if (mode == MODE_BALL) s.setColors(s.team == 0 ? TEAM_BLUE : TEAM_RED);
                 s.spawn(b, spX[i], spY[i], spA[i], m);
                 s.brain = new BotBrain(this, s, trophies);
             }
@@ -220,6 +240,10 @@ final class World {
         if (mode == MODE_SHOWDOWN) banner("SURVIVAL!");
         else if (mode == MODE_DUO) banner(ts == 3 ? "TRIO SURVIVAL!" : "DUO SURVIVAL!");
         else if (mode == MODE_ENDLESS) banner("ENDLESS BRAWL!");
+        else if (mode == MODE_BALL) {
+            resetBall();
+            banner("SNAKE BALL!");
+        } else if (mode == MODE_EGGS) banner("EGG HEIST!");
     }
 
     /** Bots get fancier skins and higher power levels as the player's trophies grow. */
@@ -493,6 +517,487 @@ final class World {
                 x = Math.max(2, Math.min(n - 3, x));
                 y = Math.max(2, Math.min(c - 1, y));
             }
+        }
+    }
+
+    // ------------------------------------------------------------------ Snake Ball and Egg Heist
+
+    static final float ARENA_RESPAWN = 3f;
+    static final float BALL_R = 34f, BALL_TIME = 150f;
+    static final int GOALS_TO_WIN = 3;
+    static final float EGG_TIME = 120f, NEST_R = 230f;
+    static final int EGG_CAP = 10;
+    private static final int MAX_EGGS = 30;
+    static final int[] TEAM_BLUE = {0xff3f8cff, 0xff9ad0ff}, TEAM_RED = {0xffff4a4a, 0xffffb0a0};
+
+    /** Match finished (Snake Ball: a team reached 3 goals or time ran out; Egg Heist: time ran out). */
+    boolean over;
+    float ballX, ballY, ballVX, ballVY, ballSpin;
+    final int[] goals = new int[2];
+    /** Seconds left of the goal celebration (the ball sits in the net, then kick-off). */
+    float goalPause;
+    int lastGoalTeam = -1;
+    private Snake lastTouch;
+
+    final float[] eggX = new float[MAX_EGGS], eggY = new float[MAX_EGGS], eggAge = new float[MAX_EGGS];
+    int eggCount;
+    private float eggTimer;
+
+    /** Goal mouth: tiles [n/2 - 6, n/2 + 6) on the left and right edges. */
+    float goalTop() {
+        return (n / 2 - 6) * T;
+    }
+
+    float goalBottom() {
+        return (n / 2 + 6) * T;
+    }
+
+    float goalLine() {
+        return T * 1.5f;
+    }
+
+    /** Snake Ball start positions: one striker and two wingers per team, facing the other goal. */
+    private float[] kickoffSpot(int i) {
+        int team = i % 2, slot = (i / 2) % 3;
+        float fx = slot == 0 ? 0.36f : 0.22f;
+        float y = size / 2 + (slot == 1 ? -380f : slot == 2 ? 380f : 0f);
+        float x = team == 0 ? size * fx : size * (1f - fx);
+        return new float[]{x, y, team == 0 ? 0f : MathUtil.PI};
+    }
+
+    /** Football pitch: goals with posts on both ends, four pillars and hedges along the touchlines. */
+    private void generateField() {
+        int g0 = n / 2 - 6, g1 = n / 2 + 6;
+        for (int x = 0; x < 3; x++) {
+            tiles[(g0 - 1) * n + x] = WALL;
+            tiles[g1 * n + x] = WALL;
+            tiles[(g0 - 1) * n + n - 1 - x] = WALL;
+            tiles[g1 * n + n - 1 - x] = WALL;
+        }
+        int px = (int) (n * 0.3f), py = (int) (n * 0.24f);
+        for (int dy = 0; dy < 2; dy++)
+            for (int dx = 0; dx < 2; dx++) {
+                tiles[(py + dy) * n + px + dx] = WALL;
+                tiles[(py + dy) * n + n - 2 - px + dx] = WALL;
+                tiles[(n - 2 - py + dy) * n + px + dx] = WALL;
+                tiles[(n - 2 - py + dy) * n + n - 2 - px + dx] = WALL;
+            }
+        for (int x = 8; x < n - 8; x++) {
+            if (Math.abs(x - n / 2) < 3) continue;
+            plantBush(x, 2);
+            plantBush(x, n - 3);
+        }
+    }
+
+    private void resetBall() {
+        ballX = size / 2;
+        ballY = size / 2;
+        ballVX = ballVY = 0;
+        lastTouch = null;
+    }
+
+    /** After a goal: ball in the middle, every snake back to its starting spot. */
+    private void kickoff() {
+        resetBall();
+        for (int i = 0; i < snakeCount; i++) {
+            Snake s = snakes[i];
+            float[] k = kickoffSpot(i);
+            int kills = s.kills;
+            s.spawn(s.type, k[0], k[1], k[2], Math.max(70f, s.mass));
+            s.kills = kills;
+            if (s.brain != null) s.brain.reset();
+        }
+        banner("KICK OFF!");
+    }
+
+    /** Snake Ball and Egg Heist: knocked-out snakes (you too) come back after a few seconds. */
+    private void respawnArena(Snake s) {
+        float x = 0, y = 0, a = 0;
+        boolean found = false;
+        if (mode == MODE_BALL) {
+            float[] k = kickoffSpot(s.index);
+            for (int tries = 0; tries < 20 && !found; tries++) {
+                x = s.team == 0 ? MathUtil.rand(200, size * 0.25f) : MathUtil.rand(size * 0.75f, size - 200);
+                y = MathUtil.rand(size * 0.25f, size * 0.75f);
+                found = !solidCircle(x, y, 90);
+            }
+            if (!found) {
+                x = k[0];
+                y = k[1];
+            }
+            a = k[2];
+        } else {
+            for (int tries = 0; tries < 60 && !found; tries++) {
+                x = MathUtil.rand(250, size - 250);
+                y = MathUtil.rand(250, size - 250);
+                if (solidCircle(x, y, 110) || MathUtil.dist2(x, y, size / 2, size / 2) < (NEST_R + 300) * (NEST_R + 300)) continue;
+                found = true;
+                for (int i = 0; i < snakeCount && found; i++) {
+                    Snake o = snakes[i];
+                    if (o != s && o.alive && MathUtil.dist2(x, y, o.hx(), o.hy()) < 500 * 500) found = false;
+                }
+            }
+            if (!found) return; // try again next tick
+            a = MathUtil.angleTo(x, y, size / 2, size / 2);
+        }
+        int kills = s.kills;
+        s.spawn(s.type, x, y, a, mode == MODE_BALL ? 70f : 50f);
+        s.kills = kills;
+        if (s.brain != null) s.brain.reset();
+        fx.ring(x, y, 120, 0xff9ae6ff, 0.5f);
+        if (s == player) banner("BACK IN THE GAME!");
+    }
+
+    private void updateBall(float dt) {
+        if (over) return;
+        if (goalPause > 0) {
+            // The ball rolls to a stop in the net
+            ballVX *= 0.9f;
+            ballVY *= 0.9f;
+            ballX = MathUtil.clamp(ballX + ballVX * dt, BALL_R, size - BALL_R);
+            ballY = MathUtil.clamp(ballY + ballVY * dt, goalTop() + BALL_R, goalBottom() - BALL_R);
+            goalPause -= dt;
+            if (goalPause <= 0) {
+                if (goals[0] >= GOALS_TO_WIN || goals[1] >= GOALS_TO_WIN) over = true;
+                else kickoff();
+            }
+            return;
+        }
+        if (matchTime >= BALL_TIME) {
+            over = true;
+            return;
+        }
+        float fr = Math.max(0f, 1f - 0.6f * dt);
+        ballVX *= fr;
+        ballVY *= fr;
+        // The pitch slopes up at the touchlines and in the corners, so the ball never gets stuck there
+        float edge = 260f;
+        if (ballY < edge) ballVY += (edge - ballY) * 3.2f * dt;
+        else if (ballY > size - edge) ballVY -= (ballY - (size - edge)) * 3.2f * dt;
+        boolean inMouth = ballY > goalTop() && ballY < goalBottom();
+        if (!inMouth && ballX < edge) ballVX += (edge - ballX) * 3.2f * dt;
+        else if (!inMouth && ballX > size - edge) ballVX -= (ballX - (size - edge)) * 3.2f * dt;
+
+        for (int i = 0; i < snakeCount; i++) {
+            Snake s = snakes[i];
+            if (!s.alive) continue;
+            // Head: kicks the ball the way the snake is moving (harder when boosting)
+            float dx = ballX - s.hx(), dy = ballY - s.hy();
+            float min = s.radius + BALL_R, d2 = dx * dx + dy * dy;
+            if (d2 < min * min) {
+                float d = Math.max(0.01f, MathUtil.sqrt(d2)), nx = dx / d, ny = dy / d;
+                ballX = s.hx() + nx * min;
+                ballY = s.hy() + ny * min;
+                // Dribbling: the ball goes partly where the snake is heading, so it can be steered
+                float kx = nx + MathUtil.cos(s.ang) * 0.8f, ky = ny + MathUtil.sin(s.ang) * 0.8f;
+                float kl = Math.max(0.01f, MathUtil.sqrt(kx * kx + ky * ky));
+                nx = kx / kl;
+                ny = ky / kl;
+                float kick = s.speed() * (s.boosting ? 2.1f : 1.6f) + 150f;
+                float vn = ballVX * nx + ballVY * ny;
+                if (vn < kick) {
+                    if (kick - vn > 380f) sound(Platform.SND_HIT, ballX, ballY, 0.5f);
+                    ballVX += nx * (kick - vn);
+                    ballVY += ny * (kick - vn);
+                }
+                lastTouch = s;
+            }
+            // Body: the ball bounces off it
+            for (int j = 3; j < s.segs; j += 2) {
+                float bx = ballX - s.sx[j], by = ballY - s.sy[j];
+                float bm = s.radius + BALL_R, b2 = bx * bx + by * by;
+                if (b2 >= bm * bm) continue;
+                float d = Math.max(0.01f, MathUtil.sqrt(b2)), nx = bx / d, ny = by / d;
+                ballX = s.sx[j] + nx * bm;
+                ballY = s.sy[j] + ny * bm;
+                float vn = ballVX * nx + ballVY * ny;
+                if (vn < 0) {
+                    ballVX -= nx * vn * 1.6f;
+                    ballVY -= ny * vn * 1.6f;
+                }
+            }
+        }
+        // Shots push the ball
+        for (Projectile p : proj) {
+            if (!p.active || p.isBomb()) continue;
+            float rr = BALL_R + p.radius;
+            if (MathUtil.dist2(p.x, p.y, ballX, ballY) > rr * rr) continue;
+            float v = Math.max(1f, MathUtil.sqrt(p.vx * p.vx + p.vy * p.vy));
+            ballVX += p.vx / v * 260f;
+            ballVY += p.vy / v * 260f;
+            p.active = false;
+            if (p.owner != null) lastTouch = p.owner;
+            fx.burst(ballX, ballY, 6, 0xffffffff, 260, 6, 0.3f);
+        }
+        float sp = MathUtil.sqrt(ballVX * ballVX + ballVY * ballVY);
+        if (sp > 1500f) {
+            ballVX *= 1500f / sp;
+            ballVY *= 1500f / sp;
+            sp = 1500f;
+        }
+        int steps = 1 + (int) (sp * dt / 16f);
+        float sdt = dt / steps;
+        for (int k = 0; k < steps; k++) {
+            float nx = ballX + ballVX * sdt;
+            if (solidCircle(nx, ballY, BALL_R)) ballVX = -ballVX * 0.7f;
+            else ballX = nx;
+            float ny = ballY + ballVY * sdt;
+            if (solidCircle(ballX, ny, BALL_R)) ballVY = -ballVY * 0.7f;
+            else ballY = ny;
+        }
+        ballSpin += sp * dt / BALL_R;
+        if (ballY > goalTop() + BALL_R * 0.3f && ballY < goalBottom() - BALL_R * 0.3f) {
+            if (ballX > size - goalLine()) scoreGoal(0);
+            else if (ballX < goalLine()) scoreGoal(1);
+        }
+    }
+
+    private void scoreGoal(int team) {
+        goals[team]++;
+        lastGoalTeam = team;
+        goalPause = 2.6f;
+        if (lastTouch != null && lastTouch.team == team) lastTouch.banked++;
+        boolean ours = player != null && player.team == team;
+        banner(player == null ? "GOAL!" : ours ? "GOAL!!!" : "THEY SCORED!");
+        int col = team == 0 ? TEAM_BLUE[0] : TEAM_RED[0];
+        fx.burst(ballX, ballY, 40, col, 700, 10, 0.9f);
+        fx.burst(ballX, ballY, 30, 0xffffd23f, 600, 8, 0.8f);
+        fx.ring(ballX, ballY, 320, 0xffffffff, 0.6f);
+        fx.flash(ballX, ballY, 400, col, 0.4f);
+        shakeAt(ballX, ballY, 14);
+        sound(ours ? Platform.SND_VICTORY : Platform.SND_EXPLODE, ballX, ballY, 1f);
+    }
+
+    /** 1 win, 0 draw, -1 loss for the player's team (Snake Ball). */
+    int ballResult() {
+        if (player == null) return 0;
+        int mine = goals[player.team], theirs = goals[1 - player.team];
+        return mine > theirs ? 1 : mine < theirs ? -1 : 0;
+    }
+
+    /** Egg Heist place of a snake: by eggs delivered, then knockouts. */
+    int eggRank(Snake s) {
+        int r = 1;
+        for (int i = 0; i < snakeCount; i++) {
+            Snake o = snakes[i];
+            if (o != s && (o.banked > s.banked || o.banked == s.banked && o.kills > s.kills)) r++;
+        }
+        return r;
+    }
+
+    /** Egg Heist: clears the middle for the golden nest. */
+    private void clearNest() {
+        int c = n / 2, r = (int) (NEST_R / T) + 3;
+        for (int y = c - r; y <= c + r; y++)
+            for (int x = c - r; x <= c + r; x++) {
+                if (x < 0 || y < 0 || x >= n || y >= n || (x - c) * (x - c) + (y - c) * (y - c) > r * r) continue;
+                tiles[y * n + x] = EMPTY;
+                bush[y * n + x] = false;
+            }
+        for (int i = 0; i < 12; i++) spawnEgg();
+    }
+
+    private void spawnEgg() {
+        if (eggCount >= MAX_EGGS) return;
+        for (int tries = 0; tries < 40; tries++) {
+            float x = MathUtil.rand(200, size - 200), y = MathUtil.rand(200, size - 200);
+            if (MathUtil.dist2(x, y, size / 2, size / 2) < (NEST_R + 260) * (NEST_R + 260) || solidCircle(x, y, 40)) continue;
+            addEgg(x, y);
+            return;
+        }
+    }
+
+    private void addEgg(float x, float y) {
+        if (eggCount >= MAX_EGGS) return;
+        eggX[eggCount] = x;
+        eggY[eggCount] = y;
+        eggAge[eggCount] = 0;
+        eggCount++;
+    }
+
+    private void dropEggs(Snake v) {
+        for (int k = 0; k < v.eggs; k++) {
+            int j = Math.max(0, v.segs - 1 - k * 3);
+            float x = v.sx[j] + MathUtil.rand(-50, 50), y = v.sy[j] + MathUtil.rand(-50, 50);
+            if (solidCircle(x, y, 30)) {
+                x = v.sx[j];
+                y = v.sy[j];
+            }
+            addEgg(MathUtil.clamp(x, 40, size - 40), MathUtil.clamp(y, 40, size - 40));
+        }
+        v.eggs = 0;
+    }
+
+    private void updateEggs(float dt) {
+        if (over) return;
+        if (matchTime >= EGG_TIME) {
+            over = true;
+            return;
+        }
+        for (int i = 0; i < eggCount; i++) eggAge[i] += dt;
+        eggTimer -= dt;
+        if (eggTimer <= 0 && eggCount < 18) {
+            eggTimer = 1.1f;
+            spawnEgg();
+        }
+        float c = size / 2;
+        for (int i = 0; i < snakeCount; i++) {
+            Snake s = snakes[i];
+            if (!s.alive) continue;
+            float hx = s.hx(), hy = s.hy();
+            for (int e = 0; e < eggCount && s.eggs < EGG_CAP; e++) {
+                float rr = s.radius + 30f;
+                if (MathUtil.dist2(hx, hy, eggX[e], eggY[e]) > rr * rr) continue;
+                s.eggs++;
+                fx.burst(eggX[e], eggY[e], 6, 0xfffff4d8, 220, 6, 0.35f);
+                if (s == player) sound(Platform.SND_EAT, hx, hy, 0.8f);
+                eggCount--;
+                eggX[e] = eggX[eggCount];
+                eggY[e] = eggY[eggCount];
+                eggAge[e] = eggAge[eggCount];
+                e--;
+            }
+            if (s.eggs > 0 && MathUtil.dist2(hx, hy, c, c) < NEST_R * NEST_R) {
+                s.banked += s.eggs;
+                fx.text(hx, hy - s.radius - 60, "+" + s.eggs, 0xffffd23f, 54);
+                fx.burst(c, c, 10 + s.eggs * 3, 0xffffd23f, 500, 8, 0.7f);
+                fx.ring(c, c, NEST_R + 60, 0xffffd23f, 0.5f);
+                if (s == player) {
+                    sound(Platform.SND_POWER, hx, hy, 1f);
+                    if (s.eggs >= 5) banner("BIG DELIVERY!");
+                }
+                s.eggs = 0;
+            }
+        }
+    }
+
+    /** A wall placed in the top-left quarter and mirrored into the other three. */
+    private void wall4(int x, int y, float[] spX, float[] spY) {
+        int h = n / 2;
+        if (x < 0 || y < 0 || x >= h || y >= h) return;
+        wallAt(x, y, spX, spY, 4f);
+        wallAt(n - 1 - x, y, spX, spY, 4f);
+        wallAt(x, n - 1 - y, spX, spY, 4f);
+        wallAt(n - 1 - x, n - 1 - y, spX, spY, 4f);
+    }
+
+    private void bush4(int x, int y) {
+        int h = n / 2;
+        if (x < 0 || y < 0 || x >= h || y >= h) return;
+        plantBush(x, y);
+        plantBush(n - 1 - x, y);
+        plantBush(x, n - 1 - y);
+        plantBush(n - 1 - x, n - 1 - y);
+    }
+
+    /** Bush patch grown by a short random walk, mirrored into all four quarters. */
+    private void bushWalk4(int x, int y, int steps) {
+        int h = n / 2;
+        for (int st = 0; st < steps; st++) {
+            bush4(x, y);
+            bush4(x + 1, y);
+            int d = MathUtil.randInt(4);
+            if (d == 0) x++;
+            else if (d == 1) x--;
+            else if (d == 2) y++;
+            else y--;
+            x = Math.max(2, Math.min(h - 1, x));
+            y = Math.max(2, Math.min(h - 1, y));
+        }
+    }
+
+    /**
+     * Sunset Dunes: long wavy sand ridges that cross the arena with gaps to slip through, lone
+     * cacti, and dry grass in the dips. Mirror symmetric top to bottom and left to right.
+     */
+    private void generateDunes(float[] spX, float[] spY) {
+        int h = n / 2;
+        for (int k = 0; k < 3; k++) {
+            int y0 = 5 + k * (h - 6) / 3 + MathUtil.randInt(3);
+            float amp = 1.5f + MathUtil.rand() * 1.5f, freq = 0.25f + MathUtil.rand() * 0.2f, ph = MathUtil.rand(0, MathUtil.TAU);
+            int gap = 3 + MathUtil.randInt(h - 8);
+            for (int x = 3; x < h; x++) {
+                if (Math.abs(x - gap) < 2 || x > h - 3) continue;
+                int y = y0 + Math.round(MathUtil.sin(x * freq + ph) * amp);
+                wall4(x, y, spX, spY);
+            }
+        }
+        for (int k = 0; k < 7; k++) {
+            int x = 3 + MathUtil.randInt(h - 4), y = 3 + MathUtil.randInt(h - 4);
+            wall4(x, y, spX, spY);
+            if (MathUtil.rand() < 0.5f) wall4(x, y + 1, spX, spY);
+        }
+        for (int k = 0; k < 6; k++) bushWalk4(3 + MathUtil.randInt(h - 4), 3 + MathUtil.randInt(h - 4), 4 + MathUtil.randInt(6));
+    }
+
+    /**
+     * Candy Kingdom: round lollipop blobs and candy-cane bars between big fluffy cotton-candy
+     * bushes, the same in all four corners.
+     */
+    private void generateCandy(float[] spX, float[] spY) {
+        int h = n / 2;
+        for (int k = 0; k < 6; k++) {
+            int cx = 4 + MathUtil.randInt(h - 6), cy = 4 + MathUtil.randInt(h - 6);
+            int r = 1 + MathUtil.randInt(2);
+            for (int dy = -r; dy <= r; dy++)
+                for (int dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r) wall4(cx + dx, cy + dy, spX, spY);
+        }
+        for (int k = 0; k < 3; k++) {
+            int x = 4 + MathUtil.randInt(h - 8), y = 4 + MathUtil.randInt(h - 8);
+            boolean horiz = MathUtil.rand() < 0.5f;
+            for (int i = 0; i < 4; i++) wall4(horiz ? x + i : x, horiz ? y : y + i, spX, spY);
+            wall4(horiz ? x + 4 : x + 1, horiz ? y + 1 : y + 4, spX, spY); // the hook of the cane
+        }
+        for (int k = 0; k < 9; k++) bushWalk4(2 + MathUtil.randInt(h - 3), 2 + MathUtil.randInt(h - 3), 6 + MathUtil.randInt(8));
+    }
+
+    /**
+     * Neon Nights: a city grid. Square blocks sit between straight streets; a few blocks are
+     * missing (plazas) and some streets are lined with glowing hedges.
+     */
+    private void generateNeon(float[] spX, float[] spY) {
+        int h = n / 2;
+        int cell = 8;
+        for (int by = 3; by + 4 < h; by += cell) {
+            for (int bx = 3; bx + 4 < h; bx += cell) {
+                float roll = MathUtil.rand();
+                if (roll < 0.22f) continue; // plaza
+                int bw = 3 + MathUtil.randInt(2), bh = 3 + MathUtil.randInt(2);
+                for (int y = 0; y < bh; y++)
+                    for (int x = 0; x < bw; x++) {
+                        if (roll < 0.45f && x > 0 && y > 0 && x < bw - 1 && y < bh - 1) continue; // hollow courtyard
+                        wall4(bx + x, by + y, spX, spY);
+                    }
+                if (MathUtil.rand() < 0.5f) for (int x = 0; x < bw; x++) bush4(bx + x, by + bh + 1);
+                else for (int y = 0; y < bh; y++) bush4(bx + bw + 1, by + y);
+            }
+        }
+    }
+
+    /**
+     * Jungle Ruins: thick undergrowth everywhere, broken temple walls in each corner and a ruined
+     * shrine ring around the middle.
+     */
+    private void generateJungle(float[] spX, float[] spY) {
+        int h = n / 2;
+        for (int k = 0; k < 14; k++) bushWalk4(2 + MathUtil.randInt(h - 3), 2 + MathUtil.randInt(h - 3), 6 + MathUtil.randInt(10));
+        // Broken walls: L-shapes with a stone missing here and there
+        for (int k = 0; k < 4; k++) {
+            int x = 4 + MathUtil.randInt(h - 9), y = 4 + MathUtil.randInt(h - 9);
+            int len = 4 + MathUtil.randInt(3);
+            for (int i = 0; i < len; i++) {
+                if (MathUtil.rand() < 0.2f) continue;
+                wall4(x + i, y, spX, spY);
+                if (i < len - 1) wall4(x, y + i, spX, spY);
+            }
+        }
+        // Shrine ring around the centre with four doorways
+        float rad = 5.5f;
+        for (int a = 0; a < 40; a++) {
+            if (a % 10 < 2) continue;
+            float ang = a * MathUtil.TAU / 40f + MathUtil.PI / 8;
+            int x = h + Math.round(MathUtil.cos(ang) * rad), y = h + Math.round(MathUtil.sin(ang) * rad);
+            if (x >= 2 && y >= 2 && x < n - 2 && y < n - 2) wallAt(x, y, spX, spY, 4f);
         }
     }
 
@@ -807,12 +1312,17 @@ final class World {
                     // Duo: you come back next to your partner while they survive
                     Snake mate = mateOf(s);
                     if (mate != null && mate.alive && s.deadTime > DUO_RESPAWN) respawnNear(s, mate);
+                } else if (mode == MODE_BALL || mode == MODE_EGGS) {
+                    if (s.deadTime > ARENA_RESPAWN && !over && goalPause <= 0) respawnArena(s);
                 } else if (mode != MODE_SHOWDOWN && !s.isPlayer && s.deadTime > 3.5f) respawnBot(s);
                 continue;
             }
             if (s.brain != null) s.brain.update(dt);
             updateSnake(s, dt);
         }
+
+        if (mode == MODE_BALL) updateBall(dt);
+        else if (mode == MODE_EGGS) updateEggs(dt);
 
         grid.build(snakes, snakeCount);
         checkCollisions(dt);
@@ -2120,6 +2630,7 @@ final class World {
             }
             addOrb(x, y, value, v.palette[k % Skin.colorCount(v.palette)], -1);
         }
+        if (v.eggs > 0) dropEggs(v);
         for (int c = 0; c < v.cubes; c++) {
             int j = MathUtil.randInt(Math.max(1, Math.min(v.segs, 12)));
             dropCube(v.sx[j] + MathUtil.rand(-40, 40), v.sy[j] + MathUtil.rand(-40, 40));
@@ -2339,12 +2850,17 @@ final class World {
         drawGround(g, l, t, r, b, tt);
         if (fancy) drawLightPatches(g, l, t, r, b, tt);
         drawDecals(g, l, t, r, b);
+        if (mode == MODE_BALL) drawPitch(g);
+        else if (mode == MODE_EGGS) drawNest(g, tt);
         drawAreas(g, l, t, r, b, tt);
         drawOrbs(g, l, t, r, b, tt);
         drawCubes(g, l, t, r, b, tt);
+        if (mode == MODE_EGGS) drawEggs(g, l, t, r, b, tt);
         drawWallsAndBoxes(g, l, t, r, b, tt);
+        if (mode == MODE_BALL) drawBall(g);
         boolean hidePlayer = playerInBush();
         drawSnakes(g, l, t, r, b, tt, hidePlayer);
+        if (mode == MODE_EGGS) drawCarriedEggs(g, l, t, r, b, hidePlayer);
         drawProjectiles(g, l, t, r, b, tt);
         drawBushes(g, l, t, r, b, tt, hidePlayer);
         // Like Brawl Stars, you can always see yourself inside a bush (faded)
@@ -2367,6 +2883,115 @@ final class World {
             float rad = (float) Math.sqrt(w * w + h * h) * 0.62f;
             g.radial(w / 2, h / 2, rad, 0x00000000, 0x70000018);
         }
+    }
+
+    // ------------------------------------------------------------------ Snake Ball / Egg Heist drawing
+
+    private void drawPitch(Gfx g) {
+        float c = size / 2, line = 7f;
+        int white = 0x66ffffff;
+        g.color(white);
+        g.fillRect(c - line / 2, T, c + line / 2, size - T);
+        g.strokeCircle(c, c, 270, line);
+        g.fillCircle(c, c, 14);
+        float gt = goalTop(), gb = goalBottom();
+        for (int side = 0; side < 2; side++) {
+            float x0 = side == 0 ? 0 : size - goalLine(), x1 = side == 0 ? goalLine() : size;
+            // Goal area box
+            float bx0 = side == 0 ? 0 : size - 6 * T, bx1 = side == 0 ? 6 * T : size;
+            g.color(white);
+            g.strokeRoundRect(bx0, gt - 2 * T, bx1, gb + 2 * T, 10, line);
+            // Net in the team's colour (left goal is defended by blue, right by red)
+            int col = side == 0 ? TEAM_BLUE[0] : TEAM_RED[0];
+            g.color(MathUtil.withAlpha(col, 0.28f));
+            g.fillRect(x0, gt, x1, gb);
+            g.color(0x55ffffff);
+            for (float y = gt; y <= gb; y += 32) g.fillRect(x0, y - 1.5f, x1, y + 1.5f);
+            for (float x = x0; x <= x1; x += 32) g.fillRect(x - 1.5f, gt, x + 1.5f, gb);
+            g.color(MathUtil.withAlpha(col, 0.9f));
+            float lx = side == 0 ? goalLine() : size - goalLine();
+            g.fillRect(lx - 5, gt, lx + 5, gb);
+        }
+    }
+
+    private void drawBall(Gfx g) {
+        float x = ballX, y = ballY, r = BALL_R;
+        g.color(0x44000000);
+        g.fillCircle(x + 8, y + 12, r);
+        g.color(0xff14142a);
+        g.fillCircle(x, y, r + 4);
+        g.color(0xfff4f6ff);
+        g.fillCircle(x, y, r);
+        // Patches turn as the ball rolls
+        g.color(0xff2a2e48);
+        g.fillCircle(x, y, r * 0.3f);
+        for (int k = 0; k < 5; k++) {
+            float a = ballSpin + k * MathUtil.TAU / 5;
+            float px = x + MathUtil.cos(a) * r * 0.68f, py = y + MathUtil.sin(a) * r * 0.68f;
+            g.fillCircle(px, py, r * 0.2f);
+        }
+        g.color(0x99ffffff);
+        g.fillCircle(x - r * 0.38f, y - r * 0.42f, r * 0.22f);
+    }
+
+    private void drawNest(Gfx g, float tt) {
+        float c = size / 2;
+        float pulse = 0.5f + 0.5f * MathUtil.sin(tt * 2.5f);
+        if (!lowGraphics) g.radial(c, c, NEST_R + 140, MathUtil.withAlpha(0xffffd23f, 0.35f + 0.15f * pulse), 0x00ffd23f);
+        g.color(0xff6a4a24);
+        g.fillCircle(c, c, NEST_R);
+        g.color(0xff8a6230);
+        g.fillCircle(c, c, NEST_R * 0.82f);
+        g.color(0xffb08040);
+        for (int k = 0; k < 36; k++) {
+            float a = k * MathUtil.TAU / 36f, a2 = a + 0.5f;
+            float r1 = NEST_R * (0.7f + (k % 3) * 0.08f), r2 = NEST_R * 0.98f;
+            g.line(c + MathUtil.cos(a) * r1, c + MathUtil.sin(a) * r1, c + MathUtil.cos(a2) * r2, c + MathUtil.sin(a2) * r2, 7f);
+        }
+        g.color(MathUtil.withAlpha(0xffffd23f, 0.55f + 0.35f * pulse));
+        g.strokeCircle(c, c, NEST_R + 8, 8f);
+        egg(g, c - 40, c + 10, 34, 0);
+        egg(g, c + 30, c - 5, 30, 0);
+        egg(g, c + 5, c + 40, 28, 0);
+    }
+
+    private void drawEggs(Gfx g, float l, float t, float r, float b, float tt) {
+        for (int i = 0; i < eggCount; i++) {
+            float x = eggX[i], y = eggY[i];
+            if (x < l - 60 || x > r + 60 || y < t - 60 || y > b + 60) continue;
+            float pop = Math.min(1f, eggAge[i] * 4f);
+            float bob = MathUtil.sin(tt * 3f + i) * 4f;
+            if (!lowGraphics) g.radial(x, y + 10, 46, 0x66ffd23f, 0x00ffd23f);
+            egg(g, x, y + bob, 30 * pop, i);
+        }
+    }
+
+    /** Eggs ride on the tail of the snake that carries them. */
+    private void drawCarriedEggs(Gfx g, float l, float t, float r, float b, boolean hidePlayer) {
+        for (int i = 0; i < snakeCount; i++) {
+            Snake s = snakes[i];
+            if (!s.alive || s.eggs == 0 || s.maxX < l || s.minX > r || s.maxY < t || s.minY > b) continue;
+            if (s != player && !visibleTo(s, player)) continue;
+            if (s == player && hidePlayer) continue;
+            for (int k = 0; k < s.eggs; k++) {
+                int j = Math.max(2, s.segs - 2 - k * 3);
+                egg(g, s.sx[j], s.sy[j] - s.radius * 0.4f, Math.max(18f, s.radius * 0.9f), k);
+            }
+        }
+    }
+
+    private static void egg(Gfx g, float x, float y, float sz, int seed) {
+        g.color(0xff14142a);
+        g.fillCircle(x, y + sz * 0.12f, sz * 0.58f);
+        g.fillCircle(x, y - sz * 0.2f, sz * 0.47f);
+        g.color(0xfffff4d8);
+        g.fillCircle(x, y + sz * 0.12f, sz * 0.5f);
+        g.fillCircle(x, y - sz * 0.2f, sz * 0.39f);
+        g.color(0xffe8c890);
+        g.fillCircle(x - sz * 0.15f + (seed % 3) * sz * 0.1f, y + sz * 0.2f, sz * 0.08f);
+        g.fillCircle(x + sz * 0.18f, y - sz * 0.05f - (seed % 2) * sz * 0.1f, sz * 0.06f);
+        g.color(0xccffffff);
+        g.fillCircle(x - sz * 0.16f, y - sz * 0.3f, sz * 0.1f);
     }
 
     /** Big soft sun-dapples and shadows that break up the tiled ground. */

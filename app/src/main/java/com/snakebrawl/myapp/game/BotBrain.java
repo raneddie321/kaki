@@ -18,6 +18,7 @@ final class BotBrain {
     private float reaction;
     private float shotGap;
     private Snake lastTarget;
+    private boolean ballChaser;
 
     BotBrain(World w, Snake me, int trophies) {
         this.w = w;
@@ -105,10 +106,20 @@ final class BotBrain {
             }
         }
 
+        // Snake Ball and Egg Heist: play for the objective instead of farming
+        if (w.mode == World.MODE_BALL && !(hpFrac < 0.25f && target != null && targetDist < 400)) {
+            goalAng = ballGoal(hx, hy);
+        } else if (w.mode == World.MODE_EGGS) {
+            float e = eggGoal(hx, hy, target, targetDist);
+            if (e != NO_DODGE) goalAng = e;
+        }
+
         // Shooting happens independently of where we steer. Early on bots mostly farm unless provoked.
         boolean provoked = me.lastAttacker == target && me.sinceDamaged < 4f;
         boolean early = (w.mode == World.MODE_SHOWDOWN || w.mode == World.MODE_DUO) && w.matchTime < 18f;
-        if (target != null && reaction <= 0 && (!early || provoked || targetDist < me.type.range * 0.55f)) shootAt(target, targetDist);
+        // The Snake Ball player going for the ball keeps their eyes on it
+        boolean busy = w.mode == World.MODE_BALL && ballChaser && targetDist > me.type.range * 0.5f && !provoked;
+        if (target != null && reaction <= 0 && !busy && (!early || provoked || targetDist < me.type.range * 0.55f)) shootAt(target, targetDist);
         else if (target == null && me.ammo >= 2.5f) shootBox();
 
         // Skilled bots sidestep shots that are about to hit their head
@@ -124,6 +135,94 @@ final class BotBrain {
     }
 
     private static final float NO_DODGE = -999f;
+
+    /**
+     * Snake Ball: the team-mate closest to the ball goes for it, getting behind it first so the
+     * push sends it towards the other goal; the next one supports, the last one defends.
+     */
+    private float ballGoal(float hx, float hy) {
+        float bx = w.ballX, by = w.ballY, size = w.size, mid = size / 2;
+        float gx = me.team == 0 ? size : 0, ownX = size - gx;
+        int closer = 0;
+        float myD = MathUtil.dist2(hx, hy, bx, by);
+        for (int i = 0; i < w.snakeCount; i++) {
+            Snake o = w.snakes[i];
+            if (o != me && o.alive && o.team == me.team && MathUtil.dist2(o.hx(), o.hy(), bx, by) < myD) closer++;
+        }
+        ballChaser = closer == 0;
+        if (closer == 0) {
+            float ux = gx - bx, uy = mid - by;
+            float ul = Math.max(1f, MathUtil.sqrt(ux * ux + uy * uy));
+            ux /= ul;
+            uy /= ul;
+            float rx = hx - bx, ry = hy - by;
+            float along = rx * ux + ry * uy, side = rx * -uy + ry * ux;
+            float back = me.radius + World.BALL_R + 70f;
+            if (along < -me.radius && Math.abs(side) < back * 1.5f) {
+                // Lined up behind the ball: push it through towards the goal
+                wantBoost = me.mass > 50f && MathUtil.dist(hx, hy, bx, by) < 600f && MathUtil.rand() < 0.4f + skill * 0.6f;
+                return MathUtil.angleTo(hx, hy, bx + ux * 40f, by + uy * 40f);
+            }
+            // Go round the ball to get behind it, on the side we're already on, without touching it
+            float sgn = side >= 0 ? 1f : -1f;
+            float tx, ty;
+            if (along > -back * 0.6f) {
+                // Level with the ball or past it: swing wide around it first
+                tx = bx - uy * sgn * back * 2.4f - ux * back * 0.5f;
+                ty = by + ux * sgn * back * 2.4f - uy * back * 0.5f;
+            } else {
+                tx = bx - ux * back;
+                ty = by - uy * back;
+            }
+            tx = MathUtil.clamp(tx, 120f, size - 120f);
+            ty = MathUtil.clamp(ty, 120f, size - 120f);
+            wantBoost = MathUtil.dist(hx, hy, tx, ty) > 700f && me.mass > 60f;
+            return MathUtil.angleTo(hx, hy, tx, ty);
+        }
+        float tx, ty;
+        if (closer == 1) {
+            tx = bx + (ownX - bx) * 0.25f;
+            ty = by + (by < mid ? 320f : -320f);
+        } else if (Math.abs(bx - ownX) < size * 0.45f) {
+            // Ball in our half: the last one back guards the goal
+            tx = ownX + (bx - ownX) * 0.35f;
+            ty = mid + (by - mid) * 0.5f;
+        } else {
+            // Ball in their half: wait near their goal for a pass or a rebound
+            tx = gx + (bx - gx) * 0.45f;
+            ty = mid + (by < mid ? 300f : -300f);
+        }
+        tx = MathUtil.clamp(tx, 150f, size - 150f);
+        ty = MathUtil.clamp(ty, 150f, size - 150f);
+        if (MathUtil.dist(hx, hy, tx, ty) < 120f) return me.ang + 0.9f; // circle around the spot
+        return MathUtil.angleTo(hx, hy, tx, ty);
+    }
+
+    /** Egg Heist: deliver a good load to the nest, hunt egg carriers, otherwise grab the nearest egg. */
+    private float eggGoal(float hx, float hy, Snake target, float targetDist) {
+        float c = w.size / 2;
+        float toNest = MathUtil.dist(hx, hy, c, c);
+        boolean late = w.matchTime > World.EGG_TIME - 15f;
+        if (me.eggs >= 4 + (int) (aggression * 3) || me.eggs > 0 && (toNest < 900f || late)) {
+            wantBoost = me.mass > 55f && toNest > 500f;
+            return MathUtil.angleTo(hx, hy, c, c);
+        }
+        if (target != null && target.eggs >= 3 && targetDist < 750f) {
+            wantBoost = targetDist < 450f && me.mass > 60f;
+            return MathUtil.angleTo(hx, hy, target.hx(), target.hy());
+        }
+        int best = -1;
+        float bd = 1800f * 1800f;
+        for (int i = 0; i < w.eggCount; i++) {
+            float d = MathUtil.dist2(hx, hy, w.eggX[i], w.eggY[i]);
+            if (d < bd) {
+                bd = d;
+                best = i;
+            }
+        }
+        if (best < 0) return NO_DODGE;
+        return MathUtil.angleTo(hx, hy, w.eggX[best], w.eggY[best]);
+    }
 
     private float incomingDodge(float hx, float hy) {
         float danger = me.radius * 2.4f;
