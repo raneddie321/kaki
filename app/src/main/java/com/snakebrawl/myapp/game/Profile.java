@@ -40,6 +40,10 @@ final class Profile {
     boolean passPlus;
     /** Snake Pass MAX bought for this season (Google Play, snakepass_max): Pass+ with doubled rewards. */
     boolean passMax;
+    /** Snake Club (monthly subscription) is active on this device's Google account. */
+    boolean clubActive;
+    /** Last day the Club's daily coins / week its free crate was claimed. */
+    int clubCoinDay = -1, clubCrateWeek = -1;
 
     /** Arena picked on the menu (see Maps). */
     int map;
@@ -76,6 +80,9 @@ final class Profile {
         passPremium = (p.loadInt("passPrem", 0) & 0xffffffffL) | ((long) p.loadInt("passPremHi", 0) << 32);
         passPlus = p.loadInt("passPlus", 0) == 1;
         passMax = p.loadInt("passMax", 0) == 1;
+        clubActive = p.loadInt("clubActive", 0) == 1;
+        clubCoinDay = p.loadInt("clubCoinDay", -1);
+        clubCrateWeek = p.loadInt("clubCrateWeek", -1);
         SnakePass.checkSeason(this);
         mode = clamp(p.loadInt("mode", 0), 0, 4);
         skin = clamp(p.loadInt("skin", 0), 0, Skin.ALL.length - 1);
@@ -133,6 +140,9 @@ final class Profile {
         p.saveInt("passPremHi", (int) (passPremium >>> 32));
         p.saveInt("passPlus", passPlus ? 1 : 0);
         p.saveInt("passMax", passMax ? 1 : 0);
+        p.saveInt("clubActive", clubActive ? 1 : 0);
+        p.saveInt("clubCoinDay", clubCoinDay);
+        p.saveInt("clubCrateWeek", clubCrateWeek);
         p.saveInt("mode", mode);
         p.saveInt("skin", skin);
         p.saveInt("ownedSkins", ownedSkins);
@@ -187,12 +197,14 @@ final class Profile {
     void importText(String text) {
         Recorder r = Recorder.parse(text);
         Platform real = p;
+        boolean club = clubActive; // the subscription belongs to this device's Google account
         p = r;
         try {
             load();
         } finally {
             p = real;
         }
+        clubActive = club;
         save();
         for (String k : EXTRA_KEYS) {
             String v = r.loadString(k, null);
@@ -244,6 +256,8 @@ final class Profile {
             passPlus |= c.passPlus;
             passMax |= c.passMax;
         }
+        clubCoinDay = Math.max(clubCoinDay, c.clubCoinDay);
+        clubCrateWeek = Math.max(clubCrateWeek, c.clubCrateWeek);
         if (c.dailyDay > dailyDay || (c.dailyDay == dailyDay && c.dailyIndex > dailyIndex)) {
             dailyDay = c.dailyDay;
             dailyIndex = c.dailyIndex;

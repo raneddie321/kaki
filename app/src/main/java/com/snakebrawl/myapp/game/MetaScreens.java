@@ -4,13 +4,15 @@ package com.snakebrawl.myapp.game;
 final class MetaScreens {
     private static final int B_TILE = 100, B_SELECT = 150, B_UPGRADE = 151, B_UNLOCK = 152;
     private static final int B_SKIN = 200;
-    private static final int B_TAB = 300, B_GIFT = 310, B_BOX = 311, B_MEGA = 312, B_DEAL = 313, B_FEATURED = 314, B_SHOP_BRAWLER = 330;
+    private static final int B_TAB = 300, B_GIFT = 310, B_BOX = 311, B_MEGA = 312, B_DEAL = 313, B_FEATURED = 314, B_CLUB_JOIN = 315, B_CLUB_COINS = 316,
+            B_CLUB_CRATE = 317, B_CLUB_MANAGE = 318, B_SHOP_BRAWLER = 330;
     private static final int B_PACK = 350;
     private static final int B_SETTING = 400, B_RESET = 420, B_PRIVACY = 421, B_REDEEM = 422, B_RID = 423;
 
     /** The COINS tab only exists while the real-money store is enabled. */
-    private static int tabCount() {
-        return Game.coinStoreEnabled ? TABS.length : TABS.length - 1;
+    /** COINS needs Google Play; CLUB too, unless the player is already a member. */
+    private int tabCount() {
+        return Game.coinStoreEnabled ? TABS.length : pr.clubActive ? TABS.length - 1 : TABS.length - 2;
     }
 
     /** Short in-app privacy notice (the full policy is on the store page). */
@@ -21,7 +23,7 @@ final class MetaScreens {
             + "Coin purchases are handled by Google Play; we never see payment details. "
             + "Questions: raneddie321@gmail.com";
 
-    private static final String[] TABS = {"OFFERS", "SKINS", "SNAKES", "COINS"};
+    private static final String[] TABS = {"OFFERS", "SKINS", "SNAKES", "CLUB", "COINS"};
     private static final String[] SETTING_NAMES = {"Sound", "Vibration", "Damage numbers", "Graphics",
             "Auto-aim on tap", "Left-handed controls", "Joystick size", "Camera"};
 
@@ -117,6 +119,17 @@ final class MetaScreens {
                     for (int i = 0; i < n; i++) {
                         float cl = l + (i % 4) * (cw + gap), ct = top + 10 * u + (i / 4) * (ch + gap);
                         ui.addScroll(B_SHOP_BRAWLER + first + i, cl, ct, cl + cw, ct + ch, null, null, 0);
+                    }
+                } else if (shopTab == 3) {
+                    // Snake Club: the membership card on the left, this week's claims on the right
+                    ui.setScrollArea(l, top, r, bottom, 0);
+                    float gap = 26 * u, fw = Math.min(900 * u, (r - l) * 0.46f);
+                    ui.add(B_CLUB_JOIN, l, top + 10 * u, l + fw, bottom - 10 * u, null, null, 0);
+                    float cl = l + fw + gap, ch = (bottom - top - 140 * u - gap) / 2f;
+                    ui.add(B_CLUB_COINS, cl, top + 10 * u, r, top + 10 * u + ch, null, null, 0);
+                    ui.add(B_CLUB_CRATE, cl, top + 10 * u + ch + gap, r, top + 10 * u + 2 * ch + gap, null, null, 0);
+                    if (pr.clubActive) {
+                        ui.add(B_CLUB_MANAGE, r - 360 * u, bottom - 100 * u, r, bottom - 10 * u, "MANAGE", null, 0xff4a5090);
                     }
                 } else {
                     ui.setScrollArea(l, top, r, bottom, 0);
@@ -248,6 +261,44 @@ final class MetaScreens {
                         + Skin.ALL[SnakePass.maxSkin(pr.passSeason)].name + " skin for this season. " + SnakePass.maxPrice
                         + " for this season (buy it again next season).", 2, SnakePass.maxSkin(pr.passSeason), Game.ACT_PASS_MAX, 0,
                         "BUY", "NOT NOW");
+                break;
+            case B_CLUB_JOIN:
+                if (pr.clubActive) {
+                    game.showInfo("SNAKE CLUB", "You're a member! Claim your daily coins and weekly crate here.", 1, 0);
+                } else {
+                    game.confirm("JOIN SNAKE CLUB", "50 coins every day, a free Snake Crate every week, +50% Snake Pass XP, "
+                            + "a CLUB badge and a gold name. " + Club.price + " a month, renews automatically until you cancel "
+                            + "in Google Play > Subscriptions.", 1, 0, Game.ACT_CLUB, 0, "JOIN", "NOT NOW");
+                }
+                break;
+            case B_CLUB_COINS:
+                if (!pr.clubActive) {
+                    game.showInfo("MEMBERS ONLY", "Join Snake Club to get 50 coins every day.", 1, 0);
+                } else if (!Club.coinsReady(pr)) {
+                    game.showInfo("CLAIMED", "Today's Club coins are yours. More in " + Quests.hoursLeft() + "h!", 1, 0);
+                } else {
+                    pr.clubCoinDay = Quests.today();
+                    pr.coins += Club.DAILY_COINS;
+                    pr.save();
+                    game.coinBurst(Club.DAILY_COINS);
+                    game.showInfo("+" + Club.DAILY_COINS + " COINS", "Your daily Snake Club coins. See you tomorrow!", 1, 0);
+                }
+                break;
+            case B_CLUB_CRATE:
+                if (!pr.clubActive) {
+                    game.showInfo("MEMBERS ONLY", "Join Snake Club to get a free Snake Crate every week.", 4, 0);
+                } else if (!Club.crateReady(pr)) {
+                    int dl = Club.crateDaysLeft();
+                    game.showInfo("CLAIMED", "Your next free crate is ready in " + dl + (dl == 1 ? " day." : " days."), 4, 0);
+                } else {
+                    pr.clubCrateWeek = Club.week();
+                    pr.save();
+                    game.openRewardBox(false);
+                }
+                break;
+            case B_CLUB_MANAGE:
+                game.gated.openUrl("https://play.google.com/store/account/subscriptions?sku=" + Club.PRODUCT
+                        + "&package=com.snakebrawl.myapp");
                 break;
             case B_GIFT:
                 if (pr.giftReady()) {
@@ -712,6 +763,9 @@ final class MetaScreens {
                     g.fillCircle(ix - 6 * u, cy - 3 * u, 4 * u);
                     g.fillCircle(ix + 6 * u, cy - 3 * u, 4 * u);
                     break;
+                case 3: // crown
+                    crown(g, ix, cy, 22 * u, on ? 0xffffffff : 0xffffd23f);
+                    break;
                 default:
                     ui.coin(g, ix, cy, 40 * u);
                     break;
@@ -794,6 +848,101 @@ final class MetaScreens {
         g.text(price, cx, b - 56 * u, 48 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
     }
 
+    /** A three-pointed crown centered on (x, y), {@code s} wide-ish. */
+    static void crown(Gfx g, float x, float y, float s, int color) {
+        float[] xy = {x - s, y + s * 0.7f, x - s, y - s * 0.5f, x - s * 0.5f, y, x, y - s * 0.8f, x + s * 0.5f, y,
+                x + s, y - s * 0.5f, x + s, y + s * 0.7f};
+        g.color(color);
+        g.fillPoly(xy, 7);
+    }
+
+    /** The gold CLUB badge drawn after a member's name (baseline y); returns its width. */
+    static float clubBadge(Gfx g, float x, float y, float u) {
+        float bw = 118 * u, bt = y - 34 * u, bb = y + 6 * u;
+        g.color(Ui.INK);
+        g.fillRoundRect(x - 3 * u, bt - 3 * u, x + bw + 3 * u, bb + 3 * u, 14 * u);
+        g.vertical(x, bt, x + bw, bb, 0xffffe066, 0xffffa81f);
+        crown(g, x + 22 * u, (bt + bb) / 2, 12 * u, Ui.INK);
+        g.color(Ui.INK);
+        g.text("CLUB", x + 74 * u, bb - 9 * u, 26 * u, Gfx.ALIGN_CENTER, 0, 0);
+        return bw;
+    }
+
+    /** Snake Club membership card: benefits, the monthly price and the Google Play terms. */
+    private void drawClubCard(Gfx g, Ui.Btn bt) {
+        float u = game.u, d = press(bt);
+        float l = bt.l + d, t = bt.t + d, r = bt.r - d, b = bt.b - d, cx = (l + r) / 2;
+        ui.panel(g, l, t, r, b, 0xff5a3a10);
+        g.save();
+        g.clip(l + 6 * u, t + 6 * u, r - 6 * u, b - 6 * u);
+        g.vertical(l, t, r, b, 0xff8a5a10, 0xff2a1a08);
+        g.radial(cx, t + 120 * u, (r - l) * 0.55f, 0x88ffd23f, 0x00ffd23f);
+        float sweep = (game.clock * 0.3f) % 1.6f - 0.3f, sx = l + (r - l) * sweep;
+        g.color(0x1affffff);
+        poly3(g, sx - 60 * u, b, sx + 20 * u, b, sx + 160 * u, t);
+        poly3(g, sx - 60 * u, b, sx + 160 * u, t, sx + 80 * u, t);
+        g.restore();
+        crown(g, cx, t + 92 * u, 46 * u, Ui.INK);
+        crown(g, cx, t + 86 * u, 40 * u, 0xffffd23f);
+        g.color(0xffffd23f);
+        g.text("SNAKE CLUB", cx, t + 200 * u, Ui.fit(g, "SNAKE CLUB", 76 * u, r - l - 60 * u), Gfx.ALIGN_CENTER, 9 * u, Ui.INK);
+        String[] perks = {"50 coins every day", "Free Snake Crate every week", "+50% Snake Pass XP", "CLUB badge & gold name"};
+        float py = t + 270 * u, rowH = Math.min(62 * u, (b - t - 520 * u) / 4f);
+        for (int i = 0; i < perks.length; i++) {
+            float y = py + i * rowH;
+            g.color(0xff3ac04a);
+            g.fillCircle(l + 70 * u, y - 12 * u, 16 * u);
+            g.color(0xffffffff);
+            g.text("+", l + 70 * u, y - 1 * u, 26 * u, Gfx.ALIGN_CENTER, 0, 0);
+            g.text(perks[i], l + 104 * u, y, Ui.fit(g, perks[i], 36 * u, r - l - 140 * u), Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
+        }
+        String label = pr.clubActive ? "MEMBER" : Club.price + " / MONTH";
+        g.color(Ui.INK);
+        g.fillRoundRect(l + 40 * u, b - 210 * u, r - 40 * u, b - 114 * u, 30 * u);
+        g.color(pr.clubActive ? 0xff3ac04a : 0xff2fcf6a);
+        g.fillRoundRect(l + 46 * u, b - 204 * u, r - 46 * u, b - 120 * u, 26 * u);
+        g.color(0x55ffffff);
+        g.fillRoundRect(l + 70 * u, b - 198 * u, r - 70 * u, b - 184 * u, 7 * u);
+        g.color(0xffffffff);
+        g.text(label, cx, b - 146 * u, Ui.fit(g, label, 46 * u, r - l - 120 * u), Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
+        String terms = "Monthly subscription. Renews automatically until you cancel in Google Play > Subscriptions.";
+        float ts = ui.fitWrap(g, terms, r - l - 80 * u, 90 * u, 26 * u);
+        g.save();
+        ui.wrap(g, terms, l + 40 * u, r - 40 * u, b - 76 * u, ts, 0xffd8c8a0, b - 10 * u);
+        g.restore();
+    }
+
+    /** Daily coins / weekly crate claim card on the Club tab. */
+    private void drawClubClaim(Gfx g, Ui.Btn bt) {
+        float u = game.u, d = press(bt);
+        float l = bt.l + d, t = bt.t + d, r = bt.r - d, b = bt.b - d, cy = (t + b) / 2;
+        boolean coins = bt.id == B_CLUB_COINS;
+        boolean ready = coins ? Club.coinsReady(pr) : Club.crateReady(pr);
+        ui.panel(g, l, t, r, b, ready ? 0xff2a5a3a : 0xff2a2f66);
+        float ax = l + (b - t) * 0.55f;
+        if (coins) {
+            for (int k = 0; k < 3; k++) ui.coin(g, ax - 40 * u + k * 40 * u, cy + MathUtil.sin(game.clock * 3 + k) * 6 * u, 90 * u);
+        } else {
+            drawBox(g, ax, cy, Math.min(230 * u, (b - t) * 0.8f), false, game.clock, u);
+        }
+        float tx = ax + (b - t) * 0.5f;
+        g.color(0xffffd23f);
+        String title = coins ? "DAILY 50 COINS" : "WEEKLY FREE CRATE";
+        g.text(title, tx, cy - 20 * u, Ui.fit(g, title, 50 * u, r - tx - 300 * u), Gfx.ALIGN_LEFT, 6 * u, Ui.INK);
+        g.color(0xffd8dcff);
+        String sub = !pr.clubActive ? "Snake Club members" : ready ? "Ready to claim!"
+                : coins ? "Next in " + Quests.hoursLeft() + "h" : "Next in " + Club.crateDaysLeft() + "d";
+        g.text(sub, tx, cy + 34 * u, Ui.fit(g, sub, 34 * u, r - tx - 300 * u), Gfx.ALIGN_LEFT, 4 * u, Ui.INK);
+        String btn = !pr.clubActive ? "LOCKED" : ready ? "CLAIM" : "CLAIMED";
+        float bl = r - 270 * u, bt2 = cy - 46 * u, bb = cy + 46 * u;
+        g.color(Ui.INK);
+        g.fillRoundRect(bl - 6 * u, bt2 - 6 * u, r - 24 * u, bb + 6 * u, 30 * u);
+        g.color(ready ? 0xff2fcf6a : 0xff4a5090);
+        g.fillRoundRect(bl, bt2, r - 30 * u, bb, 26 * u);
+        g.color(0xffffffff);
+        g.text(btn, (bl + r - 30 * u) / 2, cy + 16 * u, Ui.fit(g, btn, 40 * u, r - bl - 60 * u), Gfx.ALIGN_CENTER, 5 * u, Ui.INK);
+    }
+
     private void renderShop(Gfx g) {
         float u = game.u;
         for (int i = 0; i < ui.count; i++) {
@@ -808,6 +957,13 @@ final class MetaScreens {
                 else if (bt.id == B_FEATURED) drawFeatured(g, bt);
             }
         } else if (shopTab == 3) {
+            for (int i = 0; i < ui.count; i++) {
+                Ui.Btn bt = ui.btns[i];
+                if (bt.id == B_CLUB_JOIN) drawClubCard(g, bt);
+                else if (bt.id == B_CLUB_COINS || bt.id == B_CLUB_CRATE) drawClubClaim(g, bt);
+                else if (bt.id == B_CLUB_MANAGE) ui.button(g, bt);
+            }
+        } else if (shopTab == 4) {
             for (int i = 0; i < ui.count; i++) {
                 Ui.Btn bt = ui.btns[i];
                 if (bt.id >= B_PACK && bt.id < B_PACK + CoinStore.PRODUCT_IDS.length) drawCoinPack(g, bt);
@@ -1144,7 +1300,7 @@ final class MetaScreens {
             ui.button(g, bt);
         }
         g.color(0xff9aa0d0);
-        g.text("Snake Brawl v3.20  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
+        g.text("Snake Brawl v3.21  •  " + pr.games + " games  •  " + pr.totalKills + " knockouts  •  best " + pr.bestTrophies + " trophies",
                 w / 2, h - game.padB - 160 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
 }

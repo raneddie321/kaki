@@ -238,6 +238,7 @@ public final class MainActivity extends Activity implements Platform {
         if (pool != null) pool.autoResume();
         view.resume();
         game.onResume();
+        if (billing != null) billing.refreshSubscriptions(); // a renewal or cancellation since last time
     }
 
     @Override
@@ -453,7 +454,7 @@ public final class MainActivity extends Activity implements Platform {
 
     /** Connects Google Play Billing; the coin store appears once the coin products are found. */
     private void startBilling() {
-        billing = new PlayBilling(getApplicationContext(), this, game.coinProductIds(), new PlayBilling.Listener() {
+        billing = new PlayBilling(getApplicationContext(), this, game.coinProductIds(), game.subscriptionIds(), new PlayBilling.Listener() {
             @Override
             public void onAvailable(boolean available) {
                 game.setCoinStoreAvailable(available);
@@ -482,6 +483,11 @@ public final class MainActivity extends Activity implements Platform {
             @Override
             public void onPurchaseFailed(String productId, boolean cancelled) {
                 game.onPurchaseFailed(productId, cancelled);
+            }
+
+            @Override
+            public void onSubscription(String productId, boolean active) {
+                game.setClubActive(active);
             }
         });
         billing.start();

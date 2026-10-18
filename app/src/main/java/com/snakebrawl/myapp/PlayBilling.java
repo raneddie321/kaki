@@ -34,6 +34,9 @@ final class PlayBilling {
         boolean grantOnce(String purchaseToken, String productId, int quantity);
 
         void onPurchaseFailed(String productId, boolean cancelled);
+
+        /** Whether a subscription is active on this Google account (checked on start and after a purchase). */
+        void onSubscription(String productId, boolean active);
     }
 
     private static final String P = "com.android.billingclient.api.";
@@ -41,17 +44,19 @@ final class PlayBilling {
     private static final int STATE_PURCHASED = 1;
 
     private final Object context, activity;
-    private final String[] productIds;
+    private final String[] productIds, subscriptionIds;
     private final Listener listener;
     private Object client;
     private final List<Object> details = new ArrayList<Object>();
+    private final List<Object> subDetails = new ArrayList<Object>();
     private boolean ready;
     private String pendingProduct;
 
-    PlayBilling(Object context, Object activity, String[] productIds, Listener listener) {
+    PlayBilling(Object context, Object activity, String[] productIds, String[] subscriptionIds, Listener listener) {
         this.context = context;
         this.activity = activity;
         this.productIds = productIds;
+        this.subscriptionIds = subscriptionIds;
         this.listener = listener;
     }
 
@@ -103,7 +108,9 @@ final class PlayBilling {
                 if (m.getName().equals("onBillingSetupFinished")) {
                     if (code(a[0]) == OK) {
                         queryProducts();
+                        querySubscriptions();
                         restorePurchases();
+                        checkSubscriptions();
                     } else {
                         listener.onAvailable(false);
                     }
@@ -167,13 +174,19 @@ final class PlayBilling {
 
     /** Opens Google Play's purchase sheet. Returns false when billing isn't ready. */
     boolean launch(String productId) {
-        if (!ready) return false;
         try {
             Object pd = null;
+            String offerToken = null;
             for (Object d : details) if (productId.equals(call(d, "getProductId"))) pd = d;
-            if (pd == null) return false;
+            if (pd == null) {
+                for (Object d : subDetails) if (productId.equals(call(d, "getProductId"))) pd = d;
+                if (pd == null) return false;
+                offerToken = subscriptionOffer(pd);
+                if (offerToken == null) return false;
+            }
             Object pdpb = Class.forName(P + "BillingFlowParams$ProductDetailsParams").getMethod("newBuilder").invoke(null);
             pdpb = call(pdpb, "setProductDetails", pd);
+            if (offerToken != null) pdpb = call(pdpb, "setOfferToken", offerToken);
             Object pdp = call(pdpb, "build");
             Object fb = Class.forName(P + "BillingFlowParams").getMethod("newBuilder").invoke(null);
             fb = callTyped(fb, "setProductDetailsParamsList", List.class, Collections.singletonList(pdp));
@@ -199,6 +212,7 @@ final class PlayBilling {
             for (Object p : (List<Object>) purchases) handlePurchase(p);
         } else if (c == ITEM_ALREADY_OWNED) {
             restorePurchases(); // an earlier purchase was never consumed: finish it now
+            checkSubscriptions();
         } else if (pendingProduct != null) {
             listener.onPurchaseFailed(pendingProduct, c == USER_CANCELED);
         }
@@ -214,6 +228,11 @@ final class PlayBilling {
             final List<String> products = (List<String>) call(purchase, "getProducts");
             final int quantity = Math.max(1, (Integer) call(purchase, "getQuantity"));
             String token = (String) call(purchase, "getPurchaseToken");
+            if (isSubscription(products)) {
+                for (String id : products) listener.onSubscription(id, true);
+                if (!(Boolean) call(purchase, "isAcknowledged")) acknowledge(token);
+                return;
+            }
             // Grant first (saved with the token, so a retry can't grant twice), then consume
             for (String id : products) {
                 if (!listener.grantOnce(token, id, quantity)) return;
@@ -251,6 +270,129 @@ final class PlayBilling {
         } catch (Throwable ignored) {
             // nothing to restore
         }
+    }
+
+    private boolean isSubscription(List<String> products) {
+        for (String id : products) for (String s : subscriptionIds) if (s.equals(id)) return true;
+        return false;
+    }
+
+    private void querySubscriptions() {
+        if (subscriptionIds.length == 0) return;
+        try {
+            Class<?> prodCls = Class.forName(P + "QueryProductDetailsParams$Product");
+            List<Object> products = new ArrayList<Object>();
+            for (String id : subscriptionIds) {
+                Object b = prodCls.getMethod("newBuilder").invoke(null);
+                b = call(b, "setProductId", id);
+                b = call(b, "setProductType", "subs");
+                products.add(call(b, "build"));
+            }
+            Object qb = Class.forName(P + "QueryProductDetailsParams").getMethod("newBuilder").invoke(null);
+            qb = callTyped(qb, "setProductList", List.class, products);
+            Object responseListener = proxy(P + "ProductDetailsResponseListener", new InvocationHandler() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object invoke(Object o, Method m, Object[] a) {
+                    if (m.getName().equals("onProductDetailsResponse") && code(a[0]) == OK) {
+                        try {
+                            List<Object> list = a[1] instanceof List ? (List<Object>) a[1] : (List<Object>) call(a[1], "getProductDetailsList");
+                            subDetails.clear();
+                            if (list != null) subDetails.addAll(list);
+                            for (Object d : subDetails) {
+                                String price = subscriptionPrice(d);
+                                if (price != null) listener.onPrice((String) call(d, "getProductId"), price);
+                            }
+                        } catch (Throwable ignored) {
+                            // no subscription for sale
+                        }
+                    }
+                    return defaultFor(m, o, a);
+                }
+            });
+            call(client, "queryProductDetailsAsync", call(qb, "build"), responseListener);
+        } catch (Throwable ignored) {
+            // subscriptions unavailable; coin packs still work
+        }
+    }
+
+    /** The offer to buy: a free-trial / intro offer if Google Play has one for this player, else the base plan. */
+    @SuppressWarnings("unchecked")
+    private static Object firstOffer(Object pd) throws Exception {
+        List<Object> offers = (List<Object>) call(pd, "getSubscriptionOfferDetails");
+        if (offers == null || offers.isEmpty()) return null;
+        for (Object offer : offers) if (call(offer, "getOfferId") != null) return offer;
+        return offers.get(0);
+    }
+
+    private static String subscriptionOffer(Object pd) throws Exception {
+        Object offer = firstOffer(pd);
+        return offer == null ? null : (String) call(offer, "getOfferToken");
+    }
+
+    /** The recurring price (the last pricing phase, after any trial). */
+    @SuppressWarnings("unchecked")
+    private static String subscriptionPrice(Object pd) throws Exception {
+        List<Object> offers = (List<Object>) call(pd, "getSubscriptionOfferDetails");
+        if (offers == null || offers.isEmpty()) return null;
+        List<Object> phases = (List<Object>) call(call(offers.get(0), "getPricingPhases"), "getPricingPhaseList");
+        if (phases == null || phases.isEmpty()) return null;
+        return (String) call(phases.get(phases.size() - 1), "getFormattedPrice");
+    }
+
+    private void acknowledge(String token) {
+        try {
+            Object ab = Class.forName(P + "AcknowledgePurchaseParams").getMethod("newBuilder").invoke(null);
+            ab = call(ab, "setPurchaseToken", token);
+            Object ackListener = proxy(P + "AcknowledgePurchaseResponseListener", new InvocationHandler() {
+                @Override
+                public Object invoke(Object o, Method m, Object[] a) {
+                    return defaultFor(m, o, a); // not acknowledged: retried by checkSubscriptions() next start
+                }
+            });
+            call(client, "acknowledgePurchase", call(ab, "build"), ackListener);
+        } catch (Throwable ignored) {
+            // retried on the next start
+        }
+    }
+
+    /** Asks Google Play which subscriptions are active now (expired or cancelled ones are not listed). */
+    private void checkSubscriptions() {
+        if (subscriptionIds.length == 0) return;
+        try {
+            Object qb = Class.forName(P + "QueryPurchasesParams").getMethod("newBuilder").invoke(null);
+            qb = call(qb, "setProductType", "subs");
+            Object responseListener = proxy(P + "PurchasesResponseListener", new InvocationHandler() {
+                @Override
+                @SuppressWarnings("unchecked")
+                public Object invoke(Object o, Method m, Object[] a) {
+                    if (m.getName().equals("onQueryPurchasesResponse") && code(a[0]) == OK) {
+                        List<String> active = new ArrayList<String>();
+                        if (a[1] != null) {
+                            for (Object p : (List<Object>) a[1]) {
+                                try {
+                                    if ((Integer) call(p, "getPurchaseState") != STATE_PURCHASED) continue;
+                                    active.addAll((List<String>) call(p, "getProducts"));
+                                } catch (Throwable ignored) {
+                                    // skip it
+                                }
+                                handlePurchase(p);
+                            }
+                        }
+                        for (String id : subscriptionIds) listener.onSubscription(id, active.contains(id));
+                    }
+                    return defaultFor(m, o, a);
+                }
+            });
+            call(client, "queryPurchasesAsync", call(qb, "build"), responseListener);
+        } catch (Throwable ignored) {
+            // keep the last known state
+        }
+    }
+
+    /** Re-checks subscriptions (for example when the game comes back to the front). */
+    void refreshSubscriptions() {
+        if (client != null) checkSubscriptions();
     }
 
     void destroy() {

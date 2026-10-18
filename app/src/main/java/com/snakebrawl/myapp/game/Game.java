@@ -13,7 +13,7 @@ public final class Game {
 
     // Popup actions confirmed with YES
     static final int ACT_NONE = 0, ACT_BUY_SKIN = 1, ACT_UNLOCK = 2, ACT_UPGRADE = 3, ACT_BOX = 4,
-            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9, ACT_PASS_PLUS = 10, ACT_PASS_MAX = 16,
+            ACT_MEGA_BOX = 5, ACT_RESET = 6, ACT_DEAL = 7, ACT_JOIN_CLUB = 8, ACT_LEAVE_CLUB = 9, ACT_PASS_PLUS = 10, ACT_PASS_MAX = 16, ACT_CLUB = 17,
             ACT_DELETE_MAP = 11, ACT_UPDATE = 12, ACT_RID_CONNECT = 13, ACT_RID_DISCONNECT = 15;
 
     private static final int[] TROPHY_TABLE = {10, 8, 7, 6, 4, 2, 0, -1, -2, -3};
@@ -183,6 +183,7 @@ public final class Game {
     public Game(Platform platform) {
         this.host = platform;
         this.profile = new Profile(platform);
+        World.goldName = profile.clubActive;
         gated = new Platform() {
             @Override
             public void playSound(int id, float volume) {
@@ -391,6 +392,30 @@ public final class Game {
         return ids;
     }
 
+    /** Subscriptions sold through Google Play. */
+    public String[] subscriptionIds() {
+        return new String[]{Club.PRODUCT};
+    }
+
+    /** Called by the host with whether the player's Snake Club subscription is active right now. */
+    public void setClubActive(boolean active) {
+        if (profile.clubActive == active) return;
+        profile.clubActive = active;
+        World.goldName = active;
+        profile.save();
+        layout();
+    }
+
+    /** Buys Snake Club through Google Play (reported back through {@link #setClubActive}). */
+    void buyClub() {
+        if (host.launchPurchase(Club.PRODUCT)) return;
+        if (testCheckout) {
+            setClubActive(true); // desktop tests: no store
+            return;
+        }
+        showInfo("STORE UNAVAILABLE", "Google Play isn't ready right now. Please try again in a moment.", 0, 0);
+    }
+
     /** Called by the host when Google Play Billing is (or stops being) ready. */
     public void setCoinStoreAvailable(boolean on) {
         coinStoreEnabled = on;
@@ -400,6 +425,7 @@ public final class Game {
     /** Called by the host with Google Play's localized price for a coin pack. */
     public void setPrice(String productId, String price) {
         if (SnakePass.MAX_PRODUCT.equals(productId) && price != null && price.length() > 0) SnakePass.maxPrice = price;
+        if (Club.PRODUCT.equals(productId) && price != null && price.length() > 0) Club.price = price;
         int i = CoinStore.indexOf(productId);
         if (i >= 0 && price != null && price.length() > 0) CoinStore.PRICES[i] = price;
     }
@@ -1100,6 +1126,7 @@ public final class Game {
         int tierBefore = SnakePass.tier(profile);
         SnakePass.checkSeason(profile);
         resPassXp = SnakePass.matchXp(world.mode, resRank, p.kills, win);
+        if (profile.clubActive) resPassXp += resPassXp / 2; // Snake Club: +50% pass XP
         profile.passXp += resPassXp;
         resPassTierUp = SnakePass.tier(profile) > tierBefore;
         resNewBest = resLength > profile.bestLen;
@@ -1164,6 +1191,7 @@ public final class Game {
         if (id == B_YES) {
             if (action == ACT_JOIN_CLUB || action == ACT_LEAVE_CLUB) social.perform(action, arg);
             else if (action == ACT_PASS_PLUS || action == ACT_PASS_MAX) pass.perform(action);
+            else if (action == ACT_CLUB) buyClub();
             else if (action == ACT_DELETE_MAP) maps.deleteMap(arg);
             else if (action == ACT_UPDATE) gated.openStorePage();
             else if (action == ACT_RID_CONNECT) rid.connect();
@@ -2286,10 +2314,12 @@ public final class Game {
         g.color(0xffd8dcff);
         // Player card: nickname and wins
         float nx = tl + 10 * u;
-        g.color(0xffffffff);
+        g.color(profile.clubActive ? 0xffffd23f : 0xffffffff);
         g.text(profile.displayName(), nx, tt + 142 * u, 38 * u, Gfx.ALIGN_LEFT, 5 * u, Ui.INK);
+        float wx = nx + g.measureText(profile.displayName(), 38 * u) + 24 * u;
+        if (profile.clubActive) wx += MetaScreens.clubBadge(g, wx, tt + 142 * u, u) + 16 * u;
         g.color(0xffd8dcff);
-        g.text("Wins " + profile.wins, nx + g.measureText(profile.displayName(), 38 * u) + 24 * u, tt + 142 * u, 30 * u,
+        g.text("Wins " + profile.wins, wx, tt + 142 * u, 30 * u,
                 Gfx.ALIGN_LEFT, 4 * u, Ui.INK);
 
         drawShowcase(g);

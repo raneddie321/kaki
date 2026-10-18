@@ -2,6 +2,9 @@ package com.snakebrawl.myapp.game;
 
 /** One arena: map, snakes, projectiles, food, poison and effects. */
 final class World {
+    /** Snake Club members see their own name in gold (drawing only, never part of the simulation). */
+    static boolean goldName;
+
     static final int MODE_SHOWDOWN = 0;
     static final int MODE_ENDLESS = 1;
     static final int MODE_DEMO = 2;
@@ -4047,7 +4050,7 @@ final class World {
             }
             g.color(0xffffffff);
             g.text(Integer.toString((int) Math.ceil(s.hp)), x, by + barH - 3f, 18, Gfx.ALIGN_CENTER, 3, 0xff000000);
-            g.color(mine ? 0xff9cff8a : ally ? 0xff8ad8ff : 0xffffffff);
+            g.color(mine ? (goldName ? 0xffffd23f : 0xff9cff8a) : ally ? 0xff8ad8ff : 0xffffffff);
             g.text(s.name, x, by - 9, 23, Gfx.ALIGN_CENTER, 4, 0xff000000);
             if (s.cubes > 0) {
                 float cxp = x + barW / 2 + 20;

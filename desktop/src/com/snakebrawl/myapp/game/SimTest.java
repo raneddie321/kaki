@@ -960,11 +960,11 @@ public final class SimTest {
         if (again.screenId() != Game.MENU) throw new IllegalStateException("onboarding shown twice");
         again.resize(width, height);
         tapBtn(again, Game.B_SHOP);
-        if (again.ui.find(303) != null) throw new IllegalStateException("COINS tab visible without billing");
+        if (again.ui.find(304) != null) throw new IllegalStateException("COINS tab visible without billing");
         // Billing ready: the COINS tab appears, with Google Play's prices
         again.setCoinStoreAvailable(true);
         again.setPrice("coins_500", "\u20aa3.90");
-        tapBtn(again, 303);
+        tapBtn(again, 304);
         shot(again, font, width, height, outDir + "/0e_coins_live_prices.png");
         // Without real billing and outside tests, tapping a pack must not fake a purchase
         int coinsBefore = fresh.loadInt("coins", 0);
@@ -1008,6 +1008,38 @@ public final class SimTest {
         tapBtn(game, Game.B_BACK);
         run(game, 0.6f);
         shot(game, font, width, height, outDir + "/1t_menu_after_pass.png");
+
+        // Snake Club: join, claim the daily coins and the weekly crate, gold name + badge on the menu
+        tapBtn(game, Game.B_SHOP);
+        tapBtn(game, 303);
+        run(game, 0.3f);
+        shot(game, font, width, height, outDir + "/1u_club_tab.png");
+        tapBtn(game, 315);
+        shot(game, font, width, height, outDir + "/1v_club_confirm.png");
+        tapBtn(game, Game.B_YES);
+        if (pf.loadInt("clubActive", 0) != 1 || !World.goldName) throw new IllegalStateException("club not active");
+        int clubCoins = pf.loadInt("coins", 0);
+        tapBtn(game, 316);
+        tapBtn(game, Game.B_OK);
+        if (pf.loadInt("coins", 0) != clubCoins + Club.DAILY_COINS) throw new IllegalStateException("club coins not granted");
+        tapBtn(game, 316);
+        tapBtn(game, Game.B_OK);
+        if (pf.loadInt("coins", 0) != clubCoins + Club.DAILY_COINS) throw new IllegalStateException("club coins granted twice");
+        tapBtn(game, 317);
+        if (!game.box.active) throw new IllegalStateException("club crate not opened");
+        for (int i = 0; i < 40 && game.box.active; i++) {
+            run(game, 0.6f);
+            game.box.tap();
+        }
+        if (game.box.active || Club.crateReady(game.profile)) throw new IllegalStateException("club crate stuck");
+        run(game, 0.3f);
+        shot(game, font, width, height, outDir + "/1w_club_claimed.png");
+        tapBtn(game, 300);
+        tapBtn(game, Game.B_BACK);
+        run(game, 0.6f);
+        shot(game, font, width, height, outDir + "/1x_menu_club.png");
+        int xpBase = SnakePass.matchXp(0, 1, 3, true);
+        if (xpBase <= 0) throw new IllegalStateException("no pass xp");
 
         // (Clubs are hidden in the menu for now, so they are not shot here)
 
@@ -1054,7 +1086,7 @@ public final class SimTest {
         tapBtn(game, 302); // brawlers tab
         run(game, 0.3f);
         shot(game, font, width, height, outDir + "/5_shop_brawlers.png");
-        tapBtn(game, 303); // coins tab
+        tapBtn(game, 304); // coins tab
         run(game, 0.4f);
         shot(game, font, width, height, outDir + "/5b_shop_coins.png");
         int before = pf.loadInt("coins", 0);
