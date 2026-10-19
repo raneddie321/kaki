@@ -8,6 +8,7 @@ import { Alert, AuthShell, Button, CheckIcon, Heading, LinkButton, ShieldIcon, S
 /** The games we can connect, and the link that sends the player back into each one. */
 const GAMES: Record<string, { name: string; returnUrl: string }> = {
   snakebrawl: { name: "Snake Brawl", returnUrl: "snakebrawl://raneddie" },
+  fizzapp: { name: "Fizz App", returnUrl: "fizzapp://raneddie" },
 };
 
 /**

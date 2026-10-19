@@ -2,7 +2,8 @@ import "server-only";
 import { clerkClient } from "@clerk/nextjs/server";
 import { verify, type GameToken } from "./game-token";
 
-export type PrivateMeta = { gameTokenVersion?: number; snakeBrawlSave?: string; snakeBrawlSaveAt?: number };
+export type PrivateMeta = { gameTokenVersion?: number; snakeBrawlSave?: string; snakeBrawlSaveAt?: number;
+  fizzappSave?: string; fizzappSaveAt?: number };
 
 /** The player behind a game request (Authorization: Bearer <game token>), or null. */
 export async function gameUser(req: Request) {
