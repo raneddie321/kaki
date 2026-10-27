@@ -64,10 +64,10 @@ abstract class NetSession {
         this.host = host;
     }
 
-    /** Rooms found nearby (Wi-Fi only; online rooms are joined by code). */
+    /** Rooms discovered on the local Wi-Fi network. */
     abstract List<Room> rooms();
 
-    /** Joins a room: a Wi-Fi address, or an online room code. */
+    /** Joins a local Wi-Fi room by its IP address. */
     abstract void join(String address, int port);
 
     /** Next message, or null. Also handles keep-alive and timeouts. */
@@ -92,7 +92,7 @@ abstract class NetSession {
 
     abstract void clearError();
 
-    /** The address or code a friend types to join this room, or null while it is not ready. */
+    /** The local IP address a friend types to join this room, or null while it is not ready. */
     abstract String roomLabel();
 
     /** True for a local Wi-Fi session. */
