@@ -3,13 +3,13 @@ package com.snakebrawl.myapp.game;
 import java.util.List;
 
 /**
- * Multiplayer lobby: host a room or join a friend's room, then start together. On Android rooms are
- * on the local Wi-Fi; in the browser they are online and joined with a room code.
+ * Multiplayer lobby: Android friends play only over the same local Wi-Fi or hotspot.
+ * The browser build cannot host Wi-Fi sockets, so friends multiplayer is unavailable there.
  */
 final class FriendsScreen {
     static final int B_FIRST = 600;
     private static final int B_HOST = 600, B_JOIN = 601, B_MODE = 602, B_CANCEL = 603, B_START = 604, B_ADDRESS = 605,
-            B_NETWORK = 606, B_MAP = 607, B_INVITE = 608, B_ROOM = 610;
+            B_MAP = 607, B_INVITE = 608, B_ROOM = 610;
     static final int B_LAST = 640;
 
     static final int HOME = 0, HOSTING = 1, SEARCHING = 2, GUEST_LOBBY = 3;
@@ -41,32 +41,19 @@ final class FriendsScreen {
     private List<NetSession.Room> shownRooms = new java.util.ArrayList<NetSession.Room>();
     private float roomRefresh;
     private String lastError;
-    /** Online (internet, works with browser players) or local Wi-Fi. */
-    boolean online;
-
     FriendsScreen(Game game) {
         this.game = game;
         this.ui = game.ui;
-        online = OnlineSession.available(game.gated) || !Lan.available();
     }
 
-    /** Online play is only offered to players old enough for it (see Profile.ONLINE_AGE). */
-    private boolean onlineOk() {
-        return OnlineSession.available(game.gated) && game.profile.canPlayOnline();
-    }
-
-    /** Nothing to play with: browser build (no Wi-Fi play) and too young for online play. */
+    /** Friend multiplayer is intentionally local-only. Browsers cannot open the required sockets. */
     private boolean blocked() {
-        return !Lan.available() && !onlineOk();
+        return !Lan.available();
     }
 
-    /** True when the current (or chosen) connection is local Wi-Fi. */
+    /** Every supported friends session is local Wi-Fi. */
     private boolean lanMode() {
-        return net != null ? net.lan() : !online;
-    }
-
-    private boolean bothNetworks() {
-        return Lan.available() && onlineOk();
+        return true;
     }
 
     static boolean handles(int id) {
@@ -261,31 +248,20 @@ final class FriendsScreen {
 
     void onButton(int id) {
         switch (id) {
-            case B_NETWORK:
-                online = !online && onlineOk();
-                break;
             case B_HOST:
-                if (blocked() || online && !onlineOk()) return;
-                if (online) {
-                    net = OnlineSession.host(game.gated);
-                } else {
-                    net = Lan.host(game.profile.displayName());
-                    game.gated.setNetworkDiscovery(true);
-                    game.gated.setNetworkFast(true);
-                }
+                if (blocked()) return;
+                net = Lan.host(game.profile.displayName());
+                game.gated.setNetworkDiscovery(true);
+                game.gated.setNetworkFast(true);
                 clearRoster();
                 roster[0] = me();
                 state = HOSTING;
                 break;
             case B_JOIN:
-                if (blocked() || online && !onlineOk()) return;
-                if (online) {
-                    net = OnlineSession.search(game.gated);
-                } else {
-                    game.gated.setNetworkDiscovery(true);
-                    game.gated.setNetworkFast(true);
-                    net = Lan.search(game.profile.displayName());
-                }
+                if (blocked()) return;
+                game.gated.setNetworkDiscovery(true);
+                game.gated.setNetworkFast(true);
+                net = Lan.search(game.profile.displayName());
                 shownRooms = new java.util.ArrayList<NetSession.Room>();
                 lastError = null;
                 clearRoster();
@@ -332,13 +308,9 @@ final class FriendsScreen {
                             game.showInfo("CHECK THE ADDRESS", "It looks like 192.168.1.23 and is shown on your friend's phone.", 0, 0);
                             return;
                         }
-                        if (!lan && !ip.matches("[A-Z0-9]{4,6}")) {
-                            game.showInfo("CHECK THE CODE", "The room code has 5 letters and numbers, like K7QX2.", 0, 0);
-                            return;
-                        }
                         lastError = null;
                         net.clearError();
-                        net.join(ip, lan ? Lan.port() : 0);
+                        net.join(ip, Lan.port());
                         game.layout();
                     }
                 });
@@ -366,17 +338,12 @@ final class FriendsScreen {
         float bottom = h - game.padB - 30 * u;
         switch (state) {
             case HOME: {
-                online = Lan.available() ? online && onlineOk() : true;
                 if (blocked()) break;
                 float cw = 560 * u, ch = 430 * u, top = game.padT + 190 * u;
                 ui.add(B_HOST, cx - cw - 30 * u, top, cx - 30 * u, top + ch, null, null, 0);
                 ui.add(B_JOIN, cx + 30 * u, top, cx + cw + 30 * u, top + ch, null, null, 0);
                 ui.add(B_INVITE, cx - 260 * u, top + ch + 40 * u, cx + 260 * u, top + ch + 150 * u, "INVITE FRIENDS",
                         "Send them the game", 0xff4ad04a);
-                if (bothNetworks()) {
-                    ui.add(B_NETWORK, w - game.padR - 430 * u, game.padT + 10 * u, w - game.padR - 10 * u, game.padT + 120 * u,
-                            online ? "ONLINE" : "WI-FI", online ? "Tap for Wi-Fi" : "Tap for online", online ? 0xff3fb6a8 : 0xff6a5cff);
-                }
                 break;
             }
             case HOSTING: {
@@ -472,21 +439,18 @@ final class FriendsScreen {
         float u = game.u, w = game.w, h = game.h;
         if (blocked()) {
             g.color(0xffffffff);
-            g.text("ONLINE PLAY IS FOR AGES " + Profile.ONLINE_AGE + "+", w / 2, h * 0.45f, 56 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
+            g.text("LOCAL WI-FI PLAY ONLY", w / 2, h * 0.45f, 56 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
             g.color(0xffb8bdf0);
-            g.text("To keep younger players safe, playing online with others is turned off.", w / 2, h * 0.45f + 70 * u, 32 * u,
+            g.text("Friends multiplayer is available in the Android app only.", w / 2, h * 0.45f + 70 * u, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
-            g.text("You can still play Survival, Duo and Endless against bots!", w / 2, h * 0.45f + 115 * u, 32 * u,
+            g.text("Both phones must use the same Wi-Fi or hotspot.", w / 2, h * 0.45f + 115 * u, 32 * u,
                     Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
             return;
         }
         drawChoice(g, ui.find(B_HOST), 0xffff7a2e, "HOST A ROOM", "Your friend joins you", true);
         drawChoice(g, ui.find(B_JOIN), 0xff3fa0ff, "JOIN A ROOM", "Find your friend's room", false);
         g.color(0xffb8bdf0);
-        String note = lanMode() ? "Both phones must be on the same Wi-Fi network (or one phone's hotspot)."
-                : "Play online with a friend anywhere, in the app or the browser: share your room code.";
-        if (lanMode() && !game.profile.canPlayOnline()) note = "Play with a friend next to you on the same Wi-Fi. Online play is for ages "
-                + Profile.ONLINE_AGE + "+.";
+        String note = "Both phones must be on the same Wi-Fi network or one phone's hotspot.";
         g.text(note, w / 2, h - game.padB - 90 * u, 32 * u,
                 Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
     }
@@ -534,10 +498,10 @@ final class FriendsScreen {
         float u = game.u, w = game.w, cx = w / 2;
         float top = game.padT + 150 * u;
         String label = net != null ? net.roomLabel() : null;
-        String addr = label == null ? (lanMode() ? "No Wi-Fi found" : "Opening room...") : label;
+        String addr = label == null ? "Waiting for Wi-Fi..." : label;
         ui.panel(g, cx - 560 * u, top, cx + 560 * u, top + 130 * u, 0xee22264a);
         g.color(0xffb8bdf0);
-        g.text(lanMode() ? "YOUR ROOM ADDRESS" : "YOUR ROOM CODE", cx, top + 42 * u, 28 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
+        g.text("YOUR LOCAL WI-FI ADDRESS", cx, top + 42 * u, 28 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
         g.color(0xffffffff);
         g.text(addr, cx, top + 104 * u, 56 * u, Gfx.ALIGN_CENTER, 7 * u, Ui.INK);
         drawPlayers(g, top + 150 * u);
@@ -545,8 +509,7 @@ final class FriendsScreen {
         int max = net != null ? net.maxPlayers() : 2;
         int n = playerCount();
         String note;
-        if (n < 2) note = lanMode() ? "Ask your friends to tap JOIN A ROOM. Your room shows up on their phones (up to " + max + " players)."
-                : "Ask your friend to tap JOIN A ROOM and enter this code.";
+        if (n < 2) note = "Ask your friend to tap JOIN A ROOM. Your room appears on the same Wi-Fi (up to " + max + " players).";
         else if (n < max) note = "Tap START, or wait for one more friend to join!";
         else note = "The room is full. Pick a mode and tap START!";
         g.text(note, cx, top + 420 * u, 30 * u, Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
@@ -623,11 +586,10 @@ final class FriendsScreen {
             }
             g.color(0xffffffff);
             g.color(0xffffffff);
-            g.text(lanMode() ? "Looking for rooms on your Wi-Fi..." : "Ask your friend for their room code", cx, top + 380 * u,
+            g.text("Looking for rooms on your Wi-Fi...", cx, top + 380 * u,
                     44 * u, Gfx.ALIGN_CENTER, 6 * u, Ui.INK);
             g.color(0xffb8bdf0);
-            g.text(lanMode() ? "Not showing up? Tap TYPE ADDRESS and enter the address on your friend's screen."
-                    : "Tap ENTER CODE and type the code shown on their screen.", cx, top + 440 * u, 28 * u,
+            g.text("Not showing up? Tap TYPE ADDRESS and enter the address on your friend's screen.", cx, top + 440 * u, 28 * u,
                     Gfx.ALIGN_CENTER, 4 * u, Ui.INK);
         }
         boolean connecting = net != null && net.state == NetSession.ST_CONNECTING;
