@@ -84,20 +84,18 @@ The **SNAKE PASS** card on the main menu opens a 30-tier season pass. Seasons la
   the minimap shows their health and respawn timer.
 - There is no online server, so club members and your duo partner are computer players.
 
-### Play with friends (Wi-Fi only, up to 3 phones)
+### Play with friends (local Wi-Fi only, up to 3 Android phones)
 
-There is no internet play (it was removed in 3.7). **FRIENDS** on the main menu plays over local Wi-Fi in the app:
+**FRIENDS** uses local Wi-Fi only. There is no internet multiplayer, online room code, or browser multiplayer:
 
-- Rooms on the same Wi-Fi (or one phone's hotspot) are found automatically; if not, type the address
-  shown on the host's screen. Up to 3 phones per room; the host relays everyone's inputs.
-- The host picks **TOGETHER** (a duo or trio against bot teams) or **VERSUS** (fight each other plus bots) and the map.
-- All phones run the same match in lockstep: they share a random seed, exchange only their controls
-  (60 small packets a second) and compare a checksum every 2 seconds. A player who leaves becomes a
-  bot on every phone at the same tick.
+- Both Android phones must be connected to the same Wi-Fi network, or one phone can create a hotspot.
+- Rooms on the local network are discovered automatically; if needed, enter the host phone's local IP address.
+- Up to 3 phones can play together. The host relays player inputs.
+- The host chooses **TOGETHER**, **VERSUS**, **SNAKE BALL**, or **EGG HEIST**, plus the map.
+- All phones run the same match in lockstep, share a random seed, exchange controls, and compare a checksum.
 - Wi-Fi ports: TCP 47321 (game), UDP 47322 (room announcements). `NetSession.PROTOCOL` must be raised
   whenever the simulation changes, so different versions never join the same room.
-- `SimTest net 0 60` (two phones) and `SimTest net3 0 60` (three phones) run games over localhost
-  and check they stay identical every tick.
+- `SimTest net 0 60` (two phones) and `SimTest net3 0 60` (three phones) test lockstep synchronization locally.
 
 ### Privacy and safety for younger players
 
