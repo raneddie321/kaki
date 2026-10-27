@@ -12,9 +12,9 @@ import java.util.List;
  * guest's messages to the other guests, so guests only ever talk to the host.
  */
 abstract class NetSession {
-    /** Version 5: longer input delay (4: the four new brawlers; 3: up to three players, slots, rosters, maps). */
-    static final int PROTOCOL = 8;
-    static final int MAX_PLAYERS = 3;
+    /** Version 9: local Wi-Fi only, limited to two players. */
+    static final int PROTOCOL = 9;
+    static final int MAX_PLAYERS = 2;
 
     static final int ST_WAITING = 0, ST_CONNECTING = 1, ST_CONNECTED = 2, ST_CLOSED = 3;
 
