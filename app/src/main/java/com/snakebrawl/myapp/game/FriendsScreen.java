@@ -172,7 +172,7 @@ final class FriendsScreen {
                     } else if (m.exact != net.exact()) {
                         why = net.exact()
                                 ? m.name + "'s browser is too old to play with you. Ask them to update Safari or Chrome."
-                                : "This browser is too old to play with " + m.name + ". Update Safari or Chrome and try again.";
+                                : "This version is too old to play with " + m.name + ". Update Safari or Chrome and try again.";
                     }
                     if (net.host) {
                         if (why != null) {
@@ -365,7 +365,7 @@ final class FriendsScreen {
                     ui.add(B_ROOM + i, cx - 450 * u, t, cx + 450 * u, t + 100 * u, null, null, 0);
                 }
                 ui.add(B_CANCEL, cx - 500 * u, bottom - 130 * u, cx - 30 * u, bottom, "CANCEL", null, 0xffff5a5a);
-                ui.add(B_ADDRESS, cx + 30 * u, bottom - 130 * u, cx + 500 * u, bottom, lanMode() ? "TYPE ADDRESS" : "ENTER CODE", null,
+                ui.add(B_ADDRESS, cx + 30 * u, bottom - 130 * u, cx + 500 * u, bottom, "TYPE ADDRESS", null,
                         0xff3fa0ff);
                 break;
             }
