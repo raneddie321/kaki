@@ -298,8 +298,8 @@ final class FriendsScreen {
                 break;
             case B_ADDRESS:
                 final boolean lan = lanMode();
-                String ask = lan ? "Friend's address (shown on their phone)" : "Room code (shown on your friend's screen)";
-                game.gated.requestText(ask, lan ? "192.168." : "", lan ? 15 : 8, false, new Platform.TextCallback() {
+                String ask = "Friend's local IP address (shown on their phone)";
+                game.gated.requestText(ask, "192.168.", 15, true, new Platform.TextCallback() {
                     @Override
                     public void onText(String text) {
                         if (text == null || net == null || state != SEARCHING) return;
@@ -568,7 +568,7 @@ final class FriendsScreen {
             ui.snakeArt(g, fb, pal, l + cw / 2, top + 150 * u, (seats >= 3 ? 0.72f : 0.85f) * u, game.clock + i * 1.3f);
             if (!mine) {
                 g.color(0xffb8bdf0);
-                String where = order[i] == 0 ? "host" : p.platform == NetSession.PLAT_BROWSER ? "in a browser" : "in the app";
+                String where = order[i] == 0 ? "host" : "in the app";
                 g.text(where, l + cw / 2, top + ch - 16 * u, 24 * u, Gfx.ALIGN_CENTER, 3 * u, Ui.INK);
             }
         }
