@@ -84,13 +84,13 @@ The **SNAKE PASS** card on the main menu opens a 30-tier season pass. Seasons la
   the minimap shows their health and respawn timer.
 - There is no online server, so club members and your duo partner are computer players.
 
-### Play with friends (local Wi-Fi only, up to 3 Android phones)
+### Play with friends (local Wi-Fi only, 2 Android phones)
 
-**FRIENDS** uses local Wi-Fi only. There is no internet multiplayer, online room code, or browser multiplayer:
+**FRIENDS** uses local Wi-Fi only for exactly two Android phones. There is no internet multiplayer, online room code, or browser multiplayer:
 
 - Both Android phones must be connected to the same Wi-Fi network, or one phone can create a hotspot.
 - Rooms on the local network are discovered automatically; if needed, enter the host phone's local IP address.
-- Up to 3 phones can play together. The host relays player inputs.
+- Only two phones can play together: the host and one friend. The host relays the guest's inputs.
 - The host chooses **TOGETHER**, **VERSUS**, **SNAKE BALL**, or **EGG HEIST**, plus the map.
 - All phones run the same match in lockstep, share a random seed, exchange controls, and compare a checksum.
 - Wi-Fi ports: TCP 47321 (game), UDP 47322 (room announcements). `NetSession.PROTOCOL` must be raised
