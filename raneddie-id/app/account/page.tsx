@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useClerk, useReverification, useSession, useUser } from "@clerk/nextjs";
 import { PASSWORD_MIN_LENGTH, clerkError } from "@/lib/auth-helpers";
@@ -328,14 +329,14 @@ export default function AccountCenterPage() {
   }
 
   if (!isLoaded) {
-    return <main className="account-loading"><div className="account-spinner" /><p>Loading your RanEddie account…</p></main>;
+    return <main className="account-loading"><Image src="/raneddie-logo.png" alt="" width={64} height={50} priority className="account-loading-logo" /><div className="account-spinner" /><p>Loading your RanEddie account…</p></main>;
   }
 
   if (!isSignedIn || !user) {
     return (
       <main className="account-unauth">
         <div className="account-unauth-card">
-          <div className="account-brand-mark">R<span>ID</span></div>
+          <Image src="/raneddie-logo.png" alt="RanEddie" width={72} height={57} priority className="account-unauth-logo" />
           <p className="account-kicker">RANEDDIE ID</p>
           <h1>Your account, all in one place.</h1>
           <p>Sign in to manage your profile, security and connected RanEddie products.</p>
@@ -350,13 +351,13 @@ export default function AccountCenterPage() {
     <main className="account-shell">
       <header className="account-topbar">
         <Link href="/" className="account-wordmark" aria-label="RanEddie ID home">
-          <span className="account-logo">R</span>
+          <Image src="/raneddie-logo.png" alt="" width={40} height={32} priority className="account-logo-img" />
           <span>RanEddie <b>ID</b></span>
         </Link>
         <div className="account-top-actions">
           <a href="https://raneddie.com" className="account-back-site">RanEddie website ↗</a>
           <button className="account-avatar account-avatar-small" onClick={() => openSection("profile")} aria-label="Open profile">
-            {user.imageUrl ? <img src={user.imageUrl} alt="" /> : initials(user.firstName, user.lastName, user.username, primaryEmail)}
+            {user.hasImage ? <img src={user.imageUrl} alt="" /> : initials(user.firstName, user.lastName, user.username, primaryEmail)}
           </button>
         </div>
       </header>
@@ -400,6 +401,7 @@ export default function AccountCenterPage() {
             <>
               <div className="account-welcome-card">
                 <div className="account-welcome-glow" />
+                <Image src="/raneddie-logo.png" alt="" width={333} height={262} className="account-welcome-watermark" aria-hidden />
                 <div className="account-welcome-copy">
                   <span className="account-overline">YOUR RANEDDIE ID</span>
                   <h2>Welcome back, {user.firstName || user.username || "there"}.</h2>
@@ -407,13 +409,13 @@ export default function AccountCenterPage() {
                   <button onClick={() => openSection("profile")} className="account-outline-btn">Manage profile <span>→</span></button>
                 </div>
                 <div className="account-welcome-avatar">
-                  {user.imageUrl ? <img src={user.imageUrl} alt="" /> : initials(user.firstName, user.lastName, user.username, primaryEmail)}
+                  {user.hasImage ? <img src={user.imageUrl} alt="" /> : initials(user.firstName, user.lastName, user.username, primaryEmail)}
                 </div>
                 <div className="account-welcome-orbit orbit-one" />
                 <div className="account-welcome-orbit orbit-two" />
               </div>
               <div className="account-stat-grid">
-                <article className="account-stat-card"><span className="account-stat-label">ACCOUNT STATUS</span><strong className="account-stat-value"><i className="account-status-dot" /> Active</strong><small>Your Clerk account is signed in</small></article>
+                <article className="account-stat-card"><span className="account-stat-label">ACCOUNT STATUS</span><strong className="account-stat-value"><i className="account-status-dot" /> Active</strong><small>Signed in and protected</small></article>
                 <article className="account-stat-card"><span className="account-stat-label">EMAIL VERIFICATION</span><strong className="account-stat-value">{emailVerified ? "Verified" : "Pending"}</strong><small>{primaryEmail || "No primary email"}</small></article>
                 <article className="account-stat-card"><span className="account-stat-label">MEMBER SINCE</span><strong className="account-stat-value">{dateLabel(user.createdAt)}</strong><small>Part of the RanEddie ecosystem</small></article>
               </div>
@@ -437,7 +439,7 @@ export default function AccountCenterPage() {
             <div className="account-panel account-panel-large">
               <div className="account-panel-heading"><div><span className="account-overline">PROFILE SETTINGS</span><h3>Personal information</h3><p>Changes are saved directly to your Clerk identity.</p></div></div>
               <div className="account-photo-row">
-                <div className="account-avatar account-avatar-large">{user.imageUrl ? <img src={user.imageUrl} alt="Profile" /> : initials(user.firstName, user.lastName, user.username, primaryEmail)}</div>
+                <div className="account-avatar account-avatar-large">{user.hasImage ? <img src={user.imageUrl} alt="Profile" /> : initials(user.firstName, user.lastName, user.username, primaryEmail)}</div>
                 <div><b>Profile photo</b><p>JPG, PNG or WebP. Maximum 5 MB.</p><button className="account-secondary-btn" onClick={() => fileRef.current?.click()} disabled={saving}>Upload new photo</button><input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={uploadAvatar} /></div>
               </div>
               <form className="account-form" onSubmit={saveProfile}>
