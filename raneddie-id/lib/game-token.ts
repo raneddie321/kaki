@@ -46,7 +46,8 @@ export function challengeOf(verifier: string) {
   return createHash("sha256").update(verifier).digest("base64url");
 }
 
-export type LinkCode = { t: "code"; sub: string; ch: string; exp: number };
-export type GameToken = { t: "game"; sub: string; v: number; iat: number };
+export type GameApp = "snakebrawl" | "fizzapp";
+export type LinkCode = { t: "code"; sub: string; ch: string; app: GameApp; exp: number };
+export type GameToken = { t: "game"; sub: string; v: number; iat: number; app?: GameApp };
 
 export const PKCE_RE = /^[A-Za-z0-9_-]{43,128}$/;

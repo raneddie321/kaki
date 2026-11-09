@@ -1,14 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect } from "react";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { Alert, AuthShell, Button, Divider, Heading, LinkButton, Spinner } from "@/components/ui";
-import { MONTHS, countries } from "@/lib/auth-helpers";
 
 export default function HomePage() {
   const { isLoaded, isSignedIn, user } = useUser();
   const { signOut } = useClerk();
-  const countryList = useMemo(() => countries(), []);
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      fetch("/api/account/migrate-private-profile", { method: "POST" }).catch(() => undefined);
+    }
+  }, [isLoaded, isSignedIn]);
 
   if (!isLoaded) {
     return (
@@ -39,9 +43,6 @@ export default function HomePage() {
     );
   }
 
-  const meta = (user.unsafeMetadata ?? {}) as { birthDate?: string; country?: string };
-  const country = countryList.find((c) => c.code === meta.country);
-  const birth = meta.birthDate ? meta.birthDate.split("-").map(Number) : null;
   const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
 
   return (
@@ -61,12 +62,11 @@ export default function HomePage() {
         </div>
         <Divider />
         <dl className="grid grid-cols-2 gap-4 text-sm">
-          <Info label="Country" value={country ? `${country.flag} ${country.name}` : "—"} />
-          <Info label="Date of birth" value={birth ? `${MONTHS[birth[1] - 1]} ${birth[2]}, ${birth[0]}` : "—"} />
           <Info label="Member since" value={user.createdAt ? user.createdAt.toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "—"} />
           <Info label="Player ID" value={<span className="font-mono text-xs">{user.id.replace("user_", "").slice(0, 10)}</span>} />
         </dl>
         <Divider />
+        <LinkButton href="/account">Open Account Center</LinkButton>
         <Button type="button" variant="ghost" onClick={() => signOut({ redirectUrl: "/" })}>
           Sign out
         </Button>

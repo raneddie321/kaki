@@ -132,7 +132,22 @@ export function navigateAfterAuth(
   };
 }
 
-/** A safe ?redirect_url= value: a path on this site only. */
+/** Safe redirect targets: local paths or explicitly trusted RanEddie product origins. */
+const TRUSTED_REDIRECT_ORIGINS = new Set([
+  "https://raneddie.com",
+  "https://www.raneddie.com",
+  "https://fizz.raneddie.com",
+  "https://fizzbrowser.vercel.app",
+]);
+
 export function safeRedirect(r: string | null | undefined): string | null {
-  return r && r.startsWith("/") && !r.startsWith("//") && !r.startsWith("/\\") ? r : null;
+  if (!r) return null;
+  if (r.startsWith("/") && !r.startsWith("//") && !r.startsWith("/\\") ) return r;
+  try {
+    const url = new URL(r);
+    if (url.protocol !== "https:" || !TRUSTED_REDIRECT_ORIGINS.has(url.origin)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
