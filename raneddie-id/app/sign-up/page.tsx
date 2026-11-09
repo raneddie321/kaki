@@ -176,22 +176,35 @@ function SignUp() {
       const { error } = await signUp.update({ username });
       if (error) {
         const { code, message } = clerkError(error);
-        if (code.startsWith("form_username") || code === "form_identifier_exists") setFieldError({ username: message });
-        else setError(message);
+        if (code.startsWith("form_username") || code === "form_identifier_exists") {
+          setFieldError({ username: message });
+        } else {
+          setError(message);
+        }
         return;
       }
-    if (signUp.status === "complete") {
-      await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1")) });
-      return;
-    }
-    if (signUp.unverifiedFields.includes("email_address")) {
-      const sent = await signUp.verifications.sendEmailCode();
+
+      if (signUp.status === "complete") {
+        await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1")) });
+        return;
+      }
+
+      if (signUp.unverifiedFields.includes("email_address")) {
+        const sent = await signUp.verifications.sendEmailCode();
+        if (sent.error) {
+          setError(clerkError(sent.error).message);
+          return;
+        }
+        go("verify");
+        return;
+      }
+
+      await finishSignUp();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "We couldn't create your account. Please try again.");
+    } finally {
       setBusy(false);
-      if (sent.error) return setError(clerkError(sent.error).message);
-      go("verify");
-      return;
     }
-    await finishSignUp();
   }
 
   // ---------------------------------------------------------------- step 6: verify email
@@ -202,16 +215,14 @@ function SignUp() {
     try {
       if (signUp.unverifiedFields.includes("email_address")) {
         const { error } = await signUp.verifications.verifyEmailCode({ code: code.trim() });
-        if (error) return setError(clerkError(error).message);
+        if (error) {
+          setError(clerkError(error).message);
+          return;
+        }
       }
       await finishSignUp();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The code could not be verified. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "We couldn't create your account. Please try again.");
     } finally {
       setBusy(false);
     }
