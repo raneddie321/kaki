@@ -67,6 +67,7 @@ export default function HomePage() {
           <Info label="Player ID" value={<span className="font-mono text-xs">{user.id.replace("user_", "").slice(0, 10)}</span>} />
         </dl>
         <Divider />
+        <LinkButton href="/account">Open Account Center</LinkButton>
         <Button type="button" variant="ghost" onClick={() => signOut({ redirectUrl: "/" })}>
           Sign out
         </Button>
