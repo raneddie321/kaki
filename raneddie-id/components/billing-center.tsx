@@ -12,7 +12,7 @@ import { useState } from "react";
 type Sub = { id: string; product: string; plan: string; monthly: number; detail: string; href: string; color: string };
 
 /** Subscriptions you can have in RanEddie products. Status comes from the payment provider once connected. */
-const PRODUCT_SUBS: Sub[] = [
+export const PRODUCT_SUBS: Sub[] = [
   { id: "bluebear", product: "BlueBear Stream", plan: "Standard", monthly: 9.99, detail: "Films and series, 4 profiles, downloads", href: "https://raneddie.com/bluebear-media", color: "#2f6bff" },
   { id: "core", product: "RanEddie Games", plan: "Core Pass", monthly: 11.99, detail: "50+ games, online play, cloud saves", href: "https://raneddie.com/raneddie-games", color: "#22c55e" },
   { id: "cloudly", product: "Cloudly", plan: "200 GB", monthly: 2.99, detail: "Storage for files, photos and backups", href: "https://raneddie.com/cloudly", color: "#38bdf8" },
@@ -27,7 +27,8 @@ const money = (n: number) => (n === 0 ? "Free" : `$${n.toFixed(2)}`);
 
 export default function BillingCenter({ name, email }: { name: string; email: string }) {
   const [dialog, setDialog] = useState<string | null>(null);
-  const active: Sub[] = []; // filled from the payment provider once connected
+  // Filled from the payment provider once connected (matched against PRODUCT_SUBS by id).
+  const active: Sub[] = [];
 
   return (
     <>
@@ -52,13 +53,20 @@ export default function BillingCenter({ name, email }: { name: string; email: st
           <div>
             <span className="account-overline">RANEDDIE PRODUCTS</span>
             <h3>Subscriptions by product</h3>
-            <p>Manage, upgrade or cancel subscriptions you started in any RanEddie product.</p>
+            <p>Subscriptions you started in RanEddie products.</p>
           </div>
         </div>
-        <div className="billing-subs">
-          {PRODUCT_SUBS.map((s) => {
-            const on = active.some((a) => a.id === s.id);
-            return (
+        {active.length === 0 ? (
+          <div className="billing-empty">
+            <div className="account-empty-icon">▤</div>
+            <div>
+              <b>No subscriptions yet</b>
+              <p>When you subscribe in a RanEddie product — like BlueBear Stream, Core Pass or Cloudly — it will appear here.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="billing-subs">
+            {active.map((s) => (
               <div key={s.id} className="billing-sub">
                 <i style={{ background: s.color }}>{s.product.slice(0, 1)}</i>
                 <div className="billing-sub-copy">
@@ -66,12 +74,12 @@ export default function BillingCenter({ name, email }: { name: string; email: st
                   <p>{s.detail}</p>
                 </div>
                 <div className="billing-sub-price"><b>{money(s.monthly)}</b><small>/month</small></div>
-                <span className={on ? "account-verified" : "account-pending"}>{on ? "Active" : "Not subscribed"}</span>
-                <button className="account-text-action" onClick={() => setDialog(`${on ? "Manage" : "Subscribe to"} ${s.product} ${s.plan}`)}>{on ? "Manage" : "Subscribe"}</button>
+                <span className="account-verified">Active</span>
+                <button className="account-text-action" onClick={() => setDialog(`Manage ${s.product} ${s.plan}`)}>Manage</button>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="account-panel">
