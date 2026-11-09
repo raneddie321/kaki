@@ -20,7 +20,7 @@ package com.snakebrawl.myapp.game;
  */
 final class RanEddieId {
     /** The RanEddie ID website (see the raneddie-id folder). */
-    static final String SITE = "https://raneddie-id.vercel.app";
+    static final String SITE = "https://id.raneddie.com";
     /** RanEddie ID accounts start at this age (the website asks for the date of birth too). */
     static final int MIN_AGE = 13;
 
