@@ -87,7 +87,8 @@ export default function AccountCenterPage() {
   }
 
   async function uploadAvatar(event: FormEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
+    const input = event.currentTarget;
+    const file = input.files?.[0];
     if (!file || !user) return;
     if (!file.type.startsWith("image/")) {
       setNotice({ tone: "error", message: "Choose an image file." });
@@ -106,7 +107,7 @@ export default function AccountCenterPage() {
       setNotice({ tone: "error", message: error instanceof Error ? error.message : "The image could not be uploaded." });
     } finally {
       setSaving(false);
-      event.currentTarget.value = "";
+      input.value = "";
     }
   }
 
