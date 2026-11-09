@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useClerk, useReverification, useUser } from "@clerk/nextjs";
 
 type Section = "overview" | "profile" | "security" | "products" | "billing" | "privacy" | "preferences";
@@ -46,7 +46,34 @@ export default function AccountCenterPage() {
   const [pendingEmailId, setPendingEmailId] = useState<string | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
   const [theme, setTheme] = useState<"system" | "light" | "dark">("system");
+  const [connectedProducts, setConnectedProducts] = useState<{ snakebrawl: number | null; fizzapp: number | null }>({ snakebrawl: null, fizzapp: null });
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let active = true;
+    setProductsLoading(true);
+    fetch("/api/account/products", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load connected products.");
+        return response.json() as Promise<{ products?: { snakebrawl?: number | null; fizzapp?: number | null } }>;
+      })
+      .then((data) => {
+        if (active) setConnectedProducts({
+          snakebrawl: data.products?.snakebrawl ?? null,
+          fizzapp: data.products?.fizzapp ?? null,
+        });
+      })
+      .catch(() => {
+        if (active) setNotice({ tone: "error", message: "Connected product status could not be loaded." });
+      })
+      .finally(() => {
+        if (active) setProductsLoading(false);
+      });
+    return () => { active = false; };
+  }, [isLoaded, isSignedIn]);
 
   const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? "";
   const emailVerified = user?.primaryEmailAddress?.verification?.status === "verified";
@@ -54,6 +81,25 @@ export default function AccountCenterPage() {
     if (!user) return "Your account";
     return user.fullName || user.username || primaryEmail || "RanEddie member";
   }, [user, primaryEmail]);
+
+  async function disconnectProduct(app: "snakebrawl" | "fizzapp") {
+    setDisconnecting(app);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/account/products", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ app }),
+      });
+      if (!response.ok) throw new Error("The product could not be disconnected.");
+      setConnectedProducts((current) => ({ ...current, [app]: null }));
+      setNotice({ tone: "success", message: app === "snakebrawl" ? "Snake Brawl was disconnected. Its saved cloud data remains in your account." : "Fizz App was disconnected." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Could not disconnect the product." });
+    } finally {
+      setDisconnecting(null);
+    }
+  }
 
   function openSection(next: Section) {
     setSection(next);
@@ -338,13 +384,15 @@ export default function AccountCenterPage() {
 
           {section === "products" && (
             <div className="account-panel">
-              <div className="account-panel-heading"><div><span className="account-overline">RANEDDIE ECOSYSTEM</span><h3>Connected products</h3><p>Only verified integrations will be marked as connected.</p></div></div>
+              <div className="account-panel-heading"><div><span className="account-overline">RANEDDIE ECOSYSTEM</span><h3>Connected products</h3><p>Connection status is read from your private Clerk account metadata.</p></div></div>
               <div className="account-product-list">
-                {[{name:"RanEddie Website",kind:"Company website",status:"Current identity portal",symbol:"R"},{name:"FIZZ",kind:"Browser",status:"Integration not verified",symbol:"F"},{name:"Snake Brawl",kind:"Game",status:"Integration not verified",symbol:"S"},{name:"Prime Code",kind:"Developer tools",status:"Not connected",symbol:"P"}].map((product) => (
-                  <div className="account-product-row" key={product.name}><div className="account-product-icon">{product.symbol}</div><div className="account-product-copy"><b>{product.name}</b><small>{product.kind}</small></div><span className={product.name === "RanEddie Website" ? "account-verified" : "account-pending"}>{product.status}</span></div>
-                ))}
+                <div className="account-product-row"><div className="account-product-icon">R</div><div className="account-product-copy"><b>RanEddie ID</b><small>Central identity provider</small></div><span className="account-verified">Active</span></div>
+                <div className="account-product-row"><div className="account-product-icon">S</div><div className="account-product-copy"><b>Snake Brawl</b><small>Game account and cloud-save connection</small></div>{connectedProducts.snakebrawl ? <><span className="account-verified">Connected</span><button className="account-text-action" disabled={disconnecting === "snakebrawl"} onClick={() => disconnectProduct("snakebrawl")}>{disconnecting === "snakebrawl" ? "Disconnecting…" : "Disconnect"}</button></> : <span className="account-pending">{productsLoading ? "Checking…" : "Not connected"}</span>}</div>
+                <div className="account-product-row"><div className="account-product-icon">F</div><div className="account-product-copy"><b>Fizz App</b><small>Game-link and cloud-save integration</small></div>{connectedProducts.fizzapp ? <><span className="account-verified">Connected</span><button className="account-text-action" disabled={disconnecting === "fizzapp"} onClick={() => disconnectProduct("fizzapp")}>{disconnecting === "fizzapp" ? "Disconnecting…" : "Disconnect"}</button></> : <span className="account-pending">{productsLoading ? "Checking…" : "Not connected"}</span>}</div>
+                <div className="account-product-row"><div className="account-product-icon">F</div><div className="account-product-copy"><b>FIZZ Platform</b><small>Browser and AI workspace</small></div><span className="account-pending">Identity migration pending</span></div>
+                <div className="account-product-row"><div className="account-product-icon">P</div><div className="account-product-copy"><b>Prime Code</b><small>Developer tools</small></div><span className="account-pending">Not connected</span></div>
               </div>
-              <p className="account-footnote">The product directory is informational at this stage. A product becomes connected only after its own authentication integration is implemented and verified.</p>
+              <p className="account-footnote">Disconnecting a game revokes its product token. Existing cloud-save data remains in your private RanEddie ID account. FIZZ Platform and Prime Code still require their own integrations.</p>
             </div>
           )}
 
