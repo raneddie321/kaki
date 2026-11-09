@@ -421,3 +421,13 @@ body {
 .billing-dialog .account-primary-btn { width:100%; justify-content:center; }
 @media (max-width:900px) { .billing-plans { grid-template-columns:1fr; } .billing-current-grid { grid-template-columns:1fr 1fr; } }
 @media (max-width:560px) { .billing-row { grid-template-columns:1fr 1fr; } .billing-row.head span:nth-child(2), .billing-row.head span:nth-child(4) { display:none; } }
+.billing-subs { display:grid; gap:8px; }
+.billing-sub { display:grid; grid-template-columns:42px 1fr auto auto auto; align-items:center; gap:14px; padding:12px 14px; border:1px solid #e8eef8; border-radius:14px; }
+.billing-sub i { width:42px; height:42px; border-radius:12px; display:grid; place-items:center; color:#fff; font-style:normal; font-weight:800; }
+.billing-sub-copy { min-width:0; }
+.billing-sub-copy b { font-size:13px; }
+.billing-sub-copy b small { margin-left:6px; color:#1e5fe4; font-size:11px; }
+.billing-sub-copy p { margin:3px 0 0; color:#7484a0; font-size:11px; }
+.billing-sub-price { text-align:right; white-space:nowrap; }
+.billing-sub-price b { font-size:14px; } .billing-sub-price small { color:#8794a8; font-size:11px; }
+@media (max-width:700px) { .billing-sub { grid-template-columns:42px 1fr auto; } .billing-sub-price { display:none; } .billing-sub .account-pending, .billing-sub .account-verified { display:none; } }
