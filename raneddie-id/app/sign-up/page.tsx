@@ -147,19 +147,21 @@ function SignUp() {
     setError(null);
     setHumanFix(null);
     setHuman("checking");
-    const { error } = await signUp.password({
-      emailAddress: email.trim(),
-      password,
-    });
-    if (error) {
-      setHuman("idle");
-      const { code, message, param } = clerkError(error);
-      setError(message);
-      if (code.startsWith("form_password") || param === "password") setHumanFix("password");
-      else if (code === "form_identifier_exists" || param === "email_address") setHumanFix("email");
-      return;
+    try {
+      const { error } = await signUp.password({ emailAddress: email.trim(), password });
+      if (error) {
+        const { code, message, param } = clerkError(error);
+        setError(message);
+        if (code.startsWith("form_password") || param === "password") setHumanFix("password");
+        else if (code === "form_identifier_exists" || param === "email_address") setHumanFix("email");
+        return;
+      }
+      setHuman("ok");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "We couldn't start account verification. Check your connection and try again.");
+    } finally {
+      setHuman((current) => current === "checking" ? "idle" : current);
     }
-    setHuman("ok");
   }
 
   // ---------------------------------------------------------------- step 5: username → create the account
@@ -170,14 +172,14 @@ function SignUp() {
     setError(null);
     setFieldError({});
     setBusy(true);
-    const { error } = await signUp.update({ username });
-    if (error) {
-      setBusy(false);
-      const { code, message } = clerkError(error);
-      if (code.startsWith("form_username") || code === "form_identifier_exists") setFieldError({ username: message });
-      else setError(message);
-      return;
-    }
+    try {
+      const { error } = await signUp.update({ username });
+      if (error) {
+        const { code, message } = clerkError(error);
+        if (code.startsWith("form_username") || code === "form_identifier_exists") setFieldError({ username: message });
+        else setError(message);
+        return;
+      }
     if (signUp.status === "complete") {
       await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1")) });
       return;
@@ -197,14 +199,22 @@ function SignUp() {
     e.preventDefault();
     setError(null);
     setBusy(true);
-    if (signUp.unverifiedFields.includes("email_address")) {
-      const { error } = await signUp.verifications.verifyEmailCode({ code: code.trim() });
-      if (error) {
-        setBusy(false);
-        return setError(clerkError(error).message);
+    try {
+      if (signUp.unverifiedFields.includes("email_address")) {
+        const { error } = await signUp.verifications.verifyEmailCode({ code: code.trim() });
+        if (error) return setError(clerkError(error).message);
       }
+      await finishSignUp();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The code could not be verified. Please try again.");
+    } finally {
+      setBusy(false);
     }
-    await finishSignUp();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "We couldn't create your account. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   /** The email is verified: fill in whatever else the Clerk settings require, then sign the player in. */
