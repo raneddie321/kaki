@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useClerk, useReverification, useSession, useUser } from "@clerk/nextjs";
 
 type Section = "overview" | "profile" | "security" | "products" | "billing" | "privacy" | "preferences";
@@ -111,10 +111,7 @@ export default function AccountCenterPage() {
 
   const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? "";
   const emailVerified = user?.primaryEmailAddress?.verification?.status === "verified";
-  const displayName = useMemo(() => {
-    if (!user) return "Your account";
-    return user.fullName || user.username || primaryEmail || "RanEddie member";
-  }, [user, primaryEmail]);
+
 
   async function beginTotpSetup() {
     setTotpBusy(true);
