@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { ClerkFailed, ClerkLoading } from "@clerk/nextjs";
 
 /** Where RanEddie ID is meant to be used. The production Clerk instance only works on raneddie.com. */
-const OFFICIAL_URL = "https://accounts.raneddie.com";
+const OFFICIAL_URL = "https://id.raneddie.com";
 const SLOW_AFTER_MS = 12_000;
 
 /**
@@ -67,7 +67,7 @@ function Unavailable({ slow = false }: { slow?: boolean }) {
               href={officialHref}
               className="flex h-12 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white hover:bg-brand-700"
             >
-              Go to accounts.raneddie.com
+              Go to id.raneddie.com
             </a>
           ) : (
             <button
