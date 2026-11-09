@@ -38,6 +38,9 @@ export default function AccountCenterPage() {
   const { session: currentSession } = useSession();
   const createEmailAddress = useReverification((email: string) => user?.createEmailAddress({ email }));
   const setPrimaryEmailAddress = useReverification((id: string) => user?.update({ primaryEmailAddressId: id }));
+  const createTotp = useReverification(() => user?.createTOTP());
+  const verifyTotp = useReverification((code: string) => user?.verifyTOTP({ code }));
+  const disableTotp = useReverification(() => user?.disableTOTP());
   const [section, setSection] = useState<Section>("overview");
   const [mobileNav, setMobileNav] = useState(false);
   const [firstName, setFirstName] = useState("");
@@ -60,6 +63,10 @@ export default function AccountCenterPage() {
   const [sessions, setSessions] = useState<AccountSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [revokingSession, setRevokingSession] = useState<string | null>(null);
+  const [totpUri, setTotpUri] = useState<string | null>(null);
+  const [totpSecret, setTotpSecret] = useState<string | null>(null);
+  const [totpCode, setTotpCode] = useState("");
+  const [totpBusy, setTotpBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -103,6 +110,56 @@ export default function AccountCenterPage() {
     if (!user) return "Your account";
     return user.fullName || user.username || primaryEmail || "RanEddie member";
   }, [user, primaryEmail]);
+
+  async function beginTotpSetup() {
+    setTotpBusy(true);
+    setNotice(null);
+    try {
+      const setup = await createTotp();
+      if (!setup?.uri || !setup.secret) throw new Error("Clerk did not return authenticator setup details.");
+      setTotpUri(setup.uri);
+      setTotpSecret(setup.secret);
+      setNotice({ tone: "success", message: "Add this account to your authenticator app, then enter the six-digit code." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Authenticator setup is unavailable. Check the Clerk instance settings and plan." });
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  async function confirmTotpSetup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!user) return;
+    setTotpBusy(true);
+    setNotice(null);
+    try {
+      await verifyTotp(totpCode.trim());
+      await user.reload();
+      setTotpUri(null);
+      setTotpSecret(null);
+      setTotpCode("");
+      setNotice({ tone: "success", message: "Authenticator-based two-factor authentication is now enabled." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "That authenticator code could not be verified." });
+    } finally {
+      setTotpBusy(false);
+    }
+  }
+
+  async function removeTotp() {
+    if (!user) return;
+    setTotpBusy(true);
+    setNotice(null);
+    try {
+      await disableTotp();
+      await user.reload();
+      setNotice({ tone: "success", message: "Authenticator-based two-factor authentication was disabled." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Authenticator could not be disabled." });
+    } finally {
+      setTotpBusy(false);
+    }
+  }
 
   async function revokeOtherSession(sessionId: string) {
     const target = sessions.find((item) => item.id === sessionId);
@@ -413,8 +470,20 @@ export default function AccountCenterPage() {
               </div>
               <div className="account-panel">
                 <div className="account-panel-heading"><div><span className="account-overline">AUTHENTICATION</span><h3>Account protection</h3></div></div>
-                <div className="account-security-row"><div><b>Two-factor authentication</b><p>{user.twoFactorEnabled ? "Two-factor authentication is enabled." : "Two-factor authentication is not enabled on this account."}</p></div><span className={user.twoFactorEnabled ? "account-verified" : "account-pending"}>{user.twoFactorEnabled ? "Enabled" : "Not enabled"}</span></div>
-                <div className="account-security-row"><div><b>Authenticator app</b><p>Authenticator enrollment is controlled by your Clerk instance settings.</p></div><span className={user.totpEnabled ? "account-verified" : "account-pending"}>{user.totpEnabled ? "Enabled" : "Not enabled"}</span></div>
+                <div className="account-security-row"><div><b>Two-factor authentication</b><p>{user.twoFactorEnabled ? "Two-factor authentication is enabled." : "Add a second verification step to protect your account."}</p></div><span className={user.twoFactorEnabled ? "account-verified" : "account-pending"}>{user.twoFactorEnabled ? "Enabled" : "Not enabled"}</span></div>
+                <div className="account-security-row"><div><b>Authenticator app (TOTP)</b><p>{user.totpEnabled ? "Your authenticator app is linked to this account." : "Use an authenticator app to generate sign-in codes."}</p></div>{user.totpEnabled ? <button className="account-danger-link" disabled={totpBusy} onClick={removeTotp}>{totpBusy ? "Working…" : "Remove"}</button> : <button className="account-text-action" disabled={totpBusy || !!totpUri} onClick={beginTotpSetup}>{totpBusy ? "Setting up…" : "Set up"}</button>}</div>
+                {totpUri && totpSecret && (
+                  <div className="account-totp-setup">
+                    <b>1. Add this account to your authenticator</b>
+                    <p>Scan the URI with your authenticator app, or copy the secret and add it manually.</p>
+                    <div className="account-totp-secret"><small>Setup secret</small><code>{totpSecret}</code><button type="button" onClick={() => navigator.clipboard?.writeText(totpSecret)}>Copy</button></div>
+                    <div className="account-totp-secret"><small>Authenticator URI</small><code>{totpUri}</code><button type="button" onClick={() => navigator.clipboard?.writeText(totpUri)}>Copy</button></div>
+                    <form className="account-inline-form" onSubmit={confirmTotpSetup}>
+                      <input inputMode="numeric" autoComplete="one-time-code" value={totpCode} onChange={(event) => setTotpCode(event.target.value)} placeholder="6-digit verification code" required />
+                      <button className="account-primary-btn" disabled={totpBusy}>{totpBusy ? "Verifying…" : "Verify and enable"}</button>
+                    </form>
+                  </div>
+                )}
               </div>
               <div className="account-panel">
                 <div className="account-panel-heading"><div><span className="account-overline">ACTIVE DEVICES</span><h3>Sessions and devices</h3><p>Review active sign-ins and revoke sessions you no longer recognize.</p></div><span className="account-verified">{sessions.length} active</span></div>
