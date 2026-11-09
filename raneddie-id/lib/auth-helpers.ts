@@ -3,6 +3,12 @@
 /** Players must be at least this old to create a RanEddie ID (COPPA: no accounts for under-13s). */
 export const MIN_AGE = 13;
 
+/**
+ * Must match Clerk → User & authentication → Password → minimum length (currently 15 on both the
+ * development and production instances). Clerk enforces it server-side; this is only the live hint.
+ */
+export const PASSWORD_MIN_LENGTH = 15;
+
 type ClerkLikeError = {
   code?: string;
   message?: string;
@@ -26,10 +32,15 @@ const FRIENDLY: Record<string, string> = {
   form_password_incorrect: "That password isn't right. Try again or reset it.",
   form_identifier_exists: "That email already has a RanEddie ID. Sign in instead.",
   form_username_exists: "That username is taken. Try another one.",
+  form_password_length_too_short: `Your password is too short. Use at least ${PASSWORD_MIN_LENGTH} characters — a short phrase works well.`,
+  form_param_unknown: "RanEddie ID is being updated. Please try again in a moment.",
   form_password_pwned:
     "This password has appeared in a data leak on another site. Please choose a different one.",
   form_code_incorrect: "That code isn't right. Check the email and try again.",
   verification_expired: "That code has expired. Send a new one.",
+  protect_check_execution_failed:
+    "The security check couldn't run. Turn off ad or content blockers for this page, then tick the box again.",
+  captcha_invalid: "The security check failed. Please refresh the page and try again.",
   too_many_requests: "Too many attempts. Please wait a minute and try again.",
 };
 
@@ -39,18 +50,18 @@ export function isEmail(s: string) {
 
 /** Password rule shown while typing (Clerk enforces its own on top); the meter suggests the rest. */
 export function passwordChecks(pw: string) {
-  return [{ ok: pw.length >= 8, label: "At least 8 characters" }];
+  return [{ ok: pw.length >= PASSWORD_MIN_LENGTH, label: `At least ${PASSWORD_MIN_LENGTH} characters` }];
 }
 
 export function passwordStrength(pw: string): { score: number; label: string } {
   if (!pw) return { score: 0, label: "" };
   let s = 0;
-  if (pw.length >= 8) s++;
-  if (pw.length >= 12) s++;
+  if (pw.length >= PASSWORD_MIN_LENGTH) s += 2;
+  if (pw.length >= PASSWORD_MIN_LENGTH + 5) s++;
   if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
   if (/\d/.test(pw)) s++;
   if (/[^A-Za-z0-9]/.test(pw)) s++;
-  const score = Math.min(4, Math.max(1, s - (pw.length < 8 ? 1 : 0)));
+  const score = Math.min(4, Math.max(1, s - (pw.length < PASSWORD_MIN_LENGTH ? 1 : 0)));
   return { score, label: ["", "Weak", "Fair", "Good", "Strong"][score] };
 }
 
@@ -137,12 +148,14 @@ const TRUSTED_REDIRECT_ORIGINS = new Set([
   "https://raneddie.com",
   "https://www.raneddie.com",
   "https://fizz.raneddie.com",
+  "https://accounts.raneddie.com",
+  "https://id.raneddie.com",
   "https://fizzbrowser.vercel.app",
 ]);
 
 export function safeRedirect(r: string | null | undefined): string | null {
   if (!r) return null;
-  if (r.startsWith("/") && !r.startsWith("//") && !r.startsWith("/\\") ) return r;
+  if (r.startsWith("/") && !r.startsWith("//") && !r.startsWith("/\\")) return r;
   try {
     const url = new URL(r);
     if (url.protocol !== "https:" || !TRUSTED_REDIRECT_ORIGINS.has(url.origin)) return null;

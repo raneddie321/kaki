@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useClerk, useReverification, useSession, useUser } from "@clerk/nextjs";
+import { PASSWORD_MIN_LENGTH, clerkError } from "@/lib/auth-helpers";
 
 type Section = "overview" | "profile" | "security" | "products" | "billing" | "privacy" | "preferences";
 type AccountSession = {
@@ -25,6 +27,12 @@ const navigation: { id: Section; label: string; description: string; icon: strin
 function initials(first?: string | null, last?: string | null, username?: string | null, email?: string) {
   const value = [first, last].filter(Boolean).join(" ") || username || email || "R";
   return value.slice(0, 1).toUpperCase();
+}
+
+/** Clerk's own readable message for API errors, otherwise the given fallback. */
+function friendly(error: unknown, fallback: string) {
+  const fromClerk = (error as { errors?: unknown[] } | null)?.errors?.length ? clerkError(error).message : null;
+  return fromClerk || (error instanceof Error && error.message) || fallback;
 }
 
 function dateLabel(date?: Date | null) {
@@ -58,7 +66,7 @@ export default function AccountCenterPage() {
   const [emailBusy, setEmailBusy] = useState(false);
   const [theme, setTheme] = useState<"system" | "light" | "dark">("system");
   const [connectedProducts, setConnectedProducts] = useState<{ snakebrawl: number | null; fizzapp: number | null }>({ snakebrawl: null, fizzapp: null });
-  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [sessions, setSessions] = useState<AccountSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -77,7 +85,6 @@ export default function AccountCenterPage() {
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     let active = true;
-    setProductsLoading(true);
     fetch("/api/account/products", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Could not load connected products.");
@@ -101,7 +108,6 @@ export default function AccountCenterPage() {
   useEffect(() => {
     if (section !== "security" || !user) return;
     let active = true;
-    setSessionsLoading(true);
     user.getSessions()
       .then((items) => { if (active) setSessions(items as AccountSession[]); })
       .catch(() => { if (active) setNotice({ tone: "error", message: "Active sessions could not be loaded." }); })
@@ -123,7 +129,7 @@ export default function AccountCenterPage() {
       setTotpSecret(setup.secret);
       setNotice({ tone: "success", message: "Add this account to your authenticator app, then enter the six-digit code." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Authenticator setup is unavailable. Check the Clerk instance settings and plan." });
+      setNotice({ tone: "error", message: friendly(error, "Authenticator setup is unavailable. Check the Clerk instance settings and plan.") });
     } finally {
       setTotpBusy(false);
     }
@@ -142,7 +148,7 @@ export default function AccountCenterPage() {
       setTotpCode("");
       setNotice({ tone: "success", message: "Authenticator-based two-factor authentication is now enabled." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "That authenticator code could not be verified." });
+      setNotice({ tone: "error", message: friendly(error, "That authenticator code could not be verified.") });
     } finally {
       setTotpBusy(false);
     }
@@ -157,7 +163,7 @@ export default function AccountCenterPage() {
       await user.reload();
       setNotice({ tone: "success", message: "Authenticator-based two-factor authentication was disabled." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Authenticator could not be disabled." });
+      setNotice({ tone: "error", message: friendly(error, "Authenticator could not be disabled.") });
     } finally {
       setTotpBusy(false);
     }
@@ -173,7 +179,7 @@ export default function AccountCenterPage() {
       setSessions((current) => current.filter((item) => item.id !== sessionId));
       setNotice({ tone: "success", message: "The selected session was revoked." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "The session could not be revoked." });
+      setNotice({ tone: "error", message: friendly(error, "The session could not be revoked.") });
     } finally {
       setRevokingSession(null);
     }
@@ -192,7 +198,7 @@ export default function AccountCenterPage() {
       setConnectedProducts((current) => ({ ...current, [app]: null }));
       setNotice({ tone: "success", message: app === "snakebrawl" ? "Snake Brawl was disconnected. Its saved cloud data remains in your account." : "Fizz App was disconnected." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Could not disconnect the product." });
+      setNotice({ tone: "error", message: friendly(error, "Could not disconnect the product.") });
     } finally {
       setDisconnecting(null);
     }
@@ -200,6 +206,7 @@ export default function AccountCenterPage() {
 
   function openSection(next: Section) {
     setSection(next);
+    if (next === "security") setSessionsLoading(true);
     setNotice(null);
     setMobileNav(false);
     if (next === "profile" && user) {
@@ -224,7 +231,7 @@ export default function AccountCenterPage() {
       setNotice({ tone: "success", message: "Your profile was updated in RanEddie ID." });
       setProfileReady(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Clerk could not update your profile. Please try again.";
+      const message = friendly(error, "Clerk could not update your profile. Please try again.");
       setNotice({ tone: "error", message });
     } finally {
       setSaving(false);
@@ -249,7 +256,7 @@ export default function AccountCenterPage() {
       await user.setProfileImage({ file });
       setNotice({ tone: "success", message: "Your profile photo was updated." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "The image could not be uploaded." });
+      setNotice({ tone: "error", message: friendly(error, "The image could not be uploaded.") });
     } finally {
       setSaving(false);
       input.value = "";
@@ -259,8 +266,8 @@ export default function AccountCenterPage() {
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!user) return;
-    if (newPassword.length < 8) {
-      setNotice({ tone: "error", message: "Use at least 8 characters for your new password." });
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+      setNotice({ tone: "error", message: `Use at least ${PASSWORD_MIN_LENGTH} characters for your new password.` });
       return;
     }
     setPasswordBusy(true);
@@ -271,7 +278,7 @@ export default function AccountCenterPage() {
       setNewPassword("");
       setNotice({ tone: "success", message: "Password updated. Other active sessions were signed out." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Password update failed. Check your current password." });
+      setNotice({ tone: "error", message: friendly(error, "Password update failed. Check your current password.") });
     } finally {
       setPasswordBusy(false);
     }
@@ -292,7 +299,7 @@ export default function AccountCenterPage() {
       setPendingEmailId(address.id);
       setNotice({ tone: "success", message: "A verification code was sent to your new email address." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Could not start email verification." });
+      setNotice({ tone: "error", message: friendly(error, "Could not start email verification.") });
     } finally {
       setEmailBusy(false);
     }
@@ -314,7 +321,7 @@ export default function AccountCenterPage() {
       setEmailCode("");
       setNotice({ tone: "success", message: "Your new email is verified and now primary." });
     } catch (error) {
-      setNotice({ tone: "error", message: error instanceof Error ? error.message : "Email verification failed." });
+      setNotice({ tone: "error", message: friendly(error, "Email verification failed.") });
     } finally {
       setEmailBusy(false);
     }
@@ -332,8 +339,8 @@ export default function AccountCenterPage() {
           <p className="account-kicker">RANEDDIE ID</p>
           <h1>Your account, all in one place.</h1>
           <p>Sign in to manage your profile, security and connected RanEddie products.</p>
-          <a className="account-primary-btn" href="/sign-in?redirect_url=%2Faccount">Sign in to RanEddie ID</a>
-          <a className="account-back-link" href="/">Back to RanEddie</a>
+          <Link className="account-primary-btn" href="/sign-in?redirect_url=%2Faccount">Sign in to RanEddie ID</Link>
+          <a className="account-back-link" href="https://raneddie.com">Back to RanEddie</a>
         </div>
       </main>
     );
@@ -342,10 +349,10 @@ export default function AccountCenterPage() {
   return (
     <main className="account-shell">
       <header className="account-topbar">
-        <a href="/" className="account-wordmark" aria-label="RanEddie ID home">
+        <Link href="/" className="account-wordmark" aria-label="RanEddie ID home">
           <span className="account-logo">R</span>
           <span>RanEddie <b>ID</b></span>
-        </a>
+        </Link>
         <div className="account-top-actions">
           <a href="https://raneddie.com" className="account-back-site">RanEddie website ↗</a>
           <button className="account-avatar account-avatar-small" onClick={() => openSection("profile")} aria-label="Open profile">
@@ -466,7 +473,7 @@ export default function AccountCenterPage() {
                 <div className="account-panel-heading"><div><span className="account-overline">PASSWORD</span><h3>Update your password</h3><p>Your password is managed securely by Clerk.</p></div><span className="account-security-icon">◇</span></div>
                 <form className="account-form" onSubmit={changePassword}>
                   <label>Current password<input type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required /></label>
-                  <label>New password<input type="password" autoComplete="new-password" minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required /></label>
+                  <label>New password<input type="password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required /></label>
                   <div className="account-form-actions"><button className="account-primary-btn" disabled={passwordBusy}>{passwordBusy ? "Updating…" : "Update password"}</button></div>
                 </form>
               </div>

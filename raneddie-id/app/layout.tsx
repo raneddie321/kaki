@@ -3,6 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/sora";
 import "./globals.css";
+import { ClerkHealth } from "@/components/clerk-health";
 
 export const metadata: Metadata = {
   title: "RanEddie ID",
@@ -19,7 +20,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           signInFallbackRedirectUrl="/"
           signUpFallbackRedirectUrl="/"
         >
-          {children}
+          <ClerkHealth>{children}</ClerkHealth>
         </ClerkProvider>
       </body>
     </html>
