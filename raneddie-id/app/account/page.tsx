@@ -71,6 +71,11 @@ export default function AccountCenterPage() {
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
+    fetch("/api/account/migrate-private-profile", { method: "POST" }).catch(() => undefined);
+  }, [isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
     let active = true;
     setProductsLoading(true);
     fetch("/api/account/products", { cache: "no-store" })
