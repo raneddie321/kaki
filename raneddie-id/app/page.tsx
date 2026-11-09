@@ -3,23 +3,31 @@
 import { useEffect } from "react";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { Alert, AuthShell, Button, Divider, Heading, LinkButton, Spinner } from "@/components/ui";
+import { ClerkLoadFailed, useClerkStatus } from "@/components/clerk-gate";
+import { flushPendingProfile } from "@/lib/profile-client";
 
 export default function HomePage() {
   const { isLoaded, isSignedIn, user } = useUser();
   const { signOut } = useClerk();
+  const clerkStatus = useClerkStatus();
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
       fetch("/api/account/migrate-private-profile", { method: "POST" }).catch(() => undefined);
+      void flushPendingProfile();
     }
   }, [isLoaded, isSignedIn]);
 
   if (!isLoaded) {
     return (
       <AuthShell>
-        <div className="flex justify-center py-16 text-brand-500">
-          <Spinner className="h-8 w-8" />
-        </div>
+        {clerkStatus === "failed" ? (
+          <ClerkLoadFailed />
+        ) : (
+          <div className="flex justify-center py-16 text-brand-500" role="status" aria-label="Loading">
+            <Spinner className="h-8 w-8" />
+          </div>
+        )}
       </AuthShell>
     );
   }

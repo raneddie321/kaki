@@ -1,7 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useClerk, useReverification, useSession, useUser } from "@clerk/nextjs";
+import { useClerkStatus } from "@/components/clerk-gate";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth-helpers";
+import { flushPendingProfile } from "@/lib/profile-client";
 
 type Section = "overview" | "profile" | "security" | "products" | "billing" | "privacy" | "preferences";
 type AccountSession = {
@@ -34,6 +38,7 @@ function dateLabel(date?: Date | null) {
 
 export default function AccountCenterPage() {
   const { isLoaded, isSignedIn, user } = useUser();
+  const clerkStatus = useClerkStatus();
   const { signOut } = useClerk();
   const { session: currentSession } = useSession();
   const createEmailAddress = useReverification((email: string) => user?.createEmailAddress({ email }));
@@ -58,26 +63,29 @@ export default function AccountCenterPage() {
   const [emailBusy, setEmailBusy] = useState(false);
   const [theme, setTheme] = useState<"system" | "light" | "dark">("system");
   const [connectedProducts, setConnectedProducts] = useState<{ snakebrawl: number | null; fizzapp: number | null }>({ snakebrawl: null, fizzapp: null });
-  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsLoaded, setProductsLoaded] = useState(false);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [sessions, setSessions] = useState<AccountSession[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsLoadedFor, setSessionsLoadedFor] = useState<string | null>(null);
   const [revokingSession, setRevokingSession] = useState<string | null>(null);
   const [totpUri, setTotpUri] = useState<string | null>(null);
   const [totpSecret, setTotpSecret] = useState<string | null>(null);
   const [totpCode, setTotpCode] = useState("");
   const [totpBusy, setTotpBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const productsLoading = !productsLoaded;
+  const sessionsLoading = sessionsLoadedFor !== (user?.id ?? null);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     fetch("/api/account/migrate-private-profile", { method: "POST" }).catch(() => undefined);
+    // Birth date and country from sign-up that couldn't be saved at the time
+    void flushPendingProfile();
   }, [isLoaded, isSignedIn]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     let active = true;
-    setProductsLoading(true);
     fetch("/api/account/products", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Could not load connected products.");
@@ -93,7 +101,7 @@ export default function AccountCenterPage() {
         if (active) setNotice({ tone: "error", message: "Connected product status could not be loaded." });
       })
       .finally(() => {
-        if (active) setProductsLoading(false);
+        if (active) setProductsLoaded(true);
       });
     return () => { active = false; };
   }, [isLoaded, isSignedIn]);
@@ -101,11 +109,10 @@ export default function AccountCenterPage() {
   useEffect(() => {
     if (section !== "security" || !user) return;
     let active = true;
-    setSessionsLoading(true);
     user.getSessions()
       .then((items) => { if (active) setSessions(items as AccountSession[]); })
       .catch(() => { if (active) setNotice({ tone: "error", message: "Active sessions could not be loaded." }); })
-      .finally(() => { if (active) setSessionsLoading(false); });
+      .finally(() => { if (active) setSessionsLoadedFor(user.id); });
     return () => { active = false; };
   }, [section, user]);
 
@@ -259,8 +266,8 @@ export default function AccountCenterPage() {
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!user) return;
-    if (newPassword.length < 8) {
-      setNotice({ tone: "error", message: "Use at least 8 characters for your new password." });
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      setNotice({ tone: "error", message: `Use at least ${MIN_PASSWORD_LENGTH} characters for your new password.` });
       return;
     }
     setPasswordBusy(true);
@@ -321,7 +328,21 @@ export default function AccountCenterPage() {
   }
 
   if (!isLoaded) {
-    return <main className="account-loading"><div className="account-spinner" /><p>Loading your RanEddie account…</p></main>;
+    if (clerkStatus === "failed") {
+      return (
+        <main className="account-unauth">
+          <div className="account-unauth-card" role="alert">
+            <div className="account-brand-mark">R<span>ID</span></div>
+            <p className="account-kicker">RANEDDIE ID</p>
+            <h1>We couldn&apos;t load your account.</h1>
+            <p>The sign-in service didn&apos;t respond. Check your connection, turn off any content blocker for this page, and try again.</p>
+            <button type="button" className="account-primary-btn" onClick={() => window.location.reload()}>Try again</button>
+            <a className="account-back-link" href="https://raneddie.com">Back to RanEddie</a>
+          </div>
+        </main>
+      );
+    }
+    return <main className="account-loading" role="status"><div className="account-spinner" /><p>Loading your RanEddie account…</p></main>;
   }
 
   if (!isSignedIn || !user) {
@@ -332,8 +353,8 @@ export default function AccountCenterPage() {
           <p className="account-kicker">RANEDDIE ID</p>
           <h1>Your account, all in one place.</h1>
           <p>Sign in to manage your profile, security and connected RanEddie products.</p>
-          <a className="account-primary-btn" href="/sign-in?redirect_url=%2Faccount">Sign in to RanEddie ID</a>
-          <a className="account-back-link" href="/">Back to RanEddie</a>
+          <Link className="account-primary-btn" href="/sign-in?redirect_url=%2Faccount">Sign in to RanEddie ID</Link>
+          <a className="account-back-link" href="https://raneddie.com">Back to RanEddie</a>
         </div>
       </main>
     );
@@ -342,10 +363,10 @@ export default function AccountCenterPage() {
   return (
     <main className="account-shell">
       <header className="account-topbar">
-        <a href="/" className="account-wordmark" aria-label="RanEddie ID home">
+        <Link href="/" className="account-wordmark" aria-label="RanEddie ID home">
           <span className="account-logo">R</span>
           <span>RanEddie <b>ID</b></span>
-        </a>
+        </Link>
         <div className="account-top-actions">
           <a href="https://raneddie.com" className="account-back-site">RanEddie website ↗</a>
           <button className="account-avatar account-avatar-small" onClick={() => openSection("profile")} aria-label="Open profile">
@@ -531,7 +552,7 @@ export default function AccountCenterPage() {
               <div className="account-security-row"><div><b>Identity data</b><p>Your name, username, email and profile photo are stored in Clerk.</p></div><span className="account-verified">Clerk</span></div>
               <div className="account-security-row"><div><b>Account identifier</b><p className="account-mono">{user.id}</p></div><button className="account-text-action" onClick={() => navigator.clipboard?.writeText(user.id)}>Copy ID</button></div>
               <div className="account-security-row"><div><b>Account deletion</b><p>{user.deleteSelfEnabled ? "Your Clerk instance allows self-service account deletion." : "Self-service deletion is not currently enabled in the Clerk instance."}</p></div><span className="account-pending">{user.deleteSelfEnabled ? "Available" : "Not enabled"}</span></div>
-              {user.deleteSelfEnabled && <button className="account-danger-btn" onClick={async () => { if (window.confirm("Permanently delete your RanEddie ID? This action cannot be undone.")) { await user.delete(); window.location.assign("/"); } }}>Delete my account</button>}
+              {user.deleteSelfEnabled && <button className="account-danger-btn" onClick={async () => { if (window.confirm("Permanently delete your RanEddie ID? This action cannot be undone.")) { try { await user.delete(); window.location.assign("https://raneddie.com"); } catch (error) { setNotice({ tone: "error", message: error instanceof Error ? error.message : "Your account could not be deleted. Please try again." }); } } }}>Delete my account</button>}
             </div>
           )}
 
