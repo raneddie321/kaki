@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { Alert, AuthShell, Button, Divider, Heading, LinkButton, Spinner } from "@/components/ui";
-import { MONTHS, countries } from "@/lib/auth-helpers";
 
 export default function HomePage() {
   const { isLoaded, isSignedIn, user } = useUser();
@@ -14,7 +13,6 @@ export default function HomePage() {
       fetch("/api/account/migrate-private-profile", { method: "POST" }).catch(() => undefined);
     }
   }, [isLoaded, isSignedIn]);
-  const countryList = useMemo(() => countries(), []);
 
   if (!isLoaded) {
     return (
