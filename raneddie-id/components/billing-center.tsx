@@ -9,95 +9,66 @@ import { useState } from "react";
  * Upgrade / add-card actions open a "launching soon" dialog; no card details are ever collected.
  */
 
-type Cycle = "monthly" | "yearly";
-type Plan = { id: string; name: string; tagline: string; monthly: number; yearly: number; features: string[]; highlight?: boolean };
+type Sub = { id: string; product: string; plan: string; monthly: number; detail: string; href: string; color: string };
 
-const PLANS: Plan[] = [
-  {
-    id: "free",
-    name: "RanEddie Free",
-    tagline: "Everything you need to get started.",
-    monthly: 0,
-    yearly: 0,
-    features: ["One RanEddie ID for every product", "5 GB Cloudly storage", "Cloud saves for RanEddie games", "Standard support"],
-  },
-  {
-    id: "plus",
-    name: "RanEddie Plus",
-    tagline: "More space and more for your games.",
-    monthly: 4.99,
-    yearly: 49.99,
-    features: ["Everything in Free", "200 GB Cloudly storage", "Ad-free BlueBear Stream", "Member discounts in RanEddie stores", "Priority support"],
-    highlight: true,
-  },
-  {
-    id: "premium",
-    name: "RanEddie Premium",
-    tagline: "The whole RanEddie world, for the whole family.",
-    monthly: 12.99,
-    yearly: 129.99,
-    features: ["Everything in Plus", "2 TB Cloudly storage, shared with up to 6 people", "Core Pass for RanEddie Games", "workIT Assist and rEmail Assist", "Protector Y for every device"],
-  },
+/** Subscriptions you can have in RanEddie products. Status comes from the payment provider once connected. */
+const PRODUCT_SUBS: Sub[] = [
+  { id: "bluebear", product: "BlueBear Stream", plan: "Standard", monthly: 9.99, detail: "Films and series, 4 profiles, downloads", href: "https://raneddie.com/bluebear-media", color: "#2f6bff" },
+  { id: "core", product: "RanEddie Games", plan: "Core Pass", monthly: 11.99, detail: "50+ games, online play, cloud saves", href: "https://raneddie.com/raneddie-games", color: "#22c55e" },
+  { id: "cloudly", product: "Cloudly", plan: "200 GB", monthly: 2.99, detail: "Storage for files, photos and backups", href: "https://raneddie.com/cloudly", color: "#38bdf8" },
+  { id: "workit", product: "workIT", plan: "Personal", monthly: 6.99, detail: "Write, Sheets, Slides, Meet and workIT Assist", href: "https://raneddie.com/workit", color: "#3b82f6" },
+  { id: "protector", product: "Protector Y", plan: "Family", monthly: 4.99, detail: "Every device, VPN and password manager", href: "https://raneddie.com/protector-y", color: "#ef4444" },
+  { id: "remail", product: "rEmail", plan: "Premium", monthly: 2.99, detail: "Custom domains, aliases and rEmail Assist", href: "https://raneddie.com/remail", color: "#f43f5e" },
+  { id: "part", product: "RanEddie Part", plan: "Part Care", monthly: 3.99, detail: "Accidental damage cover for your devices", href: "https://raneddie.com/raneddie-part", color: "#ffb020" },
+  { id: "edittime", product: "EditTime", plan: "Pro", monthly: 19.99, detail: "AI editing tools, collaboration, all exports", href: "https://raneddie.com/edittime", color: "#ff3d7f" },
 ];
 
 const money = (n: number) => (n === 0 ? "Free" : `$${n.toFixed(2)}`);
 
 export default function BillingCenter({ name, email }: { name: string; email: string }) {
-  const [cycle, setCycle] = useState<Cycle>("monthly");
   const [dialog, setDialog] = useState<string | null>(null);
-  const current = PLANS[0];
+  const active: Sub[] = []; // filled from the payment provider once connected
 
   return (
     <>
       <div className="account-panel billing-current">
         <div className="account-panel-heading">
           <div>
-            <span className="account-overline">YOUR PLAN</span>
-            <h3>{current.name}</h3>
-            <p>{current.tagline}</p>
+            <span className="account-overline">OVERVIEW</span>
+            <h3>Your subscriptions</h3>
+            <p>Every subscription you have across RanEddie products, in one place.</p>
           </div>
-          <span className="account-verified">Active</span>
         </div>
         <div className="billing-current-grid">
-          <div><small>Price</small><b>Free</b></div>
-          <div><small>Renews</small><b>—</b></div>
-          <div><small>Storage</small><b>5 GB</b></div>
-          <div><small>Members</small><b>Just you</b></div>
+          <div><small>Active</small><b>{active.length}</b></div>
+          <div><small>Monthly total</small><b>{money(active.reduce((t, s) => t + s.monthly, 0)) === "Free" ? "$0.00" : money(active.reduce((t, s) => t + s.monthly, 0))}</b></div>
+          <div><small>Next charge</small><b>—</b></div>
+          <div><small>Payment method</small><b>None</b></div>
         </div>
       </div>
 
       <div className="account-panel">
         <div className="account-panel-heading">
           <div>
-            <span className="account-overline">PLANS</span>
-            <h3>Choose what fits you</h3>
-            <p>Switch or cancel any time. Prices include applicable taxes where required.</p>
-          </div>
-          <div className="billing-cycle" role="tablist" aria-label="Billing cycle">
-            <button role="tab" aria-selected={cycle === "monthly"} className={cycle === "monthly" ? "active" : ""} onClick={() => setCycle("monthly")}>Monthly</button>
-            <button role="tab" aria-selected={cycle === "yearly"} className={cycle === "yearly" ? "active" : ""} onClick={() => setCycle("yearly")}>Yearly <em>2 months free</em></button>
+            <span className="account-overline">RANEDDIE PRODUCTS</span>
+            <h3>Subscriptions by product</h3>
+            <p>Manage, upgrade or cancel subscriptions you started in any RanEddie product.</p>
           </div>
         </div>
-        <div className="billing-plans">
-          {PLANS.map((p) => {
-            const price = cycle === "monthly" ? p.monthly : p.yearly;
-            const isCurrent = p.id === current.id;
+        <div className="billing-subs">
+          {PRODUCT_SUBS.map((s) => {
+            const on = active.some((a) => a.id === s.id);
             return (
-              <article key={p.id} className={`billing-plan${p.highlight ? " highlight" : ""}${isCurrent ? " current" : ""}`}>
-                {p.highlight && <span className="billing-badge">Most popular</span>}
-                <h4>{p.name}</h4>
-                <p>{p.tagline}</p>
-                <div className="billing-price">
-                  <b>{money(price)}</b>
-                  {price > 0 && <small>/{cycle === "monthly" ? "month" : "year"}</small>}
+              <div key={s.id} className="billing-sub">
+                <i style={{ background: s.color }}>{s.product.slice(0, 1)}</i>
+                <div className="billing-sub-copy">
+                  <b>{s.product} <small>{s.plan}</small></b>
+                  <p>{s.detail}</p>
                 </div>
-                <ul>{p.features.map((f) => <li key={f}>{f}</li>)}</ul>
-                {isCurrent ? (
-                  <button className="account-outline-btn billing-btn" disabled>Current plan</button>
-                ) : (
-                  <button className="account-primary-btn billing-btn" onClick={() => setDialog(`Upgrade to ${p.name}`)}>Upgrade</button>
-                )}
-              </article>
+                <div className="billing-sub-price"><b>{money(s.monthly)}</b><small>/month</small></div>
+                <span className={on ? "account-verified" : "account-pending"}>{on ? "Active" : "Not subscribed"}</span>
+                <button className="account-text-action" onClick={() => setDialog(`${on ? "Manage" : "Subscribe to"} ${s.product} ${s.plan}`)}>{on ? "Manage" : "Subscribe"}</button>
+              </div>
             );
           })}
         </div>
