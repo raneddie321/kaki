@@ -37,7 +37,7 @@ function Connect() {
       const res = await fetch("/api/game/code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ challenge }),
+        body: JSON.stringify({ challenge, app: params.get("game") }),
       });
       const data = (await res.json()) as { code?: string };
       if (!res.ok || !data.code) throw new Error();

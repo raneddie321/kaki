@@ -6,8 +6,9 @@ import { json } from "@/lib/game-auth";
 export async function POST(req: Request) {
   const { userId } = await auth();
   if (!userId) return json({ error: "signed_out" }, 401);
-  const body = (await req.json().catch(() => null)) as { challenge?: string } | null;
+  const body = (await req.json().catch(() => null)) as { challenge?: string; app?: string } | null;
   if (!body?.challenge || !PKCE_RE.test(body.challenge)) return json({ error: "bad_challenge" }, 400);
-  const code: LinkCode = { t: "code", sub: userId, ch: body.challenge, exp: Date.now() + 10 * 60_000 };
+  if (body.app !== "snakebrawl" && body.app !== "fizzapp") return json({ error: "bad_app" }, 400);
+  const code: LinkCode = { t: "code", sub: userId, ch: body.challenge, app: body.app, exp: Date.now() + 10 * 60_000 };
   return json({ code: sign(code) });
 }

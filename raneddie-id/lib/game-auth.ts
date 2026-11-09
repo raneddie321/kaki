@@ -2,8 +2,14 @@ import "server-only";
 import { clerkClient } from "@clerk/nextjs/server";
 import { verify, type GameToken } from "./game-token";
 
-export type PrivateMeta = { gameTokenVersion?: number; snakeBrawlSave?: string; snakeBrawlSaveAt?: number;
-  fizzappSave?: string; fizzappSaveAt?: number };
+export type PrivateMeta = {
+  gameTokenVersion?: number;
+  snakeBrawlSave?: string;
+  snakeBrawlSaveAt?: number;
+  fizzappSave?: string;
+  fizzappSaveAt?: number;
+  connectedProducts?: Partial<Record<"snakebrawl" | "fizzapp", { version: number; connectedAt: number | null }>>;
+};
 
 /** The player behind a game request (Authorization: Bearer <game token>), or null. */
 export async function gameUser(req: Request) {
@@ -14,7 +20,10 @@ export async function gameUser(req: Request) {
   try {
     const user = await client.users.getUser(tok.sub);
     const meta = (user.privateMetadata ?? {}) as PrivateMeta;
-    if ((meta.gameTokenVersion ?? 0) !== tok.v || user.banned || user.locked) return null;
+    const validProductToken = tok.app
+      ? meta.connectedProducts?.[tok.app]?.version === tok.v && !!meta.connectedProducts?.[tok.app]?.connectedAt
+      : (meta.gameTokenVersion ?? 0) === tok.v;
+    if (!validProductToken || user.banned || user.locked) return null;
     return { client, user, meta };
   } catch {
     return null;

@@ -139,8 +139,6 @@ function SignUp() {
     go("human");
   }
 
-  const birthDate = month && day && year ? `${year}-${String(Number(month) + 1).padStart(2, "0")}-${day.padStart(2, "0")}` : "";
-
   // ---------------------------------------------------------------- step 4: security check
   // Ticking the box starts the sign-up with Clerk. That is when Clerk's bot protection runs:
   // most people pass invisibly, suspicious sign-ups get a Cloudflare Turnstile challenge.
@@ -152,7 +150,6 @@ function SignUp() {
     const { error } = await signUp.password({
       emailAddress: email.trim(),
       password,
-      unsafeMetadata: { birthDate, country },
     });
     if (error) {
       setHuman("idle");
