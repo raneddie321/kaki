@@ -360,7 +360,7 @@ export default function AccountCenterPage() {
               <div className="account-security-row"><div><b>Identity data</b><p>Your name, username, email and profile photo are stored in Clerk.</p></div><span className="account-verified">Clerk</span></div>
               <div className="account-security-row"><div><b>Account identifier</b><p className="account-mono">{user.id}</p></div><button className="account-text-action" onClick={() => navigator.clipboard?.writeText(user.id)}>Copy ID</button></div>
               <div className="account-security-row"><div><b>Account deletion</b><p>{user.deleteSelfEnabled ? "Your Clerk instance allows self-service account deletion." : "Self-service deletion is not currently enabled in the Clerk instance."}</p></div><span className="account-pending">{user.deleteSelfEnabled ? "Available" : "Not enabled"}</span></div>
-              {user.deleteSelfEnabled && <button className="account-danger-btn" onClick={async () => { if (window.confirm("Permanently delete your RanEddie ID? This action cannot be undone.")) { await user.delete(); await signOut({ redirectUrl: "/" }); } }}>Delete my account</button>}
+              {user.deleteSelfEnabled && <button className="account-danger-btn" onClick={async () => { if (window.confirm("Permanently delete your RanEddie ID? This action cannot be undone.")) { await user.delete(); window.location.assign("/"); } }}>Delete my account</button>}
             </div>
           )}
 
