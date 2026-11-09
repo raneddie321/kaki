@@ -1,9 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useClerk, useReverification, useUser } from "@clerk/nextjs";
+import { useClerk, useReverification, useSession, useUser } from "@clerk/nextjs";
 
 type Section = "overview" | "profile" | "security" | "products" | "billing" | "privacy" | "preferences";
+type AccountSession = {
+  id: string;
+  status: string;
+  lastActiveAt: Date;
+  latestActivity?: { browserName?: string; deviceType?: string; city?: string; country?: string };
+  revoke: () => Promise<unknown>;
+};
 
 const navigation: { id: Section; label: string; description: string; icon: string }[] = [
   { id: "overview", label: "Overview", description: "Your account at a glance", icon: "◫" },
@@ -28,6 +35,7 @@ function dateLabel(date?: Date | null) {
 export default function AccountCenterPage() {
   const { isLoaded, isSignedIn, user } = useUser();
   const { signOut } = useClerk();
+  const { session: currentSession } = useSession();
   const createEmailAddress = useReverification((email: string) => user?.createEmailAddress({ email }));
   const setPrimaryEmailAddress = useReverification((id: string) => user?.update({ primaryEmailAddressId: id }));
   const [section, setSection] = useState<Section>("overview");
@@ -49,6 +57,9 @@ export default function AccountCenterPage() {
   const [connectedProducts, setConnectedProducts] = useState<{ snakebrawl: number | null; fizzapp: number | null }>({ snakebrawl: null, fizzapp: null });
   const [productsLoading, setProductsLoading] = useState(false);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<AccountSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [revokingSession, setRevokingSession] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -75,12 +86,39 @@ export default function AccountCenterPage() {
     return () => { active = false; };
   }, [isLoaded, isSignedIn]);
 
+  useEffect(() => {
+    if (section !== "security" || !user) return;
+    let active = true;
+    setSessionsLoading(true);
+    user.getSessions()
+      .then((items) => { if (active) setSessions(items as AccountSession[]); })
+      .catch(() => { if (active) setNotice({ tone: "error", message: "Active sessions could not be loaded." }); })
+      .finally(() => { if (active) setSessionsLoading(false); });
+    return () => { active = false; };
+  }, [section, user]);
+
   const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? "";
   const emailVerified = user?.primaryEmailAddress?.verification?.status === "verified";
   const displayName = useMemo(() => {
     if (!user) return "Your account";
     return user.fullName || user.username || primaryEmail || "RanEddie member";
   }, [user, primaryEmail]);
+
+  async function revokeOtherSession(sessionId: string) {
+    const target = sessions.find((item) => item.id === sessionId);
+    if (!target || sessionId === currentSession?.id) return;
+    setRevokingSession(sessionId);
+    setNotice(null);
+    try {
+      await target.revoke();
+      setSessions((current) => current.filter((item) => item.id !== sessionId));
+      setNotice({ tone: "success", message: "The selected session was revoked." });
+    } catch (error) {
+      setNotice({ tone: "error", message: error instanceof Error ? error.message : "The session could not be revoked." });
+    } finally {
+      setRevokingSession(null);
+    }
+  }
 
   async function disconnectProduct(app: "snakebrawl" | "fizzapp") {
     setDisconnecting(app);
@@ -377,7 +415,21 @@ export default function AccountCenterPage() {
                 <div className="account-panel-heading"><div><span className="account-overline">AUTHENTICATION</span><h3>Account protection</h3></div></div>
                 <div className="account-security-row"><div><b>Two-factor authentication</b><p>{user.twoFactorEnabled ? "Two-factor authentication is enabled." : "Two-factor authentication is not enabled on this account."}</p></div><span className={user.twoFactorEnabled ? "account-verified" : "account-pending"}>{user.twoFactorEnabled ? "Enabled" : "Not enabled"}</span></div>
                 <div className="account-security-row"><div><b>Authenticator app</b><p>Authenticator enrollment is controlled by your Clerk instance settings.</p></div><span className={user.totpEnabled ? "account-verified" : "account-pending"}>{user.totpEnabled ? "Enabled" : "Not enabled"}</span></div>
-                <div className="account-security-row"><div><b>Current session</b><p>You are signed in to this RanEddie ID session.</p></div><span className="account-verified">Active</span></div>
+              </div>
+              <div className="account-panel">
+                <div className="account-panel-heading"><div><span className="account-overline">ACTIVE DEVICES</span><h3>Sessions and devices</h3><p>Review active sign-ins and revoke sessions you no longer recognize.</p></div><span className="account-verified">{sessions.length} active</span></div>
+                {sessionsLoading ? <p className="account-muted-paragraph">Loading your active sessions…</p> : sessions.length === 0 ? <p className="account-muted-paragraph">No active sessions were returned by Clerk.</p> : (
+                  <div className="account-session-list">
+                    {sessions.map((item) => {
+                      const activity = item.latestActivity;
+                      const isCurrent = item.id === currentSession?.id;
+                      return <div className="account-security-row" key={item.id}>
+                        <div><b>{activity?.browserName || activity?.deviceType || "Signed-in device"} {isCurrent ? "· This device" : ""}</b><p>{[activity?.city, activity?.country].filter(Boolean).join(", ") || "Location unavailable"} · Last active {item.lastActiveAt ? new Date(item.lastActiveAt).toLocaleString() : "Unknown"}</p></div>
+                        {isCurrent ? <span className="account-verified">Current</span> : <button className="account-text-action" disabled={revokingSession === item.id} onClick={() => revokeOtherSession(item.id)}>{revokingSession === item.id ? "Revoking…" : "Revoke"}</button>}
+                      </div>;
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}
