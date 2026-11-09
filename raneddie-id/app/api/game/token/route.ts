@@ -12,7 +12,20 @@ export async function POST(req: Request) {
   const client = await clerkClient();
   const user = await client.users.getUser(code.sub).catch(() => null);
   if (!user || user.banned || user.locked) return json({ error: "no_user" }, 403);
-  const v = ((user.privateMetadata ?? {}) as PrivateMeta).gameTokenVersion ?? 0;
-  const token: GameToken = { t: "game", sub: user.id, v, iat: Date.now() };
+  const meta = (user.privateMetadata ?? {}) as PrivateMeta;
+  const app = code.app;
+  let token: GameToken;
+  if (app === "snakebrawl" || app === "fizzapp") {
+    const version = (meta.connectedProducts?.[app]?.version ?? 0) + 1;
+    const connectedAt = Date.now();
+    await client.users.updateUserMetadata(user.id, {
+      privateMetadata: { connectedProducts: { [app]: { version, connectedAt } } },
+    });
+    token = { t: "game", sub: user.id, v: version, app, iat: connectedAt };
+  } else {
+    // Backward compatibility for short-lived link codes issued before product-bound tokens.
+    const version = meta.gameTokenVersion ?? 0;
+    token = { t: "game", sub: user.id, v: version, iat: Date.now() };
+  }
   return json({ token: sign(token), username: user.username ?? "" });
 }
