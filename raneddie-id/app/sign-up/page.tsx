@@ -21,6 +21,9 @@ import {
   Spinner,
   Stepper,
 } from "@/components/ui";
+import { ClerkGate } from "@/components/clerk-gate";
+import { saveProfileDetails } from "@/lib/profile-client";
+import { toBirthDate } from "@/lib/profile";
 import {
   MIN_AGE,
   MONTHS,
@@ -71,6 +74,10 @@ function SignUp() {
   const countryList = useMemo(() => countries(), []);
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
+
+  /** Saves the birth date and country to the new account once the player is signed in. */
+  const saveDetails = () =>
+    saveProfileDetails({ birthDate: toBirthDate(Number(year), Number(month), Number(day)), country });
 
   function go(next: Step) {
     setError(null);
@@ -185,7 +192,7 @@ function SignUp() {
       }
 
       if (signUp.status === "complete") {
-        await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1")) });
+        await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1"), saveDetails) });
         return;
       }
 
@@ -241,7 +248,7 @@ function SignUp() {
       return;
     }
     if (signUp.status === "complete") {
-      const { error } = await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1")) });
+      const { error } = await signUp.finalize({ navigate: navigateAfterAuth(router, target("/?welcome=1"), saveDetails) });
       if (error) {
         setBusy(false);
         setError(clerkError(error).message);
@@ -257,6 +264,7 @@ function SignUp() {
 
   return (
     <AuthShell>
+      <ClerkGate>
       {step === "email" && (
         <form key="email" onSubmit={submitEmail} className="rid-step" noValidate>
           {stepper}
@@ -427,6 +435,8 @@ function SignUp() {
           <BackButton onClick={() => go("details")} />
           {stepper}
           <Heading title="Quick security check" subtitle="Confirm you're a real player, not a bot." />
+          {/* Where Clerk shows its CAPTCHA challenge when Bot protection is enabled in the Clerk dashboard */}
+          <div id="clerk-captcha" data-cl-theme="light" data-cl-size="flexible" className="empty:hidden mb-4" />
           {error && (
             <Alert>
               {error}
@@ -542,8 +552,12 @@ function SignUp() {
             type="button"
             onClick={async () => {
               setError(null);
-              const r = await signUp.verifications.sendEmailCode();
-              if (r.error) setError(clerkError(r.error).message);
+              try {
+                const r = await signUp.verifications.sendEmailCode();
+                if (r.error) setError(clerkError(r.error).message);
+              } catch (cause) {
+                setError(clerkError(cause).message);
+              }
             }}
             className="mt-4 w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-700"
           >
@@ -551,6 +565,7 @@ function SignUp() {
           </button>
         </form>
       )}
+      </ClerkGate>
     </AuthShell>
   );
 }

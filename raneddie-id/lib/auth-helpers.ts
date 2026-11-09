@@ -3,6 +3,13 @@
 /** Players must be at least this old to create a RanEddie ID (COPPA: no accounts for under-13s). */
 export const MIN_AGE = 13;
 
+/**
+ * Must match the password minimum configured in the Clerk dashboard (Configure → Password).
+ * Both the Development and Production instances currently enforce 15 characters, so the forms
+ * check the same number up front instead of letting Clerk reject the password later.
+ */
+export const MIN_PASSWORD_LENGTH = 15;
+
 type ClerkLikeError = {
   code?: string;
   message?: string;
@@ -12,6 +19,10 @@ type ClerkLikeError = {
 
 /** The first error Clerk returned, in a shape that's easy to show. */
 export function clerkError(error: unknown): { code: string; message: string; param?: string } {
+  // Network failures (offline, blocked request, Clerk unreachable) surface as plain errors, not Clerk errors
+  if (error instanceof TypeError || (error instanceof Error && /failed to fetch|network|load failed/i.test(error.message))) {
+    return { code: "network_error", message: "We couldn't reach RanEddie ID. Check your connection and try again." };
+  }
   const e = (error ?? {}) as ClerkLikeError;
   const first = e.errors?.[0];
   const code = first?.code || e.code || "unknown";
@@ -28,6 +39,10 @@ const FRIENDLY: Record<string, string> = {
   form_username_exists: "That username is taken. Try another one.",
   form_password_pwned:
     "This password has appeared in a data leak on another site. Please choose a different one.",
+  form_password_length_too_short: `Your password needs at least ${MIN_PASSWORD_LENGTH} characters.`,
+  session_exists: "You're already signed in. Open your account instead.",
+  captcha_invalid: "The security check failed. Please try again.",
+  captcha_unavailable: "The security check is unavailable right now. Please try again in a moment.",
   form_code_incorrect: "That code isn't right. Check the email and try again.",
   verification_expired: "That code has expired. Send a new one.",
   too_many_requests: "Too many attempts. Please wait a minute and try again.",
@@ -39,18 +54,18 @@ export function isEmail(s: string) {
 
 /** Password rule shown while typing (Clerk enforces its own on top); the meter suggests the rest. */
 export function passwordChecks(pw: string) {
-  return [{ ok: pw.length >= 8, label: "At least 8 characters" }];
+  return [{ ok: pw.length >= MIN_PASSWORD_LENGTH, label: `At least ${MIN_PASSWORD_LENGTH} characters` }];
 }
 
 export function passwordStrength(pw: string): { score: number; label: string } {
   if (!pw) return { score: 0, label: "" };
   let s = 0;
-  if (pw.length >= 8) s++;
-  if (pw.length >= 12) s++;
+  if (pw.length >= MIN_PASSWORD_LENGTH) s++;
+  if (pw.length >= MIN_PASSWORD_LENGTH + 5) s++;
   if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
   if (/\d/.test(pw)) s++;
   if (/[^A-Za-z0-9]/.test(pw)) s++;
-  const score = Math.min(4, Math.max(1, s - (pw.length < 8 ? 1 : 0)));
+  const score = Math.min(4, Math.max(1, s - (pw.length < MIN_PASSWORD_LENGTH ? 1 : 0)));
   return { score, label: ["", "Weak", "Fair", "Good", "Strong"][score] };
 }
 
@@ -116,23 +131,29 @@ export function guessCountry(): string {
   return "";
 }
 
-/** Sends the signed-in player to `to`, through Clerk's decorateUrl (needed for Safari cookie refresh). */
+/**
+ * Sends the signed-in player to `to`, through Clerk's decorateUrl (needed for Safari cookie refresh).
+ * `beforeNavigate` runs once the session is active, right before leaving the page (used to save
+ * the profile details collected at sign-up). It must never block the sign-in, so errors are ignored.
+ */
 export function navigateAfterAuth(
   router: { push: (url: string) => void },
   to = "/",
-): (args: { session?: { currentTask?: unknown } | null; decorateUrl: (url: string) => string }) => void {
-  return ({ session, decorateUrl }) => {
+  beforeNavigate?: () => Promise<unknown>,
+): (args: { session?: { currentTask?: unknown } | null; decorateUrl: (url: string) => string }) => Promise<void> {
+  return async ({ session, decorateUrl }) => {
     if (session?.currentTask) {
       // Session tasks (e.g. choose an organization) are not used by RanEddie ID yet
       console.warn("Pending session task", session.currentTask);
     }
+    if (beforeNavigate) await beforeNavigate().catch(() => undefined);
     const url = decorateUrl(to);
     if (url.startsWith("http")) window.location.href = url;
     else router.push(url);
   };
 }
 
-/** Safe redirect targets: local paths or explicitly trusted RanEddie product origins. */
+/** Product origins that RanEddie ID may send a player back to after signing in. */
 const TRUSTED_REDIRECT_ORIGINS = new Set([
   "https://raneddie.com",
   "https://www.raneddie.com",
@@ -140,9 +161,26 @@ const TRUSTED_REDIRECT_ORIGINS = new Set([
   "https://fizzbrowser.vercel.app",
 ]);
 
+/**
+ * Safe redirect targets: local paths on this site, or https URLs on a trusted RanEddie origin.
+ *
+ * Browsers strip tabs and newlines from URLs and treat "\\" like "/", so "/\t/evil.com" and
+ * "/\\evil.com" both end up as "//evil.com" (a different site). Anything containing control
+ * characters or backslashes is rejected, and the result is re-parsed to confirm the origin.
+ */
 export function safeRedirect(r: string | null | undefined): string | null {
-  if (!r) return null;
-  if (r.startsWith("/") && !r.startsWith("//") && !r.startsWith("/\\") ) return r;
+  if (!r || r.length > 2048) return null;
+  if (/[\u0000-\u001f\u007f\\]/.test(r)) return null;
+  if (r.startsWith("/")) {
+    if (r.startsWith("//")) return null;
+    try {
+      const base = "https://local.invalid";
+      const url = new URL(r, base);
+      return url.origin === base ? r : null;
+    } catch {
+      return null;
+    }
+  }
   try {
     const url = new URL(r);
     if (url.protocol !== "https:" || !TRUSTED_REDIRECT_ORIGINS.has(url.origin)) return null;

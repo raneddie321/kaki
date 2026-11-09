@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { Alert, AuthShell, Button, CheckIcon, Heading, LinkButton, ShieldIcon, Spinner } from "@/components/ui";
+import { ClerkLoadFailed, useClerkStatus } from "@/components/clerk-gate";
 
 /** The games we can connect, and the link that sends the player back into each one. */
 const GAMES: Record<string, { name: string; returnUrl: string }> = {
@@ -20,6 +21,7 @@ function Connect() {
   const params = useSearchParams();
   const { isLoaded, isSignedIn, user } = useUser();
   const { signOut } = useClerk();
+  const clerkStatus = useClerkStatus();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [returnLink, setReturnLink] = useState<string | null>(null);
@@ -65,9 +67,13 @@ function Connect() {
   if (!isLoaded) {
     return (
       <AuthShell>
-        <div className="flex justify-center py-16 text-brand-500">
-          <Spinner className="h-8 w-8" />
-        </div>
+        {clerkStatus === "failed" ? (
+          <ClerkLoadFailed />
+        ) : (
+          <div className="flex justify-center py-16 text-brand-500" role="status" aria-label="Loading">
+            <Spinner className="h-8 w-8" />
+          </div>
+        )}
       </AuthShell>
     );
   }

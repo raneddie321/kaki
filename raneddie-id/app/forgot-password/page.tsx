@@ -19,6 +19,7 @@ import {
   PasswordField,
   Stepper,
 } from "@/components/ui";
+import { ClerkGate } from "@/components/clerk-gate";
 import { clerkError, isEmail, navigateAfterAuth, passwordChecks } from "@/lib/auth-helpers";
 
 type Step = "email" | "code" | "password";
@@ -38,38 +39,51 @@ function ForgotPassword() {
   const [busy, setBusy] = useState(false);
   const loading = busy || fetchStatus === "fetching";
 
+  /**
+   * Runs one step of the form. The spinner is always cleared afterwards — even when Clerk or the
+   * network throws — except when the player is being sent on to the next page.
+   */
+  async function run(task: () => Promise<"navigating" | void>) {
+    setError(null);
+    setBusy(true);
+    let navigating = false;
+    try {
+      navigating = (await task()) === "navigating";
+    } catch (cause) {
+      setError(clerkError(cause).message);
+    } finally {
+      if (!navigating) setBusy(false);
+    }
+  }
+
   // Step 1: send a reset code to the email
-  async function sendCode(e?: FormEvent) {
+  function sendCode(e?: FormEvent) {
     e?.preventDefault();
     setError(null);
     setFieldError({});
     if (!isEmail(email)) return setFieldError({ email: "Enter a valid email address." });
-    setBusy(true);
-    const created = await signIn.create({ identifier: email.trim() });
-    if (created.error) {
-      setBusy(false);
-      return setError(clerkError(created.error).message);
-    }
-    const sent = await signIn.resetPasswordEmailCode.sendCode();
-    setBusy(false);
-    if (sent.error) return setError(clerkError(sent.error).message);
-    setStep("code");
+    return run(async () => {
+      const created = await signIn.create({ identifier: email.trim() });
+      if (created.error) return setError(clerkError(created.error).message);
+      const sent = await signIn.resetPasswordEmailCode.sendCode();
+      if (sent.error) return setError(clerkError(sent.error).message);
+      setStep("code");
+    });
   }
 
   // Step 2: check the code
-  async function verifyCode(e: FormEvent) {
+  function verifyCode(e: FormEvent) {
     e.preventDefault();
-    setError(null);
-    setBusy(true);
-    const { error } = await signIn.resetPasswordEmailCode.verifyCode({ code: code.trim() });
-    setBusy(false);
-    if (error) return setError(clerkError(error).message);
-    setStep("password");
+    return run(async () => {
+      const { error } = await signIn.resetPasswordEmailCode.verifyCode({ code: code.trim() });
+      if (error) return setError(clerkError(error).message);
+      setStep("password");
+    });
   }
 
   // Step 3: choose a new password; the player is signed in afterwards
   const checks = passwordChecks(password);
-  async function submitPassword(e: FormEvent) {
+  function submitPassword(e: FormEvent) {
     e.preventDefault();
     setError(null);
     const errs: Record<string, string | null> = {};
@@ -77,17 +91,25 @@ function ForgotPassword() {
     if (confirm !== password) errs.confirm = "Passwords don't match.";
     if (errs.password || errs.confirm) return setFieldError(errs);
     setFieldError({});
-    setBusy(true);
-    const { error } = await signIn.resetPasswordEmailCode.submitPassword({ password, signOutOfOtherSessions: true });
-    if (error) {
-      setBusy(false);
-      return setError(clerkError(error).message);
-    }
-    if (signIn.status === "complete") {
-      await signIn.finalize({ navigate: navigateAfterAuth(router, target("/?reset=1")) });
-    } else {
-      setBusy(false);
+    return run(async () => {
+      const { error } = await signIn.resetPasswordEmailCode.submitPassword({ password, signOutOfOtherSessions: true });
+      if (error) return setError(clerkError(error).message);
+      if (signIn.status === "complete") {
+        const done = await signIn.finalize({ navigate: navigateAfterAuth(router, target("/?reset=1")) });
+        if (done.error) return setError(clerkError(done.error).message);
+        return "navigating";
+      }
       setError("Your password was changed. Please sign in with the new password.");
+    });
+  }
+
+  async function resendCode() {
+    setError(null);
+    try {
+      const r = await signIn.resetPasswordEmailCode.sendCode();
+      if (r.error) setError(clerkError(r.error).message);
+    } catch (cause) {
+      setError(clerkError(cause).message);
     }
   }
 
@@ -96,6 +118,7 @@ function ForgotPassword() {
 
   return (
     <AuthShell>
+      <ClerkGate>
       {step === "email" && (
         <form key="email" onSubmit={sendCode} className="rid-step" noValidate>
           <Link
@@ -164,11 +187,7 @@ function ForgotPassword() {
           </Button>
           <button
             type="button"
-            onClick={async () => {
-              setError(null);
-              const r = await signIn.resetPasswordEmailCode.sendCode();
-              if (r.error) setError(clerkError(r.error).message);
-            }}
+            onClick={resendCode}
             className="mt-4 w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-700"
           >
             Send a new code
@@ -217,6 +236,7 @@ function ForgotPassword() {
           </Button>
         </form>
       )}
+      </ClerkGate>
     </AuthShell>
   );
 }
