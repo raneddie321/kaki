@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useClerk, useReverification, useSession, useUser } from "@clerk/nextjs";
 import { PASSWORD_MIN_LENGTH, clerkError } from "@/lib/auth-helpers";
+import BillingCenter from "@/components/billing-center";
 
 type Section = "overview" | "profile" | "security" | "products" | "billing" | "privacy" | "preferences";
 type AccountSession = {
@@ -528,11 +529,7 @@ export default function AccountCenterPage() {
             </div>
           )}
 
-          {section === "billing" && (
-            <div className="account-panel account-empty-panel">
-              <div className="account-empty-icon">▤</div><span className="account-overline">BILLING CENTER</span><h3>Payments are not connected yet</h3><p>RanEddie ID is ready to host a unified billing experience, but no payment processor is currently configured. No payment methods, subscriptions or invoices are being fabricated.</p><div className="account-info-note">Your identity and profile are active. Billing will become available after a supported payment provider is configured.</div>
-            </div>
-          )}
+          {section === "billing" && <BillingCenter name={[user.firstName, user.lastName].filter(Boolean).join(" ")} email={primaryEmail} />}
 
           {section === "privacy" && (
             <div className="account-panel">
