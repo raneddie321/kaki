@@ -136,6 +136,7 @@ export function navigateAfterAuth(
 const TRUSTED_REDIRECT_ORIGINS = new Set([
   "https://raneddie.com",
   "https://www.raneddie.com",
+  "https://fizz.raneddie.com",
   "https://fizzbrowser.vercel.app",
 ]);
 
