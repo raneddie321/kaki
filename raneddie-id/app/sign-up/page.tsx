@@ -542,8 +542,12 @@ function SignUp() {
             type="button"
             onClick={async () => {
               setError(null);
-              const r = await signUp.verifications.sendEmailCode();
-              if (r.error) setError(clerkError(r.error).message);
+              try {
+                const r = await signUp.verifications.sendEmailCode();
+                if (r.error) setError(clerkError(r.error).message);
+              } catch (cause) {
+                setError(clerkError(cause).message);
+              }
             }}
             className="mt-4 w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-700"
           >

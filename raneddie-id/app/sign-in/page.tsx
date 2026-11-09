@@ -8,7 +8,7 @@ import { useSignIn } from "@clerk/nextjs";
 import { Alert, AuthShell, BackButton, Button, Field, Heading, IdentityChip, MailIcon, PasswordField } from "@/components/ui";
 import { clerkError, isEmail, navigateAfterAuth } from "@/lib/auth-helpers";
 
-type Step = "email" | "password" | "verify";
+type Step = "email" | "password" | "verify" | "totp";
 
 function SignIn() {
   const { signIn, fetchStatus } = useSignIn();
@@ -27,63 +27,79 @@ function SignIn() {
     await signIn.finalize({ navigate: navigateAfterAuth(router, target()) });
   }
 
+  /** Runs a step with the button spinner on, and always turns it off again (even if Clerk throws). */
+  async function run(step: () => Promise<void>) {
+    setError(null);
+    setBusy(true);
+    try {
+      await step();
+    } catch (cause) {
+      setError(clerkError(cause).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Step 1: email. Starting the sign-in here tells the player right away if there's no account.
-  async function submitEmail(e: FormEvent) {
+  function submitEmail(e: FormEvent) {
     e.preventDefault();
     setError(null);
     if (!isEmail(email)) return setError("Enter a valid email address.");
-    setBusy(true);
-    const { error } = await signIn.create({ identifier: email.trim() });
-    setBusy(false);
-    if (error) return setError(clerkError(error).message);
-    setStep("password");
+    return run(async () => {
+      const { error } = await signIn.create({ identifier: email.trim() });
+      if (error) return setError(clerkError(error).message);
+      setStep("password");
+    });
   }
 
   // Step 2: password
-  async function submitPassword(e: FormEvent) {
+  function submitPassword(e: FormEvent) {
     e.preventDefault();
     setError(null);
     if (!password) return setError("Enter your password.");
-    setBusy(true);
-    const { error } = await signIn.password({ password });
-    if (error) {
-      setBusy(false);
-      return setError(clerkError(error).message);
-    }
-    if (signIn.status === "complete") {
-      await finish();
-      return;
-    }
-    if (signIn.status === "needs_client_trust" || signIn.status === "needs_second_factor") {
-      // New device: Clerk asks for a code sent to the player's email
-      const canEmail = signIn.supportedSecondFactors?.some((f) => f.strategy === "email_code");
-      if (canEmail) {
-        const sent = await signIn.mfa.sendEmailCode();
-        setBusy(false);
-        if (sent.error) return setError(clerkError(sent.error).message);
-        setStep("verify");
-        return;
+    return run(async () => {
+      const { error } = await signIn.password({ password });
+      if (error) return setError(clerkError(error).message);
+      if (signIn.status === "complete") return finish();
+      if (signIn.status === "needs_client_trust" || signIn.status === "needs_second_factor") {
+        // New device: Clerk asks for a code sent to the player's email
+        const canEmail = signIn.supportedSecondFactors?.some((f) => f.strategy === "email_code");
+        if (canEmail) {
+          const sent = await signIn.mfa.sendEmailCode();
+          if (sent.error) return setError(clerkError(sent.error).message);
+          setStep("verify");
+          return;
+        }
+        const canTotp = signIn.supportedSecondFactors?.some((f) => f.strategy === "totp");
+        if (canTotp) {
+          setStep("totp");
+          return;
+        }
       }
-    }
-    setBusy(false);
-    setError("This account needs another sign-in step that RanEddie ID doesn't support yet.");
+      setError("This account needs another sign-in step that RanEddie ID doesn't support yet.");
+    });
   }
 
   // Step 3 (only on new devices): email code
-  async function submitCode(e: FormEvent) {
+  function submitCode(e: FormEvent) {
     e.preventDefault();
-    setError(null);
-    setBusy(true);
-    const { error } = await signIn.mfa.verifyEmailCode({ code: code.trim() });
-    if (error) {
-      setBusy(false);
-      return setError(clerkError(error).message);
-    }
-    if (signIn.status === "complete") await finish();
-    else {
-      setBusy(false);
+    return run(async () => {
+      const { error } = await signIn.mfa.verifyEmailCode({ code: code.trim() });
+      if (error) return setError(clerkError(error).message);
+      if (signIn.status === "complete") return finish();
       setError("We couldn't finish signing you in. Please try again.");
-    }
+    });
+  }
+
+  // Step 3 (accounts with an authenticator app): TOTP code
+  function submitTotp(e: FormEvent) {
+    e.preventDefault();
+    return run(async () => {
+      const { error } = await signIn.mfa.verifyTOTP({ code: code.trim() });
+      if (error) return setError(clerkError(error).message);
+      if (signIn.status === "complete") return finish();
+      setError("We couldn't finish signing you in. Please try again.");
+    });
   }
 
   function restart() {
@@ -183,15 +199,39 @@ function SignIn() {
           </Button>
           <button
             type="button"
-            onClick={async () => {
-              setError(null);
-              const r = await signIn.mfa.sendEmailCode();
-              if (r.error) setError(clerkError(r.error).message);
-            }}
+            onClick={() =>
+              run(async () => {
+                const r = await signIn.mfa.sendEmailCode();
+                if (r.error) setError(clerkError(r.error).message);
+              })
+            }
             className="mt-4 w-full text-center text-sm font-semibold text-brand-600 hover:text-brand-700"
           >
             Send a new code
           </button>
+        </form>
+      )}
+
+      {step === "totp" && (
+        <form key="totp" onSubmit={submitTotp} className="rid-step" noValidate>
+          <BackButton onClick={restart} label="Start over" />
+          <Heading title="Two-step verification" subtitle="Enter the 6-digit code from your authenticator app." />
+          {error && <Alert>{error}</Alert>}
+          <Field
+            label="Authenticator code"
+            name="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="000000"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            className="[&_input]:text-center [&_input]:font-mono [&_input]:text-xl [&_input]:tracking-[0.5em]"
+            autoFocus
+          />
+          <Button type="submit" loading={loading} className="mt-6" disabled={code.length < 6}>
+            Verify and sign in
+          </Button>
         </form>
       )}
     </AuthShell>
