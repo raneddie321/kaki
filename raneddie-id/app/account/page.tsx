@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type FormEvent } from "react";
-import { useClerk, useUser } from "@clerk/nextjs";
+import { useClerk, useReverification, useUser } from "@clerk/nextjs";
 
 type Section = "overview" | "profile" | "security" | "products" | "billing" | "privacy" | "preferences";
 
@@ -28,6 +28,8 @@ function dateLabel(date?: Date | null) {
 export default function AccountCenterPage() {
   const { isLoaded, isSignedIn, user } = useUser();
   const { signOut } = useClerk();
+  const createEmailAddress = useReverification((email: string) => user?.createEmailAddress({ email }));
+  const setPrimaryEmailAddress = useReverification((id: string) => user?.update({ primaryEmailAddressId: id }));
   const [section, setSection] = useState<Section>("overview");
   const [mobileNav, setMobileNav] = useState(false);
   const [firstName, setFirstName] = useState("");
@@ -138,7 +140,11 @@ export default function AccountCenterPage() {
     setEmailBusy(true);
     setNotice(null);
     try {
-      const address = await user.createEmailAddress({ email: newEmail.trim() });
+      const createdAddress = await createEmailAddress(newEmail.trim());
+      if (!createdAddress) throw new Error("Clerk did not create the new email address.");
+      await user.reload();
+      const address = user.emailAddresses.find((item) => item.id === createdAddress.id);
+      if (!address) throw new Error("The new email address could not be loaded.");
       await address.prepareVerification({ strategy: "email_code" });
       setPendingEmailId(address.id);
       setNotice({ tone: "success", message: "A verification code was sent to your new email address." });
@@ -158,7 +164,7 @@ export default function AccountCenterPage() {
       const address = user.emailAddresses.find((item) => item.id === pendingEmailId);
       if (!address) throw new Error("The pending email address could not be found. Start again.");
       await address.attemptVerification({ code: emailCode.trim() });
-      await user.update({ primaryEmailAddressId: pendingEmailId });
+      await setPrimaryEmailAddress(pendingEmailId);
       await user.reload();
       setPendingEmailId(null);
       setNewEmail("");
