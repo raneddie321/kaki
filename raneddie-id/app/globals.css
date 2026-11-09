@@ -368,3 +368,15 @@ body {
 @media (max-width:520px) {
   .rid-backdrop::after { background-size:40px 40px; }
 }
+
+/* RanEddie logo in the Account Center */
+.account-logo-img { width:40px; height:auto; filter:drop-shadow(0 6px 14px rgb(39 104 238 / .28)); }
+.account-unauth-logo { display:block; margin:0 auto 22px; width:72px; height:auto; filter:drop-shadow(0 10px 26px rgb(47 123 255 / .55)); }
+.account-loading-logo { width:64px; height:auto; margin:0 auto 4px; filter:drop-shadow(0 10px 26px rgb(47 123 255 / .5)); animation:account-logo-pulse 1.6s ease-in-out infinite; }
+@keyframes account-logo-pulse { 50% { transform:scale(1.06); opacity:.85; } }
+.account-welcome-watermark { position:absolute; z-index:-1; right:-40px; bottom:-70px; width:300px; height:auto; opacity:.13; transform:rotate(-8deg); pointer-events:none; }
+.account-wordmark:hover .account-logo-img { transform:rotate(-6deg) scale(1.05); transition:transform .2s; }
+.account-stat-card { transition:transform .18s, box-shadow .18s; }
+.account-stat-card:hover { transform:translateY(-2px); box-shadow:0 14px 34px rgb(30 74 145 / .08); }
+@media (max-width:640px) { .account-welcome-watermark { width:200px; right:-50px; bottom:-40px; } }
+@media (prefers-reduced-motion:reduce) { .account-loading-logo { animation:none; } }
