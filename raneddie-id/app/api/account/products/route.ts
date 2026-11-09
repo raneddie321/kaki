@@ -42,6 +42,9 @@ export async function DELETE(req: Request) {
 
   await client.users.updateUserMetadata(userId, {
     privateMetadata: {
+      // Bump the legacy shared version too, so tokens issued before product-bound
+      // tokens are revoked rather than remaining valid after a disconnect.
+      gameTokenVersion: (meta.gameTokenVersion ?? 0) + 1,
       connectedProducts: {
         [body.app]: { version, connectedAt: null },
       },
