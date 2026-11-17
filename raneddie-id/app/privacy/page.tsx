@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
 import { AuthShell, Heading } from "@/components/ui";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description: "How RanEddie ID collects, uses and protects your personal information.",
+  alternates: { canonical: "/privacy" },
+  openGraph: { title: "Privacy Policy | RanEddie ID", description: "How RanEddie ID collects, uses and protects your personal information.", url: "/privacy" },
+};
 
 export default function PrivacyPage() {
   return (

@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
 import { AuthShell, Heading } from "@/components/ui";
+
+export const metadata: Metadata = {
+  title: "Terms of Use",
+  description: "The terms that apply to your RanEddie ID account.",
+  alternates: { canonical: "/terms" },
+  openGraph: { title: "Terms of Use | RanEddie ID", description: "The terms that apply to your RanEddie ID account.", url: "/terms" },
+};
 
 export default function TermsPage() {
   return (
