@@ -144,21 +144,23 @@ export function navigateAfterAuth(
 }
 
 /** Safe redirect targets: local paths or explicitly trusted RanEddie product origins. */
+/** Products outside raneddie.com that may receive a signed-in user back. Every https://*.raneddie.com is trusted automatically. */
 const TRUSTED_REDIRECT_ORIGINS = new Set([
-  "https://raneddie.com",
-  "https://www.raneddie.com",
-  "https://fizz.raneddie.com",
-  "https://accounts.raneddie.com",
-  "https://id.raneddie.com",
   "https://fizzbrowser.vercel.app",
 ]);
+
+function isTrustedOrigin(url: URL) {
+  if (url.protocol !== "https:" || url.port) return false;
+  const host = url.hostname.toLowerCase();
+  return host === "raneddie.com" || host.endsWith(".raneddie.com") || TRUSTED_REDIRECT_ORIGINS.has(url.origin);
+}
 
 export function safeRedirect(r: string | null | undefined): string | null {
   if (!r) return null;
   if (r.startsWith("/") && !r.startsWith("//") && !r.startsWith("/\\")) return r;
   try {
     const url = new URL(r);
-    if (url.protocol !== "https:" || !TRUSTED_REDIRECT_ORIGINS.has(url.origin)) return null;
+    if (!isTrustedOrigin(url)) return null;
     return url.toString();
   } catch {
     return null;
