@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRedirect } from "@/lib/use-redirect";
+import { useLeaveIfSignedIn, useRedirect } from "@/lib/use-redirect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { useSignIn } from "@clerk/nextjs";
@@ -14,6 +14,7 @@ function SignIn() {
   const { signIn, fetchStatus } = useSignIn();
   const router = useRouter();
   const { target, withRedirect } = useRedirect();
+  const leaving = useLeaveIfSignedIn();
   const [step, setStep] = useState<Step>("email");
   const params = useSearchParams();
   const [email, setEmail] = useState(() => params.get("email") ?? "");
@@ -109,6 +110,8 @@ function SignIn() {
     setError(null);
     signIn.reset();
   }
+
+  if (leaving) return null;
 
   return (
     <AuthShell>
