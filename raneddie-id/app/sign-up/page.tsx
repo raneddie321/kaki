@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRedirect } from "@/lib/use-redirect";
+import { useLeaveIfSignedIn, useRedirect } from "@/lib/use-redirect";
 import { useRouter } from "next/navigation";
 import { Suspense, useMemo, useState, type FormEvent } from "react";
 import { useSignUp } from "@clerk/nextjs";
@@ -49,6 +49,7 @@ function SignUp() {
   const { signUp, fetchStatus } = useSignUp();
   const router = useRouter();
   const { target, withRedirect } = useRedirect();
+  const leaving = useLeaveIfSignedIn();
 
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
@@ -254,6 +255,8 @@ function SignUp() {
   }
 
   const stepper = stepIndex >= 0 && <Stepper step={stepIndex + 1} total={STEPS.length} label={STEPS[stepIndex].label} />;
+
+  if (leaving) return null;
 
   return (
     <AuthShell>

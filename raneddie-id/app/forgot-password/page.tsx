@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRedirect } from "@/lib/use-redirect";
+import { useLeaveIfSignedIn, useRedirect } from "@/lib/use-redirect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import { useSignIn } from "@clerk/nextjs";
@@ -28,6 +28,7 @@ function ForgotPassword() {
   const router = useRouter();
   const params = useSearchParams();
   const { target, withRedirect } = useRedirect();
+  const leaving = useLeaveIfSignedIn();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState(params.get("email") ?? "");
   const [code, setCode] = useState("");
@@ -99,6 +100,8 @@ function ForgotPassword() {
 
   const stepNo = { email: 1, code: 2, password: 3 }[step];
   const stepper = <Stepper step={stepNo} total={3} label={["Email", "Code", "New password"][stepNo - 1]} />;
+
+  if (leaving) return null;
 
   return (
     <AuthShell>
