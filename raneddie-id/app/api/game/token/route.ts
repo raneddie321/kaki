@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   const meta = (user.privateMetadata ?? {}) as PrivateMeta;
   const app = code.app;
   let token: GameToken;
-  if (app === "snakebrawl" || app === "fizzapp") {
+  if (app === "snakebrawl" || app === "fizzapp" || app === "floppy") {
     const version = (meta.connectedProducts?.[app]?.version ?? 0) + 1;
     const connectedAt = Date.now();
     await client.users.updateUserMetadata(user.id, {

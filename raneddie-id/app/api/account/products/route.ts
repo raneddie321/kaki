@@ -1,10 +1,10 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { json, type PrivateMeta } from "@/lib/game-auth";
 
-type AppId = "snakebrawl" | "fizzapp";
+type AppId = "snakebrawl" | "fizzapp" | "floppy";
 
 function isAppId(value: unknown): value is AppId {
-  return value === "snakebrawl" || value === "fizzapp";
+  return value === "snakebrawl" || value === "fizzapp" || value === "floppy";
 }
 
 export async function GET() {
@@ -21,6 +21,7 @@ export async function GET() {
     products: {
       snakebrawl: connectedProducts.snakebrawl?.connectedAt ?? null,
       fizzapp: connectedProducts.fizzapp?.connectedAt ?? null,
+      floppy: connectedProducts.floppy?.connectedAt ?? null,
     },
   });
 }
