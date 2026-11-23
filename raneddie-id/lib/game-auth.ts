@@ -8,7 +8,7 @@ export type PrivateMeta = {
   snakeBrawlSaveAt?: number;
   fizzappSave?: string;
   fizzappSaveAt?: number;
-  connectedProducts?: Partial<Record<"snakebrawl" | "fizzapp", { version: number; connectedAt: number | null }>>;
+  connectedProducts?: Partial<Record<"snakebrawl" | "fizzapp" | "floppy", { version: number; connectedAt: number | null }>>;
 };
 
 /** The player behind a game request (Authorization: Bearer <game token>), or null. */

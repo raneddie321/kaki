@@ -75,7 +75,7 @@ export default function AccountCenterPage() {
   const [pendingEmailId, setPendingEmailId] = useState<string | null>(null);
   const [emailBusy, setEmailBusy] = useState(false);
   const [theme, setTheme] = useState<"system" | "light" | "dark">("system");
-  const [connectedProducts, setConnectedProducts] = useState<{ snakebrawl: number | null; fizzapp: number | null }>({ snakebrawl: null, fizzapp: null });
+  const [connectedProducts, setConnectedProducts] = useState<{ snakebrawl: number | null; fizzapp: number | null; floppy: number | null }>({ snakebrawl: null, fizzapp: null, floppy: null });
   const [productsLoading, setProductsLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [sessions, setSessions] = useState<AccountSession[]>([]);
@@ -98,12 +98,13 @@ export default function AccountCenterPage() {
     fetch("/api/account/products", { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Could not load connected products.");
-        return response.json() as Promise<{ products?: { snakebrawl?: number | null; fizzapp?: number | null } }>;
+        return response.json() as Promise<{ products?: { snakebrawl?: number | null; fizzapp?: number | null; floppy?: number | null } }>;
       })
       .then((data) => {
         if (active) setConnectedProducts({
           snakebrawl: data.products?.snakebrawl ?? null,
           fizzapp: data.products?.fizzapp ?? null,
+          floppy: data.products?.floppy ?? null,
         });
       })
       .catch(() => {
@@ -195,7 +196,7 @@ export default function AccountCenterPage() {
     }
   }
 
-  async function disconnectProduct(app: "snakebrawl" | "fizzapp") {
+  async function disconnectProduct(app: "snakebrawl" | "fizzapp" | "floppy") {
     setDisconnecting(app);
     setNotice(null);
     try {
@@ -206,7 +207,7 @@ export default function AccountCenterPage() {
       });
       if (!response.ok) throw new Error("The product could not be disconnected.");
       setConnectedProducts((current) => ({ ...current, [app]: null }));
-      setNotice({ tone: "success", message: app === "snakebrawl" ? "Snake Brawl was disconnected. Its saved cloud data remains in your account." : "Fizz App was disconnected." });
+      setNotice({ tone: "success", message: app === "snakebrawl" ? "Snake Brawl was disconnected. Its saved cloud data remains in your account." : app === "floppy" ? "Floppy was disconnected. Sign in again from the game to reconnect it." : "Fizz App was disconnected." });
     } catch (error) {
       setNotice({ tone: "error", message: friendly(error, "Could not disconnect the product.") });
     } finally {
@@ -530,6 +531,7 @@ export default function AccountCenterPage() {
                 <div className="account-product-row"><div className="account-product-icon">R</div><div className="account-product-copy"><b>RanEddie ID</b><small>Central identity provider</small></div><span className="account-verified">Active</span></div>
                 <div className="account-product-row"><div className="account-product-icon">S</div><div className="account-product-copy"><b>Snake Brawl</b><small>Game account and cloud-save connection</small></div>{connectedProducts.snakebrawl ? <><span className="account-verified">Connected</span><button className="account-text-action" disabled={disconnecting === "snakebrawl"} onClick={() => disconnectProduct("snakebrawl")}>{disconnecting === "snakebrawl" ? "Disconnecting…" : "Disconnect"}</button></> : <span className="account-pending">{productsLoading ? "Checking…" : "Not connected"}</span>}</div>
                 <div className="account-product-row"><div className="account-product-icon">F</div><div className="account-product-copy"><b>Fizz App</b><small>Game-link and cloud-save integration</small></div>{connectedProducts.fizzapp ? <><span className="account-verified">Connected</span><button className="account-text-action" disabled={disconnecting === "fizzapp"} onClick={() => disconnectProduct("fizzapp")}>{disconnecting === "fizzapp" ? "Disconnecting…" : "Disconnect"}</button></> : <span className="account-pending">{productsLoading ? "Checking…" : "Not connected"}</span>}</div>
+<div className="account-product-row"><div className="account-product-icon">Fl</div><div className="account-product-copy"><b>Floppy</b><small>Desktop game sign-in (PC / Steam)</small></div>{connectedProducts.floppy ? <><span className="account-verified">Connected</span><button className="account-text-action" disabled={disconnecting === "floppy"} onClick={() => disconnectProduct("floppy")}>{disconnecting === "floppy" ? "Disconnecting…" : "Disconnect"}</button></> : <span className="account-pending">{productsLoading ? "Checking…" : "Not connected"}</span>}</div>
                 <div className="account-product-row"><div className="account-product-icon">F</div><div className="account-product-copy"><b>FIZZ Platform</b><small>Browser and AI workspace</small></div><span className="account-pending">Identity migration pending</span></div>
                 <div className="account-product-row"><div className="account-product-icon">P</div><div className="account-product-copy"><b>Prime Code</b><small>Developer tools</small></div><span className="account-pending">Not connected</span></div>
               </div>

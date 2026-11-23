@@ -6,9 +6,15 @@ import { useClerk, useUser } from "@clerk/nextjs";
 import { Alert, AuthShell, Button, CheckIcon, Heading, LinkButton, ShieldIcon, Spinner } from "@/components/ui";
 
 /** The games we can connect, and the link that sends the player back into each one. */
-const GAMES: Record<string, { name: string; returnUrl: string }> = {
+/**
+ * returnUrl: phone apps come back through their own link (snakebrawl://…).
+ * loopback: desktop games run a tiny server on this computer and pass its port; the player comes back to
+ * http://127.0.0.1:<port>/callback, which only that game on this computer can receive.
+ */
+const GAMES: Record<string, { name: string; returnUrl?: string; loopback?: true }> = {
   snakebrawl: { name: "Snake Brawl", returnUrl: "snakebrawl://raneddie" },
   fizzapp: { name: "Fizz App", returnUrl: "fizzapp://raneddie" },
+  floppy: { name: "Floppy", loopback: true },
 };
 
 /**
@@ -27,7 +33,10 @@ function Connect() {
   const game = GAMES[params.get("game") ?? ""];
   const state = params.get("state") ?? "";
   const challenge = params.get("ch") ?? "";
-  const valid = !!game && /^[A-Za-z0-9_-]{8,64}$/.test(state) && /^[A-Za-z0-9_-]{43,128}$/.test(challenge);
+  const portText = params.get("port") ?? "";
+  const port = /^\d{4,5}$/.test(portText) ? Number(portText) : 0;
+  const returnUrl = game?.loopback ? (port >= 1024 && port <= 65535 ? `http://127.0.0.1:${port}/callback` : "") : game?.returnUrl ?? "";
+  const valid = !!game && !!returnUrl && /^[A-Za-z0-9_-]{8,64}$/.test(state) && /^[A-Za-z0-9_-]{43,128}$/.test(challenge);
   const here = `/connect?${params.toString()}`;
 
   async function approve() {
@@ -41,7 +50,7 @@ function Connect() {
       });
       const data = (await res.json()) as { code?: string };
       if (!res.ok || !data.code) throw new Error();
-      const link = `${game.returnUrl}?state=${encodeURIComponent(state)}&code=${encodeURIComponent(data.code)}`;
+      const link = `${returnUrl}?state=${encodeURIComponent(state)}&code=${encodeURIComponent(data.code)}`;
       setReturnLink(link);
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- an app link, not a page here
       window.location.href = link;

@@ -46,7 +46,7 @@ export function challengeOf(verifier: string) {
   return createHash("sha256").update(verifier).digest("base64url");
 }
 
-export type GameApp = "snakebrawl" | "fizzapp";
+export type GameApp = "snakebrawl" | "fizzapp" | "floppy";
 export type LinkCode = { t: "code"; sub: string; ch: string; app: GameApp; exp: number };
 export type GameToken = { t: "game"; sub: string; v: number; iat: number; app?: GameApp };
 
