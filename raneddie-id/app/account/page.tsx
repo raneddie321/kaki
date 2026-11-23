@@ -33,6 +33,7 @@ function initials(first?: string | null, last?: string | null, username?: string
 
 /** Clerk's own readable message for API errors, otherwise the given fallback. */
 function friendly(error: unknown, fallback: string) {
+  if ((error as { code?: string } | null)?.code === "reverification_cancelled") return "Verification was cancelled, so nothing was changed.";
   const fromClerk = (error as { errors?: unknown[] } | null)?.errors?.length ? clerkError(error).message : null;
   return fromClerk || (error instanceof Error && error.message) || fallback;
 }
@@ -51,6 +52,13 @@ export default function AccountCenterPage() {
   const createTotp = useReverification(() => user?.createTOTP());
   const verifyTotp = useReverification((code: string) => user?.verifyTOTP({ code }));
   const disableTotp = useReverification(() => user?.disableTOTP());
+  // Clerk asks for a fresh check (password or email code) before sensitive changes; these show that prompt
+  // instead of failing with "You need to provide additional verification".
+  const updateProfile = useReverification((fields: { firstName?: string; lastName?: string; username?: string }) => user?.update(fields));
+  const setProfileImage = useReverification((file: File) => user?.setProfileImage({ file }));
+  const updatePassword = useReverification((args: { currentPassword: string; newPassword: string; signOutOfOtherSessions: boolean }) => user?.updatePassword(args));
+  const revokeSession = useReverification((target: { revoke: () => Promise<unknown> }) => target.revoke());
+  const deleteAccount = useReverification(() => user?.delete());
   const [section, setSection] = useState<Section>("overview");
   const [mobileNav, setMobileNav] = useState(false);
   const [firstName, setFirstName] = useState("");
@@ -177,7 +185,7 @@ export default function AccountCenterPage() {
     setRevokingSession(sessionId);
     setNotice(null);
     try {
-      await target.revoke();
+      await revokeSession(target);
       setSessions((current) => current.filter((item) => item.id !== sessionId));
       setNotice({ tone: "success", message: "The selected session was revoked." });
     } catch (error) {
@@ -225,7 +233,7 @@ export default function AccountCenterPage() {
     setSaving(true);
     setNotice(null);
     try {
-      await user.update({
+      await updateProfile({
         firstName: firstName.trim() || undefined,
         lastName: lastName.trim() || undefined,
         username: username.trim() || undefined,
@@ -255,7 +263,7 @@ export default function AccountCenterPage() {
     setSaving(true);
     setNotice(null);
     try {
-      await user.setProfileImage({ file });
+      await setProfileImage(file);
       setNotice({ tone: "success", message: "Your profile photo was updated." });
     } catch (error) {
       setNotice({ tone: "error", message: friendly(error, "The image could not be uploaded.") });
@@ -275,7 +283,7 @@ export default function AccountCenterPage() {
     setPasswordBusy(true);
     setNotice(null);
     try {
-      await user.updatePassword({ currentPassword, newPassword, signOutOfOtherSessions: true });
+      await updatePassword({ currentPassword, newPassword, signOutOfOtherSessions: true });
       setCurrentPassword("");
       setNewPassword("");
       setNotice({ tone: "success", message: "Password updated. Other active sessions were signed out." });
@@ -537,7 +545,7 @@ export default function AccountCenterPage() {
               <div className="account-security-row"><div><b>Identity data</b><p>Your name, username, email and profile photo are stored in Clerk.</p></div><span className="account-verified">Clerk</span></div>
               <div className="account-security-row"><div><b>Account identifier</b><p className="account-mono">{user.id}</p></div><button className="account-text-action" onClick={() => navigator.clipboard?.writeText(user.id)}>Copy ID</button></div>
               <div className="account-security-row"><div><b>Account deletion</b><p>{user.deleteSelfEnabled ? "Your Clerk instance allows self-service account deletion." : "Self-service deletion is not currently enabled in the Clerk instance."}</p></div><span className="account-pending">{user.deleteSelfEnabled ? "Available" : "Not enabled"}</span></div>
-              {user.deleteSelfEnabled && <button className="account-danger-btn" onClick={async () => { if (window.confirm("Permanently delete your RanEddie ID? This action cannot be undone.")) { await user.delete(); window.location.assign("/"); } }}>Delete my account</button>}
+              {user.deleteSelfEnabled && <button className="account-danger-btn" onClick={async () => { if (window.confirm("Permanently delete your RanEddie ID? This action cannot be undone.")) { try { await deleteAccount(); window.location.assign("/"); } catch (error) { setNotice({ tone: "error", message: friendly(error, "Your account could not be deleted.") }); } } }}>Delete my account</button>}
             </div>
           )}
 
